@@ -1,0 +1,561 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  fullName        String
+  passwordHash    String
+  photoUrl        String?
+  role            Role           @default(USER)
+  emailConfirmed  Boolean        @default(false)
+  blockedAt       DateTime?
+
+  refreshTokens   RefreshToken[]
+  trips           Trip[]
+  createdBaseTrips BaseTrip[]
+  aiRequests      AIRequest[]
+
+  sentTripInvites     TripParticipant[] @relation("TripInviteSender")
+  acceptedTripInvites TripParticipant[] @relation("TripInviteAcceptedBy")
+
+  travelProfile       UserTravelProfile?
+  purchases           Purchase[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String   @unique
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@map("refresh_tokens")
+}
+
+enum TripStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+}
+
+enum ItineraryCategory {
+  TOURIST_ATTRACTION
+  MUSEUM
+  RESTAURANT
+  CAFE
+  BAR
+  BEACH
+  PARK
+  SHOPPING
+  EXPERIENCE
+  TRANSPORT
+  EVENT
+  NIGHTLIFE
+  FREE_ACTIVITY
+  PAID_ACTIVITY
+}
+
+model Trip {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  destination String
+  coverImage  String?
+  startDate   DateTime?
+  endDate     DateTime?
+  status      TripStatus  @default(DRAFT)
+  preferences Json?
+
+  days        TripDay[]
+  aiRequests  AIRequest[]
+  participants TripParticipant[]
+  purchases   Purchase[]
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  premiumUnlockedAt DateTime?
+
+  @@map("trips")
+}
+
+model TripDay {
+  id          String   @id @default(uuid())
+  tripId      String
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  date        DateTime?
+  dayNumber   Int
+
+  title       String?
+  description String?
+
+  items       ItineraryItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tripId, dayNumber])
+  @@unique([tripId, date])
+
+  @@map("trip_days")
+}
+
+model ItineraryItem {
+  id             String            @id @default(uuid())
+  tripDayId      String
+  tripDay        TripDay           @relation(fields: [tripDayId], references: [id], onDelete: Cascade)
+
+  title          String
+  description    String?
+  category       ItineraryCategory
+  location       String?
+  googleMapsLink String?
+  latitude       Float?
+  longitude      Float?
+  timeLabel      String?
+  period         String?
+  duration       Int?
+  cost           Float?
+  currency       String?
+  externalLink   String?
+  notes          String?
+  order          Int
+
+  providerPlaceId String?
+  placeProvider   String?
+
+  isEditable     Boolean           @default(true)
+  isUserModified Boolean           @default(false)
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([tripDayId, order])
+  @@index([providerPlaceId])
+  @@map("itinerary_items")
+}
+
+enum BaseTripStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BaseTripVisibility {
+  PUBLIC
+  PRIVATE
+  INTERNAL
+}
+
+model BaseTrip {
+  id                String              @id @default(uuid())
+
+  title             String
+  destination       String
+  country           String?
+  city              String?
+  region            String?
+
+  numberOfDays      Int
+
+  profile           String?
+  shortDescription  String?
+  fullDescription   String?
+
+  coverImage        String?
+
+  bestTime          String?
+  climate           String?
+  averageBudget     Float?
+  currency          String?
+  language          String?
+
+  tags              String[]
+
+  status            BaseTripStatus      @default(DRAFT)
+  visibility        BaseTripVisibility  @default(PRIVATE)
+
+  createdByAdminId  String?
+  createdByAdmin    User?               @relation(fields: [createdByAdminId], references: [id])
+
+  days              BaseTripDay[]
+  aiRequests        AIRequest[]
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([destination])
+  @@index([status])
+  @@index([visibility])
+
+  @@map("base_trips")
+}
+
+model BaseTripDay {
+  id                  String            @id @default(uuid())
+
+  baseTripId          String
+  baseTrip            BaseTrip          @relation(fields: [baseTripId], references: [id], onDelete: Cascade)
+
+  dayNumber           Int
+
+  title               String?
+  description         String?
+
+  region              String?
+  suggestedTransport  String?
+  estimatedCost       Float?
+
+  attractions         BaseAttraction[]
+  restaurants         BaseRestaurant[]
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([baseTripId, dayNumber])
+
+  @@map("base_trip_days")
+}
+
+model BaseAttraction {
+  id                    String                @id @default(uuid())
+
+  baseTripDayId         String
+  baseTripDay           BaseTripDay           @relation(fields: [baseTripDayId], references: [id], onDelete: Cascade)
+
+  name                  String
+
+  category              ItineraryCategory
+
+  shortDescription      String?
+  fullDescription       String?
+
+  image                 String?
+
+  address               String?
+  googleMapsLink        String?
+
+  latitude              Float?
+  longitude             Float?
+
+  period                String?
+  duration              Int?
+
+  cost                  Float?
+  currency              String?
+
+  requiresTicket        Boolean               @default(false)
+  ticketLink            String?
+
+  requiresReservation   Boolean               @default(false)
+  reservationLink       String?
+
+  priority              Int?
+
+  accessibility         String?
+
+  goodForKids           Boolean               @default(false)
+  goodForElders         Boolean               @default(false)
+
+  observations          String?
+  notes                 String?
+
+  order                 Int
+
+  providerPlaceId       String?
+  placeProvider         String?
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([baseTripDayId, order])
+  @@index([providerPlaceId])
+
+  @@map("base_attractions")
+}
+
+model BaseRestaurant {
+  id                  String            @id @default(uuid())
+
+  baseTripDayId       String
+  baseTripDay         BaseTripDay       @relation(fields: [baseTripDayId], references: [id], onDelete: Cascade)
+
+  name                String
+
+  cuisineType         String?
+  priceRange          String?
+  priceLevel          Int?
+
+  address             String?
+  googleMapsLink      String?
+
+  rating              Float?
+
+  openingHours        String?
+
+  reservationLink     String?
+
+  recommendedDish     String?
+
+  image               String?
+
+  latitude            Float?
+  longitude             Float?
+
+  notes               String?
+  order               Int
+
+  providerPlaceId     String?
+  placeProvider       String?
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([baseTripDayId, order])
+  @@index([providerPlaceId])
+
+  @@map("base_restaurants")
+}
+
+enum AIRequestStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model AIRequest {
+  id            String          @id @default(uuid())
+
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId        String?
+  trip          Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  baseTripId    String?
+  baseTrip      BaseTrip?       @relation(fields: [baseTripId], references: [id], onDelete: SetNull)
+
+  provider      String
+  model         String
+
+  prompt        String
+  response      Json?
+
+  status        AIRequestStatus @default(PENDING)
+
+  tokensUsed    Int?
+
+  errorMessage  String?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([baseTripId])
+  @@index([status])
+
+  @@map("ai_requests")
+}
+
+enum ParticipantRole {
+  VIEWER
+}
+
+model TripParticipant {
+  id            String           @id @default(uuid())
+
+  tripId        String
+  trip          Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  email         String
+
+  role          ParticipantRole @default(VIEWER)
+
+  accepted      Boolean         @default(false)
+
+  inviteToken   String          @unique
+
+  invitedById   String?
+  invitedBy     User?           @relation("TripInviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  acceptedById  String?
+  acceptedBy    User?           @relation("TripInviteAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([tripId, email])
+
+  @@index([inviteToken])
+  @@index([email])
+
+  @@map("trip_participants")
+}
+
+enum TravelStyle {
+  ECONOMIC
+  COMFORT
+  LUXURY
+  ADVENTURE
+  FAMILY
+  ROMANTIC
+  PARTY
+  CULTURAL
+}
+
+enum BudgetLevel {
+  LOW
+  MEDIUM
+  HIGH
+  PREMIUM
+}
+
+model UserTravelProfile {
+  id                    String          @id @default(uuid())
+
+  userId                String          @unique
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio                   String?
+
+  preferredStyles       TravelStyle[]
+
+  budgetLevel           BudgetLevel?
+
+  favoriteCountries     String[]
+  favoriteCities        String[]
+
+  preferredLanguages    String[]
+
+  foodPreferences       String[]
+
+  accessibilityNeeds    String[]
+
+  travelInterests       String[]
+
+  travelCompanions      String[]
+  avoidedDestinations   String[]
+  preferredClimate      String[]
+  bucketListDestinations String[]
+
+  prefersNightlife      Boolean         @default(false)
+  prefersNature         Boolean         @default(false)
+  prefersGastronomy     Boolean         @default(false)
+  prefersMuseums        Boolean         @default(false)
+  prefersShopping       Boolean         @default(false)
+  prefersRelaxing       Boolean         @default(false)
+
+  averageTripDuration   Int?
+
+  passportCountry       String?
+
+  instagramHandle       String?
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([budgetLevel])
+
+  @@map("user_travel_profiles")
+}
+
+enum PurchaseStatus {
+  PENDING
+  PAID
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum ProductType {
+  ITINERARY_FULL_ACCESS
+  AI_CREDITS
+  PREMIUM_TEMPLATE
+}
+
+model Product {
+  id          String      @id @default(uuid())
+
+  name        String
+  description String?
+
+  type        ProductType
+
+  price       Float
+  currency    String      @default("BRL")
+
+  active      Boolean     @default(true)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  purchases   Purchase[]
+
+  @@index([type])
+  @@index([active])
+
+  @@map("products")
+}
+
+model Purchase {
+  id              String          @id @default(uuid())
+
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  tripId          String?
+  trip            Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  status          PurchaseStatus  @default(PENDING)
+
+  amount          Float
+  currency        String          @default("BRL")
+
+  mockPaymentId   String?
+
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+  expiredAt       DateTime?
+  refundedAt      DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([tripId])
+  @@index([status])
+
+  @@map("purchases")
+}

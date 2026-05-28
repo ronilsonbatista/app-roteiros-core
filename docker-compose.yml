@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: approteiros_db
+    environment:
+      POSTGRES_USER: approteiros_user
+      POSTGRES_PASSWORD: approteiros_password
+      POSTGRES_DB: approteiros_db
+    ports:
+      - "5433:5432" # Porta mapeada para o host (evita conflito com o local se 5432 estiver em uso)
+    volumes:
+      - approteiros_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: approteiros_api
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    volumes:
+      - approteiros_uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  approteiros_pgdata:
+  approteiros_uploads:
