@@ -86,3 +86,4 @@ Sem estas variáveis preenchidas, a aplicação lançará crash intencional no s
 | \`npm run seed\` | Roda o script limpo de mock-admin inicial |
 | \`npx prisma studio\` | Abre uma UI para gestão da base de dados |
 # app-roteiros-core
+# app-roteiros-core
