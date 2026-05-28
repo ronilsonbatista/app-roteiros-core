@@ -11,7 +11,15 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   // Startup Validation
-  const requiredEnvs = ['DATABASE_URL', 'JWT_SECRET', 'JWT_EXPIRES_IN', 'JWT_REFRESH_EXPIRES_IN', 'MEDIA_BASE_URL', 'MEDIA_STORAGE_PROVIDER'];
+  const requiredEnvs = [
+    'DATABASE_URL',
+    'JWT_SECRET',
+    'JWT_REFRESH_SECRET',
+    'JWT_EXPIRES_IN',
+    'JWT_REFRESH_EXPIRES_IN',
+    'MEDIA_BASE_URL',
+    'MEDIA_STORAGE_PROVIDER',
+  ];
   const missingEnvs = requiredEnvs.filter(env => !process.env[env]);
   
   if (missingEnvs.length > 0) {
