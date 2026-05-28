@@ -91,3 +91,4 @@ Sem estas variáveis preenchidas, a aplicação lançará crash intencional no s
 # app-roteiros-core
 # app-roteiros-core
 # app-roteiros-core
+# app-roteiros-core
