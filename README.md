@@ -1,94 +1,359 @@
-# AppRoteiros - API Backend
+# 🚀 App Roteiros Core
 
-Este repositório contém a API do AppRoteiros, responsável pela gestão de usuários, geração de roteiros de viagens via IA, integrações com o Google Places e painel administrativo.
+> Backend oficial da plataforma App Roteiros
 
-## Tecnologias Principais
-- NestJS (TypeScript)
-- Prisma (ORM)
-- PostgreSQL
-- Autenticação via JWT / Passport
-- Integração com OpenAI (GPT-4) e Google Maps
-- Docker e Docker Compose
+![NestJS](https://img.shields.io/badge/NestJS-Framework-red)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-darkblue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)
+![Swagger](https://img.shields.io/badge/API-Swagger-green)
+![Status](https://img.shields.io/badge/Status-MVP%20Concluído-success)
 
 ---
 
-## 🛠 Setup Local (Desenvolvimento)
+# 🌍 Sobre o Projeto
 
-### Pré-requisitos
-- Node.js v18 ou v20
-- Docker e Docker Compose (opcional para o banco de dados)
-- Conta na OpenAI (com chave de API) e Conta GCP (com Google Places)
+O **App Roteiros Core** é o backend oficial da plataforma **App Roteiros**, responsável por toda a camada de negócio da aplicação.
 
-### Instalação
-1. Clone o repositório.
-2. Instale as dependências:
-   \`\`\`bash
-   npm install
-   \`\`\`
-3. Crie o seu arquivo `.env` copiando o exemplo e preencha as variáveis mandatórias:
-   \`\`\`bash
-   cp .env.example .env
-   \`\`\`
+A plataforma foi desenvolvida para permitir que viajantes criem, personalizem, compartilhem e consumam roteiros inteligentes utilizando Inteligência Artificial, Google Places e dados personalizados de viagem.
 
-### Migrations e Banco de Dados
-Com o banco de dados PostgreSQL rodando, aplique o estado atual da base localmente e gere as tipagens do Prisma Client:
-\`\`\`bash
-npx prisma migrate dev
-\`\`\`
+---
 
-### Seed (Criando o Admin)
-Para testar a administração localmente, você precisa de um usuário com privilégio `ADMIN`. O seed usa as variáveis `SEED_ADMIN_*` configuradas no seu `.env`:
-\`\`\`bash
-npm run seed
-\`\`\`
+# ✨ Principais Funcionalidades
 
-### Rodando o Servidor Localmente
-\`\`\`bash
+### 🔐 Autenticação e Segurança
+
+* JWT Authentication
+* Refresh Tokens
+* Role Based Access Control (RBAC)
+* Controle de bloqueio de usuários
+* Proteção de rotas
+* Rate Limiting
+* Helmet Security
+
+### 👤 Gestão de Usuários
+
+* Cadastro
+* Login
+* Perfil de viagem
+* Preferências personalizadas
+* Compartilhamento de roteiros
+
+### ✈️ Gestão de Roteiros
+
+* Trips
+* Trip Days
+* Itinerary Items
+* Roteiros Base
+* Compartilhamento entre usuários
+* Participantes convidados
+
+### 🤖 Inteligência Artificial
+
+* Integração OpenAI
+* Geração automática de roteiros
+* Personalização baseada no perfil do usuário
+* Histórico e auditoria de requisições
+
+### 🗺️ Google Places
+
+* Busca de locais
+* Enriquecimento de atrações
+* Coordenadas geográficas
+* Avaliações e informações oficiais
+
+### 📸 Media
+
+* Avatar de usuário
+* Imagens de roteiros
+* Upload de templates
+* Storage Provider Pattern
+
+### 💳 Billing
+
+* Catálogo de produtos
+* Compras
+* Mock Payment Provider
+* Controle de desbloqueio premium
+
+### 📊 Analytics
+
+* Crescimento de usuários
+* Crescimento de roteiros
+* Consumo de IA
+* Destinos mais buscados
+* Monitoramento operacional
+
+### 🛠️ Administração
+
+* Gestão de usuários
+* Gestão de roteiros base
+* Gestão de IA
+* Gestão de produtos
+* Dashboard administrativo
+
+---
+
+# 🧰 Tecnologias
+
+### Backend
+
+* NestJS
+* TypeScript
+* Passport
+* JWT
+
+### Banco de Dados
+
+* PostgreSQL
+* Prisma ORM
+
+### Infraestrutura
+
+* Docker
+* Docker Compose
+* Uploads Locais
+* Health Checks
+
+### Integrações
+
+* OpenAI API
+* Google Places API
+
+---
+
+# 📚 Documentação
+
+## Swagger
+
+Após iniciar a aplicação:
+
+```bash
 npm run start:dev
-\`\`\`
-A API estará acessível em `http://localhost:3000`. E a documentação interativa (Swagger) em `http://localhost:3000/api`.
+```
+
+Acesse:
+
+```text
+http://localhost:3000/api
+```
 
 ---
 
-## 🐳 Setup via Docker (Produção / Homologação)
+## Health Check
 
-A API e o banco de dados estão perfeitamente isolados numa orquestração Docker Compose para deploys fáceis. O container rodará todas as *migrations* dinamicamente durante a inicialização (através do nosso entrypoint) antes de aceitar requisições.
-
-1. Preencha o arquivo `.env.docker` caso queira customizar credenciais.
-2. Faça o Build e Up:
-   \`\`\`bash
-   docker-compose up --build -d
-   \`\`\`
-
-Isso inicializará o servidor de banco de dados na rede docker, com exposição port-forwarding local na `5433` (pra evitar conflitos com Postgres local na `5432`). O server node aceitará tráfego na porta `3000`.
+```text
+http://localhost:3000/health
+```
 
 ---
 
-## 🔐 Variáveis de Ambiente Mandatórias
+# 🛠 Setup Local (Desenvolvimento)
 
-Sem estas variáveis preenchidas, a aplicação lançará crash intencional no startup garantindo que nada suba com estado corrompido:
-- `DATABASE_URL`
-- `JWT_SECRET`
-- `JWT_EXPIRES_IN`
-- `JWT_REFRESH_EXPIRES_IN`
-- `MEDIA_STORAGE_PROVIDER`
-- `MEDIA_BASE_URL`
-- `CORS_ORIGINS` (Obrigatório caso em modo \`production\`)
+## Pré-requisitos
+
+* Node.js 22+
+* PostgreSQL
+* Docker (opcional)
+* Chave OpenAI
+* Chave Google Places
 
 ---
 
-## 💡 Comandos Rápidos
+## Instalação
 
-| Comando | Descrição |
-| --- | --- |
-| \`npm run build\` | Compila o TS para JS na pasta \`dist/\` |
-| \`npm run start:prod\` | Roda o script de produção com PM2 ou Node nativo |
-| \`npm run seed\` | Roda o script limpo de mock-admin inicial |
-| \`npx prisma studio\` | Abre uma UI para gestão da base de dados |
-# app-roteiros-core
-# app-roteiros-core
-# app-roteiros-core
-# app-roteiros-core
-# app-roteiros-core
-# app-roteiros-core
-# app-roteiros-core
+Clone o repositório:
+
+```bash
+git clone git@github.com:ronilsonbatista/app-roteiros-core.git
+```
+
+Instale as dependências:
+
+```bash
+npm install
+```
+
+Crie o arquivo de ambiente:
+
+```bash
+cp .env.example .env
+```
+
+---
+
+## Banco de Dados
+
+Execute as migrations:
+
+```bash
+npx prisma migrate dev
+```
+
+Gere o Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+---
+
+## Seed Inicial
+
+Criação automática do usuário administrador:
+
+```bash
+npm run seed
+```
+
+Variáveis obrigatórias:
+
+```env
+SEED_ADMIN_EMAIL=
+SEED_ADMIN_PASSWORD=
+SEED_ADMIN_NAME=
+```
+
+---
+
+## Rodando Localmente
+
+```bash
+npm run start:dev
+```
+
+API:
+
+```text
+http://localhost:3000
+```
+
+Swagger:
+
+```text
+http://localhost:3000/api
+```
+
+---
+
+# 🐳 Docker
+
+Build:
+
+```bash
+docker compose build
+```
+
+Subir ambiente:
+
+```bash
+docker compose up -d
+```
+
+Ver logs:
+
+```bash
+docker compose logs -f
+```
+
+Swagger:
+
+```text
+http://localhost:3000/api
+```
+
+Health:
+
+```text
+http://localhost:3000/health
+```
+
+---
+
+# 🔐 Variáveis Obrigatórias
+
+A aplicação realiza validação de startup e não sobe em produção caso alguma variável obrigatória esteja ausente.
+
+Principais:
+
+```env
+DATABASE_URL=
+JWT_SECRET=
+JWT_EXPIRES_IN=
+JWT_REFRESH_EXPIRES_IN=
+OPENAI_API_KEY=
+OPENAI_MODEL=
+GOOGLE_MAPS_API_KEY=
+MEDIA_STORAGE_PROVIDER=
+MEDIA_BASE_URL=
+CORS_ORIGINS=
+```
+
+---
+
+# 📂 Estrutura dos Módulos
+
+```text
+src/
+├── auth
+├── users
+├── travel-profile
+├── trips
+├── trip-days
+├── itinerary
+├── base-trips
+├── ai
+├── places
+├── media
+├── participants
+├── billing
+├── analytics
+├── admin
+└── prisma
+```
+
+---
+
+# 💡 Comandos Úteis
+
+| Comando                | Descrição                       |
+| ---------------------- | ------------------------------- |
+| npm run start:dev      | Executa em modo desenvolvimento |
+| npm run build          | Compila o projeto               |
+| npm run start:prod     | Executa build de produção       |
+| npm run seed           | Cria usuário administrador      |
+| npx prisma studio      | Interface visual do banco       |
+| npx prisma migrate dev | Executa migrations              |
+| npx prisma generate    | Gera Prisma Client              |
+
+---
+
+# 📈 Status do Projeto
+
+## MVP Backend
+
+* ✅ Auth
+* ✅ RBAC
+* ✅ Travel Profile
+* ✅ Trips
+* ✅ Base Trips
+* ✅ AI
+* ✅ Google Places
+* ✅ Media Upload
+* ✅ Participants
+* ✅ Billing
+* ✅ Analytics
+* ✅ Docker
+* ✅ Swagger
+* ✅ Health Checks
+
+**Status Atual:** 🚀 MVP Backend concluído e em fase de homologação.
+
+---
+
+# 👨‍💻 Desenvolvido por
+
+**Ronilson Batista**
+
+Fundador da plataforma App Roteiros.
