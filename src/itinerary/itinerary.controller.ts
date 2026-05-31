@@ -6,7 +6,7 @@ import { ReorderItineraryItemDto } from './dto/reorder-itinerary-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-@ApiTags('Itinerary Items')
+@ApiTags('Itinerary - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('itinerary-items')

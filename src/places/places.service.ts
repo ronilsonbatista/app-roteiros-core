@@ -83,4 +83,29 @@ export class PlacesService {
       },
     });
   }
+
+  async enrichItineraryItemAdmin(itemId: string, providerPlaceId: string) {
+    const item = await this.prisma.itineraryItem.findUnique({
+      where: { id: itemId },
+      include: { tripDay: { include: { trip: true } } },
+    });
+
+    if (!item) throw new NotFoundException('ItineraryItem não encontrado');
+
+    const details = await this.getPlaceDetails(providerPlaceId);
+
+    return this.prisma.itineraryItem.update({
+      where: { id: itemId },
+      data: {
+        providerPlaceId,
+        placeProvider: 'GOOGLE',
+        location: item.location || details.formattedAddress,
+        latitude: details.latitude,
+        longitude: details.longitude,
+        googleMapsLink: item.googleMapsLink || details.googleMapsUri,
+        externalLink: item.externalLink || details.websiteUri,
+        isUserModified: true,
+      },
+    });
+  }
 }

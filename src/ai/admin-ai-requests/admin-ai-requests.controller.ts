@@ -6,7 +6,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
-@ApiTags('Admin AI Logs')
+@ApiTags('Admin - AI')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)

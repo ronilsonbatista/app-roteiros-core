@@ -7,7 +7,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateProductDto, UpdateProductDto } from '../dto/billing.dto';
 
-@ApiTags('Admin Billing')
+@ApiTags('Admin - Billing')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)

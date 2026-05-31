@@ -9,41 +9,42 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
+@ApiTags('Travel Profile - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class UserTravelProfileController {
   constructor(private readonly userTravelProfileService: UserTravelProfileService) {}
 
-  @ApiTags('User Travel Profile')
+  @ApiTags('Travel Profile - App')
   @Post('users/me/travel-profile')
   @ApiOperation({ summary: 'Criar perfil do viajante' })
   create(@CurrentUser() user: any, @Body() dto: CreateUserTravelProfileDto) {
     return this.userTravelProfileService.create(user.userId, dto);
   }
 
-  @ApiTags('User Travel Profile')
+  @ApiTags('Travel Profile - App')
   @Get('users/me/travel-profile')
   @ApiOperation({ summary: 'Visualizar perfil do viajante' })
   findOne(@CurrentUser() user: any) {
     return this.userTravelProfileService.findOne(user.userId);
   }
 
-  @ApiTags('User Travel Profile')
+  @ApiTags('Travel Profile - App')
   @Patch('users/me/travel-profile')
   @ApiOperation({ summary: 'Atualizar perfil do viajante' })
   update(@CurrentUser() user: any, @Body() dto: UpdateUserTravelProfileDto) {
     return this.userTravelProfileService.update(user.userId, dto);
   }
 
-  @ApiTags('User Travel Profile')
+  @ApiTags('Travel Profile - App')
   @Delete('users/me/travel-profile')
   @ApiOperation({ summary: 'Remover perfil do viajante' })
   remove(@CurrentUser() user: any) {
     return this.userTravelProfileService.remove(user.userId);
   }
 
-  @ApiTags('Admin Users')
+  @ApiTags('Admin - Users')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Get('admin/users/:id/travel-profile')

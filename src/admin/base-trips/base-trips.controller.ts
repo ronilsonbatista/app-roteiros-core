@@ -4,6 +4,7 @@ import { BaseTripsService } from './base-trips.service';
 import { CreateBaseTripDto } from './dto/create-base-trip.dto';
 import { UpdateBaseTripDto } from './dto/update-base-trip.dto';
 import { CreateBaseTripDayDto } from './dto/create-base-trip-day.dto';
+import { UpdateBaseTripDayDto } from './dto/update-base-trip-day.dto';
 import { CreateBaseAttractionDto } from './dto/create-base-attraction.dto';
 import { UpdateBaseAttractionDto } from './dto/update-base-attraction.dto';
 import { CreateBaseRestaurantDto } from './dto/create-base-restaurant.dto';
@@ -14,7 +15,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 
-@ApiTags('Admin Base Trips')
+@ApiTags('Admin - Base Trips')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
@@ -92,5 +93,17 @@ export class BaseTripsController {
   @ApiOperation({ summary: 'Remover restaurante base' })
   removeBaseRestaurant(@Param('id') id: string) {
     return this.baseTripsService.removeBaseRestaurant(id);
+  }
+
+  @Patch('base-trip-days/:id')
+  @ApiOperation({ summary: 'Atualizar dia base' })
+  updateBaseTripDay(@Param('id') id: string, @Body() dto: UpdateBaseTripDayDto) {
+    return this.baseTripsService.updateBaseTripDay(id, dto);
+  }
+
+  @Delete('base-trip-days/:id')
+  @ApiOperation({ summary: 'Remover dia base' })
+  removeBaseTripDay(@Param('id') id: string) {
+    return this.baseTripsService.removeBaseTripDay(id);
   }
 }

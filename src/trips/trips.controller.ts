@@ -7,7 +7,7 @@ import { CreateTripDayDto } from '../trip-days/dto/create-trip-day.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-@ApiTags('Trips')
+@ApiTags('Trips - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('trips')

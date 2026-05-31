@@ -325,4 +325,32 @@ export class AdminTripsService {
       where: { id: participantId },
     });
   }
+
+  async unlockPremium(tripId: string) {
+    const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
+    if (!trip) {
+      throw new NotFoundException('Viagem não encontrada');
+    }
+
+    return this.prisma.trip.update({
+      where: { id: tripId },
+      data: {
+        premiumUnlockedAt: new Date(),
+      },
+    });
+  }
+
+  async lockPremium(tripId: string) {
+    const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
+    if (!trip) {
+      throw new NotFoundException('Viagem não encontrada');
+    }
+
+    return this.prisma.trip.update({
+      where: { id: tripId },
+      data: {
+        premiumUnlockedAt: null,
+      },
+    });
+  }
 }

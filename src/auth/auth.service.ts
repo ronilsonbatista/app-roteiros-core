@@ -45,6 +45,10 @@ export class AuthService {
       throw new UnauthorizedException('Usuário bloqueado. Entre em contato com o suporte.');
     }
 
+    if (user.archivedAt) {
+      throw new UnauthorizedException('Usuário arquivado. Entre em contato com o suporte.');
+    }
+
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciais inválidas');
@@ -93,6 +97,7 @@ export class AuthService {
       const user = await this.usersService.findById(payload.sub);
       if (!user) throw new UnauthorizedException('Credenciais inválidas');
       if (user.blockedAt) throw new UnauthorizedException('Usuário bloqueado. Entre em contato com o suporte.');
+      if (user.archivedAt) throw new UnauthorizedException('Usuário arquivado. Entre em contato com o suporte.');
 
       // Validar banco de dados para revogação / hash
       const activeTokens = await this.prisma.refreshToken.findMany({

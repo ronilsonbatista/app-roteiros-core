@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Throttle } from '@nestjs/throttler';
 
-@ApiTags('AI - Trip Generation')
+@ApiTags('Trips - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('trips')

@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBaseTripDto } from './dto/create-base-trip.dto';
 import { UpdateBaseTripDto } from './dto/update-base-trip.dto';
 import { CreateBaseTripDayDto } from './dto/create-base-trip-day.dto';
+import { UpdateBaseTripDayDto } from './dto/update-base-trip-day.dto';
 import { CreateBaseAttractionDto } from './dto/create-base-attraction.dto';
 import { UpdateBaseAttractionDto } from './dto/update-base-attraction.dto';
 import { CreateBaseRestaurantDto } from './dto/create-base-restaurant.dto';
@@ -99,5 +100,17 @@ export class BaseTripsService {
     const item = await this.prisma.baseRestaurant.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Base Restaurant não encontrado');
     return this.prisma.baseRestaurant.delete({ where: { id } });
+  }
+
+  async updateBaseTripDay(id: string, dto: UpdateBaseTripDayDto) {
+    const day = await this.prisma.baseTripDay.findUnique({ where: { id } });
+    if (!day) throw new NotFoundException('Base Trip Day não encontrado');
+    return this.prisma.baseTripDay.update({ where: { id }, data: dto });
+  }
+
+  async removeBaseTripDay(id: string) {
+    const day = await this.prisma.baseTripDay.findUnique({ where: { id } });
+    if (!day) throw new NotFoundException('Base Trip Day não encontrado');
+    return this.prisma.baseTripDay.delete({ where: { id } });
   }
 }

@@ -14,13 +14,14 @@ const filePipe = new ParseFilePipeBuilder()
   .addMaxSizeValidator({ maxSize: MAX_FILE_SIZE })
   .build({ errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY });
 
+@ApiTags('Media - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('media/upload')
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
-  @ApiTags('Media - User')
+  @ApiTags('Media - App')
   @Post('avatar')
   @ApiOperation({ summary: 'Fazer upload do avatar do usuário' })
   @ApiConsumes('multipart/form-data')
@@ -35,7 +36,7 @@ export class MediaController {
     return this.mediaService.uploadAvatar(user.userId, file);
   }
 
-  @ApiTags('Media - Admin')
+  @ApiTags('Admin - Media')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Post('admin/base-trip/:id/cover')
@@ -52,7 +53,7 @@ export class MediaController {
     return this.mediaService.uploadBaseTripCover(id, file);
   }
 
-  @ApiTags('Media - Admin')
+  @ApiTags('Admin - Media')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Post('admin/base-attraction/:id/image')
@@ -69,7 +70,7 @@ export class MediaController {
     return this.mediaService.uploadBaseAttractionImage(id, file);
   }
 
-  @ApiTags('Media - Admin')
+  @ApiTags('Admin - Media')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Post('admin/base-restaurant/:id/image')
@@ -86,7 +87,7 @@ export class MediaController {
     return this.mediaService.uploadBaseRestaurantImage(id, file);
   }
 
-  @ApiTags('Media - User')
+  @ApiTags('Media - App')
   @Post('trips/:id/cover')
   @ApiOperation({ summary: 'Fazer upload da capa de uma Trip própria' })
   @ApiConsumes('multipart/form-data')

@@ -6,7 +6,7 @@ import { CreateItineraryItemDto } from '../itinerary/dto/create-itinerary-item.d
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-@ApiTags('Trip Days')
+@ApiTags('Trip Days - App')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('trip-days')
