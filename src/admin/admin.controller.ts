@@ -1,5 +1,19 @@
-import { Controller, Get, Patch, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -93,18 +107,15 @@ export class AdminController {
 
   @Patch('users/:id/archive')
   @ApiOperation({ summary: 'Arquivar a conta de um usuário (Admin)' })
-  archiveUser(
-    @CurrentUser() admin: any,
-    @Param('id') id: string,
-  ) {
+  archiveUser(@CurrentUser() admin: any, @Param('id') id: string) {
     return this.adminService.archiveUser(admin.userId, id);
   }
 
   @Patch('users/:id/restore')
-  @ApiOperation({ summary: 'Restaurar a conta de um usuário arquivado (Admin)' })
-  restoreUser(
-    @Param('id') id: string,
-  ) {
+  @ApiOperation({
+    summary: 'Restaurar a conta de um usuário arquivado (Admin)',
+  })
+  restoreUser(@Param('id') id: string) {
     return this.adminService.restoreUser(id);
   }
 }

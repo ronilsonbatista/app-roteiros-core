@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BaseTripsService } from './base-trips.service';
 import { CreateBaseTripDto } from './dto/create-base-trip.dto';
@@ -55,19 +64,28 @@ export class BaseTripsController {
 
   @Post('base-trips/:id/days')
   @ApiOperation({ summary: 'Criar dia para a Base Trip' })
-  createBaseTripDay(@Param('id') id: string, @Body() dto: CreateBaseTripDayDto) {
+  createBaseTripDay(
+    @Param('id') id: string,
+    @Body() dto: CreateBaseTripDayDto,
+  ) {
     return this.baseTripsService.createBaseTripDay(id, dto);
   }
 
   @Post('base-trip-days/:id/attractions')
   @ApiOperation({ summary: 'Criar atração em um dia base' })
-  createBaseAttraction(@Param('id') id: string, @Body() dto: CreateBaseAttractionDto) {
+  createBaseAttraction(
+    @Param('id') id: string,
+    @Body() dto: CreateBaseAttractionDto,
+  ) {
     return this.baseTripsService.createBaseAttraction(id, dto);
   }
 
   @Patch('base-attractions/:id')
   @ApiOperation({ summary: 'Atualizar atração base' })
-  updateBaseAttraction(@Param('id') id: string, @Body() dto: UpdateBaseAttractionDto) {
+  updateBaseAttraction(
+    @Param('id') id: string,
+    @Body() dto: UpdateBaseAttractionDto,
+  ) {
     return this.baseTripsService.updateBaseAttraction(id, dto);
   }
 
@@ -79,13 +97,19 @@ export class BaseTripsController {
 
   @Post('base-trip-days/:id/restaurants')
   @ApiOperation({ summary: 'Criar restaurante em um dia base' })
-  createBaseRestaurant(@Param('id') id: string, @Body() dto: CreateBaseRestaurantDto) {
+  createBaseRestaurant(
+    @Param('id') id: string,
+    @Body() dto: CreateBaseRestaurantDto,
+  ) {
     return this.baseTripsService.createBaseRestaurant(id, dto);
   }
 
   @Patch('base-restaurants/:id')
   @ApiOperation({ summary: 'Atualizar restaurante base' })
-  updateBaseRestaurant(@Param('id') id: string, @Body() dto: UpdateBaseRestaurantDto) {
+  updateBaseRestaurant(
+    @Param('id') id: string,
+    @Body() dto: UpdateBaseRestaurantDto,
+  ) {
     return this.baseTripsService.updateBaseRestaurant(id, dto);
   }
 
@@ -97,7 +121,10 @@ export class BaseTripsController {
 
   @Patch('base-trip-days/:id')
   @ApiOperation({ summary: 'Atualizar dia base' })
-  updateBaseTripDay(@Param('id') id: string, @Body() dto: UpdateBaseTripDayDto) {
+  updateBaseTripDay(
+    @Param('id') id: string,
+    @Body() dto: UpdateBaseTripDayDto,
+  ) {
     return this.baseTripsService.updateBaseTripDay(id, dto);
   }
 

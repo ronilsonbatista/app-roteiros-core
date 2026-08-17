@@ -1,7 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MockPaymentProvider } from './providers/mock-payment.provider';
-import { CreateProductDto, UpdateProductDto, CreateMockPurchaseDto } from './dto/billing.dto';
+import {
+  CreateProductDto,
+  UpdateProductDto,
+  CreateMockPurchaseDto,
+} from './dto/billing.dto';
 import { PurchaseStatus, ProductType } from '@prisma/client';
 
 @Injectable()
@@ -17,14 +26,21 @@ export class BillingService {
   }
 
   async createMockPurchase(userId: string, dto: CreateMockPurchaseDto) {
-    const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: dto.productId },
+    });
     if (!product) throw new NotFoundException('Produto não encontrado');
     if (!product.active) throw new BadRequestException('Produto inativo');
 
     if (dto.tripId) {
-      const trip = await this.prisma.trip.findUnique({ where: { id: dto.tripId } });
+      const trip = await this.prisma.trip.findUnique({
+        where: { id: dto.tripId },
+      });
       if (!trip) throw new NotFoundException('Trip não encontrada');
-      if (trip.userId !== userId) throw new ForbiddenException('Não autorizado. Você só pode comprar para a sua própria viagem.');
+      if (trip.userId !== userId)
+        throw new ForbiddenException(
+          'Não autorizado. Você só pode comprar para a sua própria viagem.',
+        );
     }
 
     return this.prisma.purchase.create({
@@ -46,8 +62,10 @@ export class BillingService {
     });
 
     if (!purchase) throw new NotFoundException('Compra não encontrada');
-    if (purchase.userId !== userId) throw new ForbiddenException('Acesso negado');
-    if (purchase.status !== PurchaseStatus.PENDING) throw new BadRequestException('A compra não está mais pendente');
+    if (purchase.userId !== userId)
+      throw new ForbiddenException('Acesso negado');
+    if (purchase.status !== PurchaseStatus.PENDING)
+      throw new BadRequestException('A compra não está mais pendente');
 
     // Chamar MockPaymentProvider
     const paymentResult = await this.paymentProvider.processPayment({
@@ -71,7 +89,10 @@ export class BillingService {
     });
 
     // Desbloquear Trip caso ITINERARY_FULL_ACCESS
-    if (purchase.product.type === ProductType.ITINERARY_FULL_ACCESS && purchase.tripId) {
+    if (
+      purchase.product.type === ProductType.ITINERARY_FULL_ACCESS &&
+      purchase.tripId
+    ) {
       await this.prisma.trip.update({
         where: { id: purchase.tripId },
         data: { premiumUnlockedAt: new Date() },
@@ -103,7 +124,10 @@ export class BillingService {
   }
 
   async deactivateProduct(id: string) {
-    return this.prisma.product.update({ where: { id }, data: { active: false } });
+    return this.prisma.product.update({
+      where: { id },
+      data: { active: false },
+    });
   }
 
   async getAdminPurchases(page: number, limit: number, filters: any) {
@@ -129,7 +153,10 @@ export class BillingService {
       this.prisma.purchase.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async getAdminPurchaseDetails(id: string) {

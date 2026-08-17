@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
@@ -27,19 +31,21 @@ export class TripsService {
   async findOne(userId: string, tripId: string, allowViewer: boolean = false) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      include: { 
+      include: {
         days: { include: { items: true } },
         participants: true,
       },
     });
 
     if (!trip) throw new NotFoundException('Viagem não encontrada');
-    
+
     const isOwner = trip.userId === userId;
     let isViewer = false;
 
     if (!isOwner && allowViewer) {
-      const participant = trip.participants.find(p => p.acceptedById === userId && p.accepted === true);
+      const participant = trip.participants.find(
+        (p) => p.acceptedById === userId && p.accepted === true,
+      );
       if (participant) {
         isViewer = true;
       }

@@ -12,13 +12,13 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    
+
     if (!requiredRoles) {
       return true; // Se a rota não exige roles específicas, permite o acesso
     }
-    
+
     const { user } = context.switchToHttp().getRequest();
-    
+
     // O JwtStrategy garante que o `user.role` existe
     return requiredRoles.includes(user.role);
   }

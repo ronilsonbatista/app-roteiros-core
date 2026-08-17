@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsArray, IsEnum, IsBoolean, IsInt, Min, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsBoolean,
+  IsInt,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TravelStyle, BudgetLevel } from '@prisma/client';
 

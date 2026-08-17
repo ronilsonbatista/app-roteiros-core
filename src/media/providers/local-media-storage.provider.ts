@@ -11,7 +11,8 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
   private readonly uploadDir: string;
 
   constructor() {
-    this.baseUrl = process.env.MEDIA_BASE_URL || 'http://localhost:3000/uploads';
+    this.baseUrl =
+      process.env.MEDIA_BASE_URL || 'http://localhost:3000/uploads';
     this.uploadDir = path.join(process.cwd(), 'uploads');
 
     if (!fs.existsSync(this.uploadDir)) {
@@ -19,10 +20,13 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     }
   }
 
-  async uploadFile(file: Express.Multer.File, folder?: string): Promise<UploadResult> {
+  async uploadFile(
+    file: Express.Multer.File,
+    folder?: string,
+  ): Promise<UploadResult> {
     const ext = path.extname(file.originalname);
     const filename = `${uuidv4()}${ext}`;
-    
+
     let targetDir = this.uploadDir;
     if (folder) {
       targetDir = path.join(this.uploadDir, folder);

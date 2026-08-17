@@ -26,19 +26,13 @@ export class BillingController {
 
   @Post('purchases/mock')
   @ApiOperation({ summary: 'Criar uma compra mockada (status PENDING)' })
-  createPurchase(
-    @CurrentUser() user: any,
-    @Body() dto: CreateMockPurchaseDto,
-  ) {
+  createPurchase(@CurrentUser() user: any, @Body() dto: CreateMockPurchaseDto) {
     return this.billingService.createMockPurchase(user.userId, dto);
   }
 
   @Post('purchases/:id/confirm-mock-payment')
   @ApiOperation({ summary: 'Confirmar pagamento mock (muda status para PAID)' })
-  confirmPayment(
-    @CurrentUser() user: any,
-    @Param('id') purchaseId: string,
-  ) {
+  confirmPayment(@CurrentUser() user: any, @Param('id') purchaseId: string) {
     return this.billingService.confirmMockPayment(user.userId, purchaseId);
   }
 }

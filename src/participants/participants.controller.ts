@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ParticipantsService } from './participants.service';
 import { InviteParticipantDto } from './dto/invite-participant.dto';
@@ -25,7 +33,10 @@ export class ParticipantsController {
 
   @Get('trips/:tripId/participants')
   @ApiOperation({ summary: 'Listar participantes de uma viagem' })
-  findAllParticipants(@CurrentUser() user: any, @Param('tripId') tripId: string) {
+  findAllParticipants(
+    @CurrentUser() user: any,
+    @Param('tripId') tripId: string,
+  ) {
     return this.participantsService.findAllByTrip(user.userId, tripId);
   }
 

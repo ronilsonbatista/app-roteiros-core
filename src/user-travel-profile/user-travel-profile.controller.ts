@@ -1,4 +1,13 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserTravelProfileService } from './user-travel-profile.service';
 import { CreateUserTravelProfileDto } from './dto/create-user-travel-profile.dto';
@@ -14,7 +23,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class UserTravelProfileController {
-  constructor(private readonly userTravelProfileService: UserTravelProfileService) {}
+  constructor(
+    private readonly userTravelProfileService: UserTravelProfileService,
+  ) {}
 
   @ApiTags('Travel Profile - App')
   @Post('users/me/travel-profile')
@@ -48,7 +59,9 @@ export class UserTravelProfileController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Get('admin/users/:id/travel-profile')
-  @ApiOperation({ summary: 'Visualizar perfil do viajante de um usuário específico (Admin)' })
+  @ApiOperation({
+    summary: 'Visualizar perfil do viajante de um usuário específico (Admin)',
+  })
   getAdminUserTravelProfile(@Param('id') id: string) {
     return this.userTravelProfileService.getAdminUserTravelProfile(id);
   }

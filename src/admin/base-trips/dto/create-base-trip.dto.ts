@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsEnum, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  IsEnum,
+  IsArray,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BaseTripStatus, BaseTripVisibility } from '@prisma/client';
 
@@ -88,7 +95,10 @@ export class CreateBaseTripDto {
   @IsEnum(BaseTripStatus)
   status?: BaseTripStatus;
 
-  @ApiPropertyOptional({ enum: BaseTripVisibility, default: BaseTripVisibility.PRIVATE })
+  @ApiPropertyOptional({
+    enum: BaseTripVisibility,
+    default: BaseTripVisibility.PRIVATE,
+  })
   @IsOptional()
   @IsEnum(BaseTripVisibility)
   visibility?: BaseTripVisibility;

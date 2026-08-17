@@ -6,6 +6,6 @@ import { OpenAIProvider } from './providers/openai.provider';
 
 @Module({
   providers: [AiService, OpenAIProvider],
-  controllers: [AiController, AdminAiRequestsController]
+  controllers: [AiController, AdminAiRequestsController],
 })
 export class AiModule {}

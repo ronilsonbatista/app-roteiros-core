@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenAIProvider } from './providers/openai.provider';
 import { ItineraryCategory } from '@prisma/client';
@@ -21,10 +27,13 @@ export class AiService {
     });
 
     if (!trip) throw new NotFoundException('Trip não encontrada');
-    if (trip.userId !== userId) throw new ForbiddenException('Trip não pertence ao usuário logado');
+    if (trip.userId !== userId)
+      throw new ForbiddenException('Trip não pertence ao usuário logado');
 
     if (trip.days && trip.days.length > 0) {
-      throw new BadRequestException('Esta viagem já possui um roteiro gerado. Limpe ou edite manualmente os dias atuais antes de gerar novamente.');
+      throw new BadRequestException(
+        'Esta viagem já possui um roteiro gerado. Limpe ou edite manualmente os dias atuais antes de gerar novamente.',
+      );
     }
 
     const travelProfile = await this.prisma.userTravelProfile.findUnique({
@@ -44,9 +53,14 @@ export class AiService {
       if (!baseTrip) throw new NotFoundException('BaseTrip não encontrada');
     }
 
-    const numberOfDays = trip.endDate && trip.startDate 
-      ? Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / (1000 * 3600 * 24)) + 1 
-      : (baseTrip?.numberOfDays || 3);
+    const numberOfDays =
+      trip.endDate && trip.startDate
+        ? Math.ceil(
+            (new Date(trip.endDate).getTime() -
+              new Date(trip.startDate).getTime()) /
+              (1000 * 3600 * 24),
+          ) + 1
+        : baseTrip?.numberOfDays || 3;
 
     let aiRequestRecord;
 
@@ -65,7 +79,7 @@ export class AiService {
           baseTripId,
           provider: aiResult.provider,
           model: aiResult.model,
-          prompt: "System Prompt + User Context", 
+          prompt: 'System Prompt + User Context',
           response: aiResult.parsedData,
           status: 'SUCCESS',
           tokensUsed: aiResult.tokensUsed,
@@ -74,7 +88,7 @@ export class AiService {
 
       // Parse and save data
       const parsedDays = aiResult.parsedData.days || [];
-      
+
       for (const day of parsedDays) {
         const tripDay = await this.prisma.tripDay.create({
           data: {
@@ -89,8 +103,12 @@ export class AiService {
           let order = 1;
           for (const item of day.items) {
             // Safe enum fallback
-            const categoryMatch = Object.values(ItineraryCategory).find(c => c === item.category);
-            const safeCategory = categoryMatch ? categoryMatch : ItineraryCategory.TOURIST_ATTRACTION;
+            const categoryMatch = Object.values(ItineraryCategory).find(
+              (c) => c === item.category,
+            );
+            const safeCategory = categoryMatch
+              ? categoryMatch
+              : ItineraryCategory.TOURIST_ATTRACTION;
 
             await this.prisma.itineraryItem.create({
               data: {
@@ -114,11 +132,11 @@ export class AiService {
         message: 'Roteiro gerado com sucesso via IA',
         aiRequestId: aiRequestRecord.id,
       };
-
     } catch (error) {
       this.logger.error('Erro na geração do roteiro via IA', error);
 
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido';
 
       await this.prisma.aIRequest.create({
         data: {
@@ -127,13 +145,15 @@ export class AiService {
           baseTripId,
           provider: 'OPENAI',
           model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-          prompt: "System Prompt + User Context",
+          prompt: 'System Prompt + User Context',
           status: 'FAILED',
           errorMessage,
         },
       });
 
-      throw new BadRequestException(`Falha ao gerar roteiro via IA: ${errorMessage}`);
+      throw new BadRequestException(
+        `Falha ao gerar roteiro via IA: ${errorMessage}`,
+      );
     }
   }
 
@@ -157,7 +177,10 @@ export class AiService {
       this.prisma.aIRequest.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async getAdminAiRequestDetails(id: string) {

@@ -4,6 +4,6 @@ import { UserTravelProfileController } from './user-travel-profile.controller';
 
 @Module({
   providers: [UserTravelProfileService],
-  controllers: [UserTravelProfileController]
+  controllers: [UserTravelProfileController],
 })
 export class UserTravelProfileModule {}

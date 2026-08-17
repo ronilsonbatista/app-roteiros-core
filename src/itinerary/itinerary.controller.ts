@@ -1,4 +1,11 @@
-import { Controller, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ItineraryService } from './itinerary.service';
 import { UpdateItineraryItemDto } from './dto/update-itinerary-item.dto';
@@ -15,8 +22,16 @@ export class ItineraryController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Atualizar um item do roteiro' })
-  update(@CurrentUser() user: any, @Param('id') id: string, @Body() updateItineraryItemDto: UpdateItineraryItemDto) {
-    return this.itineraryService.update(user.userId, id, updateItineraryItemDto);
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() updateItineraryItemDto: UpdateItineraryItemDto,
+  ) {
+    return this.itineraryService.update(
+      user.userId,
+      id,
+      updateItineraryItemDto,
+    );
   }
 
   @Delete(':id')
@@ -27,7 +42,11 @@ export class ItineraryController {
 
   @Patch(':id/reorder')
   @ApiOperation({ summary: 'Reordenar um item no roteiro' })
-  reorder(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: ReorderItineraryItemDto) {
+  reorder(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: ReorderItineraryItemDto,
+  ) {
     return this.itineraryService.reorder(user.userId, id, dto);
   }
 }

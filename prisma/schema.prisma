@@ -20,7 +20,7 @@ model User {
   id              String         @id @default(uuid())
   email           String         @unique
   fullName        String
-  passwordHash    String
+  passwordHash    String?
   photoUrl        String?
   role            Role           @default(USER)
   emailConfirmed  Boolean        @default(false)
@@ -56,6 +56,29 @@ model RefreshToken {
   revokedAt DateTime?
 
   @@map("refresh_tokens")
+}
+
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model AuthOtp {
+  id           String     @id @default(uuid())
+  email        String
+  purpose      OtpPurpose
+  codeHash     String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attemptCount Int        @default(0)
+
+  createdAt    DateTime   @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("auth_otps")
 }
 
 enum TripStatus {

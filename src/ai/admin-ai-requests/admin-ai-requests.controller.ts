@@ -1,5 +1,10 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AiService } from '../ai.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -36,7 +41,14 @@ export class AdminAiRequestsController {
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const limitNumber = limit ? parseInt(limit, 10) : 10;
-    return this.aiService.getAdminAiRequests(pageNumber, limitNumber, { status, userId, tripId, baseTripId, provider, model });
+    return this.aiService.getAdminAiRequests(pageNumber, limitNumber, {
+      status,
+      userId,
+      tripId,
+      baseTripId,
+      provider,
+      model,
+    });
   }
 
   @Get(':id')

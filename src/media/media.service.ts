@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocalMediaStorageProvider } from './providers/local-media-storage.provider';
 
@@ -11,9 +16,9 @@ export class MediaService {
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    
+
     const result = await this.mediaProvider.uploadFile(file, 'avatars');
-    
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { photoUrl: result.url },
@@ -24,7 +29,7 @@ export class MediaService {
 
   async uploadBaseTripCover(id: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    
+
     const trip = await this.prisma.baseTrip.findUnique({ where: { id } });
     if (!trip) throw new NotFoundException('BaseTrip não encontrada');
 
@@ -40,11 +45,14 @@ export class MediaService {
 
   async uploadBaseAttractionImage(id: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    
+
     const attr = await this.prisma.baseAttraction.findUnique({ where: { id } });
     if (!attr) throw new NotFoundException('BaseAttraction não encontrada');
 
-    const result = await this.mediaProvider.uploadFile(file, 'base-attractions');
+    const result = await this.mediaProvider.uploadFile(
+      file,
+      'base-attractions',
+    );
 
     await this.prisma.baseAttraction.update({
       where: { id },
@@ -56,11 +64,14 @@ export class MediaService {
 
   async uploadBaseRestaurantImage(id: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    
+
     const rest = await this.prisma.baseRestaurant.findUnique({ where: { id } });
     if (!rest) throw new NotFoundException('BaseRestaurant não encontrado');
 
-    const result = await this.mediaProvider.uploadFile(file, 'base-restaurants');
+    const result = await this.mediaProvider.uploadFile(
+      file,
+      'base-restaurants',
+    );
 
     await this.prisma.baseRestaurant.update({
       where: { id },
@@ -70,12 +81,19 @@ export class MediaService {
     return result;
   }
 
-  async uploadTripCover(userId: string, tripId: string, file: Express.Multer.File) {
+  async uploadTripCover(
+    userId: string,
+    tripId: string,
+    file: Express.Multer.File,
+  ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    
+
     const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
     if (!trip) throw new NotFoundException('Trip não encontrada');
-    if (trip.userId !== userId) throw new ForbiddenException('Apenas o dono da viagem pode alterar a capa');
+    if (trip.userId !== userId)
+      throw new ForbiddenException(
+        'Apenas o dono da viagem pode alterar a capa',
+      );
 
     const result = await this.mediaProvider.uploadFile(file, 'trips');
 

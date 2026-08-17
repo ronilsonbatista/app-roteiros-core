@@ -16,7 +16,9 @@ export class CreateTripDayDto {
   @IsString()
   title?: string;
 
-  @ApiPropertyOptional({ example: 'Dia livre para explorar os arredores do hotel.' })
+  @ApiPropertyOptional({
+    example: 'Dia livre para explorar os arredores do hotel.',
+  })
   @IsOptional()
   @IsString()
   description?: string;

@@ -1,5 +1,19 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { BillingService } from '../billing.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -57,7 +71,12 @@ export class AdminBillingController {
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const limitNumber = limit ? parseInt(limit, 10) : 10;
-    return this.billingService.getAdminPurchases(pageNumber, limitNumber, { status, userId, productId, tripId });
+    return this.billingService.getAdminPurchases(pageNumber, limitNumber, {
+      status,
+      userId,
+      productId,
+      tripId,
+    });
   }
 
   @Get('purchases/:id')

@@ -8,6 +8,6 @@ import { AdminTripsService } from './admin-trips.service';
 @Module({
   providers: [AdminService, AdminTripsService],
   controllers: [AdminController, AdminTripsController],
-  imports: [BaseTripsModule]
+  imports: [BaseTripsModule],
 })
 export class AdminModule {}

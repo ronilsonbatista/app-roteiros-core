@@ -13,15 +13,24 @@ export class AnalyticsService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const [
-      totalUsers, blockedUsers, newUsersLast30Days,
-      totalTrips, premiumUnlockedTrips, sharedTrips,
-      purchasesAgg, pendingPurchasesCount, paidPurchasesCount,
-      aiTotal, aiSuccess, aiFailed, aiTokens
+      totalUsers,
+      blockedUsers,
+      newUsersLast30Days,
+      totalTrips,
+      premiumUnlockedTrips,
+      sharedTrips,
+      purchasesAgg,
+      pendingPurchasesCount,
+      paidPurchasesCount,
+      aiTotal,
+      aiSuccess,
+      aiFailed,
+      aiTokens,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { blockedAt: { not: null } } }),
       this.prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-      
+
       this.prisma.trip.count(),
       this.prisma.trip.count({ where: { premiumUnlockedAt: { not: null } } }),
       this.prisma.tripParticipant.count(),
@@ -34,8 +43,12 @@ export class AnalyticsService {
       this.prisma.purchase.count({ where: { status: PurchaseStatus.PAID } }),
 
       this.prisma.aIRequest.count(),
-      this.prisma.aIRequest.count({ where: { status: AIRequestStatus.SUCCESS } }),
-      this.prisma.aIRequest.count({ where: { status: AIRequestStatus.FAILED } }),
+      this.prisma.aIRequest.count({
+        where: { status: AIRequestStatus.SUCCESS },
+      }),
+      this.prisma.aIRequest.count({
+        where: { status: AIRequestStatus.FAILED },
+      }),
       this.prisma.aIRequest.aggregate({
         _sum: { tokensUsed: true },
         where: { status: AIRequestStatus.SUCCESS },
@@ -87,17 +100,20 @@ export class AnalyticsService {
     });
 
     const products = await this.prisma.product.findMany({
-      where: { id: { in: purchasesByType.map(p => p.productId) } },
+      where: { id: { in: purchasesByType.map((p) => p.productId) } },
     });
 
-    const revenueByProductType = purchasesByType.reduce((acc, curr) => {
-      const p = products.find(prod => prod.id === curr.productId);
-      if (p) {
-        if (!acc[p.type]) acc[p.type] = 0;
-        acc[p.type] += curr._sum.amount || 0;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    const revenueByProductType = purchasesByType.reduce(
+      (acc, curr) => {
+        const p = products.find((prod) => prod.id === curr.productId);
+        if (p) {
+          if (!acc[p.type]) acc[p.type] = 0;
+          acc[p.type] += curr._sum.amount || 0;
+        }
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     const whereAllStatuses: any = {};
     if (startDate || endDate) {
@@ -115,7 +131,7 @@ export class AnalyticsService {
     return {
       totalRevenue: totalAgg._sum.amount || 0,
       revenueByProductType,
-      purchasesByStatus: purchasesByStatus.map(p => ({
+      purchasesByStatus: purchasesByStatus.map((p) => ({
         status: p.status,
         count: p._count,
       })),
@@ -134,7 +150,12 @@ export class AnalyticsService {
       }),
       this.prisma.aIRequest.findMany({
         where: { status: AIRequestStatus.FAILED },
-        select: { id: true, provider: true, errorMessage: true, createdAt: true },
+        select: {
+          id: true,
+          provider: true,
+          errorMessage: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
@@ -183,12 +204,15 @@ export class AnalyticsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const growth = users.reduce((acc, user) => {
-      const monthYear = `${user.createdAt.getFullYear()}-${String(user.createdAt.getMonth() + 1).padStart(2, '0')}`;
-      if (!acc[monthYear]) acc[monthYear] = 0;
-      acc[monthYear]++;
-      return acc;
-    }, {} as Record<string, number>);
+    const growth = users.reduce(
+      (acc, user) => {
+        const monthYear = `${user.createdAt.getFullYear()}-${String(user.createdAt.getMonth() + 1).padStart(2, '0')}`;
+        if (!acc[monthYear]) acc[monthYear] = 0;
+        acc[monthYear]++;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return growth;
   }
@@ -199,19 +223,22 @@ export class AnalyticsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const growth = trips.reduce((acc, trip) => {
-      const monthYear = `${trip.createdAt.getFullYear()}-${String(trip.createdAt.getMonth() + 1).padStart(2, '0')}`;
-      if (!acc[monthYear]) acc[monthYear] = 0;
-      acc[monthYear]++;
-      return acc;
-    }, {} as Record<string, number>);
+    const growth = trips.reduce(
+      (acc, trip) => {
+        const monthYear = `${trip.createdAt.getFullYear()}-${String(trip.createdAt.getMonth() + 1).padStart(2, '0')}`;
+        if (!acc[monthYear]) acc[monthYear] = 0;
+        acc[monthYear]++;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return growth;
   }
 
   getStorageStats() {
     const uploadDir = path.join(process.cwd(), 'uploads');
-    
+
     if (!fs.existsSync(uploadDir)) {
       return { totalFiles: 0, totalSize: 0, breakdown: {} };
     }
@@ -224,9 +251,9 @@ export class AnalyticsService {
 
     const countFilesAndSize = (dir: string, folderName: string) => {
       if (!fs.existsSync(dir)) return;
-      
+
       const files = fs.readdirSync(dir);
-      
+
       if (!result.breakdown[folderName]) {
         result.breakdown[folderName] = { files: 0, size: 0 };
       }
@@ -254,7 +281,8 @@ export class AnalyticsService {
       if (stats.isDirectory()) {
         countFilesAndSize(fullPath, file);
       } else {
-        if (!result.breakdown['root']) result.breakdown['root'] = { files: 0, size: 0 };
+        if (!result.breakdown['root'])
+          result.breakdown['root'] = { files: 0, size: 0 };
         result.totalFiles++;
         result.totalSize += stats.size;
         result.breakdown['root'].files++;

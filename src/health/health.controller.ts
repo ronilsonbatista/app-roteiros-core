@@ -25,9 +25,13 @@ export class HealthController {
     return {
       api: 'OK',
       database: dbStatus,
-      openaiConfigured: openaiKey && openaiKey.length > 5 ? 'OK' : 'Not Configured',
-      googleMapsConfigured: googleKey && googleKey.length > 5 ? 'OK' : 'Not Configured',
-      uploadFolderStatus: fs.existsSync(path.join(process.cwd(), 'uploads')) ? 'OK' : 'Not Created',
+      openaiConfigured:
+        openaiKey && openaiKey.length > 5 ? 'OK' : 'Not Configured',
+      googleMapsConfigured:
+        googleKey && googleKey.length > 5 ? 'OK' : 'Not Configured',
+      uploadFolderStatus: fs.existsSync(path.join(process.cwd(), 'uploads'))
+        ? 'OK'
+        : 'Not Created',
       timestamp: new Date().toISOString(),
     };
   }

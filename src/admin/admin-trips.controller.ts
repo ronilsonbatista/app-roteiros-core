@@ -1,5 +1,20 @@
-import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AdminTripsService } from './admin-trips.service';
 import { CreateTripDto } from '../trips/dto/create-trip.dto';
 import { UpdateTripDto } from '../trips/dto/update-trip.dto';
@@ -34,8 +49,18 @@ export class AdminTripsController {
   @ApiQuery({ name: 'destination', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: TripStatus })
   @ApiQuery({ name: 'premium', required: false, type: Boolean })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Formato YYYY-MM-DD' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Formato YYYY-MM-DD' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Formato YYYY-MM-DD',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'Formato YYYY-MM-DD',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   findAll(
@@ -120,14 +145,20 @@ export class AdminTripsController {
   @Post('trip-days/:tripDayId/items')
   @ApiTags('Admin - Itinerary Editor')
   @ApiOperation({ summary: 'Criar item no roteiro' })
-  createItineraryItem(@Param('tripDayId') tripDayId: string, @Body() dto: CreateItineraryItemDto) {
+  createItineraryItem(
+    @Param('tripDayId') tripDayId: string,
+    @Body() dto: CreateItineraryItemDto,
+  ) {
     return this.adminTripsService.createItineraryItem(tripDayId, dto);
   }
 
   @Patch('itinerary-items/:id')
   @ApiTags('Admin - Itinerary Editor')
   @ApiOperation({ summary: 'Editar item no roteiro' })
-  updateItineraryItem(@Param('id') id: string, @Body() dto: UpdateItineraryItemDto) {
+  updateItineraryItem(
+    @Param('id') id: string,
+    @Body() dto: UpdateItineraryItemDto,
+  ) {
     return this.adminTripsService.updateItineraryItem(id, dto);
   }
 
@@ -141,7 +172,10 @@ export class AdminTripsController {
   @Patch('itinerary-items/:id/reorder')
   @ApiTags('Admin - Itinerary Editor')
   @ApiOperation({ summary: 'Reordenar item no roteiro' })
-  reorderItineraryItem(@Param('id') id: string, @Body() dto: ReorderItineraryItemDto) {
+  reorderItineraryItem(
+    @Param('id') id: string,
+    @Body() dto: ReorderItineraryItemDto,
+  ) {
     return this.adminTripsService.reorderItineraryItem(id, dto);
   }
 

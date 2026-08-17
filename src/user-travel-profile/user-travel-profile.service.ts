@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserTravelProfileDto } from './dto/create-user-travel-profile.dto';
 import { UpdateUserTravelProfileDto } from './dto/update-user-travel-profile.dto';
@@ -10,13 +14,15 @@ export class UserTravelProfileService {
   private normalizeArray(arr?: string[]): string[] | undefined {
     if (!arr) return undefined;
     const normalized = arr
-      .filter((item) => item && typeof item === 'string' && item.trim().length > 0)
+      .filter(
+        (item) => item && typeof item === 'string' && item.trim().length > 0,
+      )
       .map((item) => item.trim());
-      
+
     // Deduplicate case-insensitive but keep original case of the first occurrence
     const seen = new Set<string>();
     const result: string[] = [];
-    
+
     for (const item of normalized) {
       const lower = item.toLowerCase();
       if (!seen.has(lower)) {
@@ -24,7 +30,7 @@ export class UserTravelProfileService {
         result.push(item);
       }
     }
-    
+
     return result;
   }
 
@@ -39,16 +45,22 @@ export class UserTravelProfileService {
 
   private normalizePayload(dto: any) {
     const data = { ...dto };
-    
+
     if (data.instagramHandle !== undefined) {
       data.instagramHandle = this.normalizeInstagram(data.instagramHandle);
     }
 
     const arrayFields = [
-      'favoriteCountries', 'favoriteCities', 'preferredLanguages', 
-      'foodPreferences', 'accessibilityNeeds', 'travelInterests',
-      'travelCompanions', 'avoidedDestinations', 'preferredClimate',
-      'bucketListDestinations'
+      'favoriteCountries',
+      'favoriteCities',
+      'preferredLanguages',
+      'foodPreferences',
+      'accessibilityNeeds',
+      'travelInterests',
+      'travelCompanions',
+      'avoidedDestinations',
+      'preferredClimate',
+      'bucketListDestinations',
     ];
 
     for (const field of arrayFields) {
@@ -66,7 +78,9 @@ export class UserTravelProfileService {
     });
 
     if (existing) {
-      throw new BadRequestException('O usuário já possui um perfil de viagem. Use a rota de atualização.');
+      throw new BadRequestException(
+        'O usuário já possui um perfil de viagem. Use a rota de atualização.',
+      );
     }
 
     const normalizedData = this.normalizePayload(dto);

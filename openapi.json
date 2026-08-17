@@ -1,0 +1,4979 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "operationId": "UsersController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Perfil retornado com sucesso."
+          },
+          "401": {
+            "description": "Não autorizado."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter perfil do usuário autenticado",
+        "tags": [
+          "Users - App"
+        ]
+      }
+    },
+    "/users/admin": {
+      "get": {
+        "operationId": "UsersController_getAdminData",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Acesso de administrador liberado."
+          },
+          "403": {
+            "description": "Acesso negado (requer role ADMIN)."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rota exclusiva para administradores",
+        "tags": [
+          "Users - App"
+        ]
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "operationId": "AuthController_signup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuário registrado com sucesso."
+          },
+          "400": {
+            "description": "Email já está em uso."
+          }
+        },
+        "summary": "Registrar novo usuário com senha",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login realizado com sucesso."
+          },
+          "401": {
+            "description": "Credenciais inválidas ou usuário bloqueado."
+          }
+        },
+        "summary": "Autenticar usuário com e-mail e senha",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens renovados com sucesso."
+          },
+          "401": {
+            "description": "Refresh token inválido ou usuário bloqueado."
+          }
+        },
+        "summary": "Renovar tokens de acesso usando o refresh token",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/otp/request": {
+      "post": {
+        "operationId": "AuthController_requestOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Código enviado com sucesso."
+          },
+          "429": {
+            "description": "Aguarde antes de solicitar novo código."
+          }
+        },
+        "summary": "Solicitar código OTP de 6 dígitos por e-mail",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/otp/verify": {
+      "post": {
+        "operationId": "AuthController_verifyOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sessão criada e tokens retornados."
+          },
+          "400": {
+            "description": "Código OTP incorreto ou expirado."
+          },
+          "429": {
+            "description": "Limite de tentativas excedido."
+          }
+        },
+        "summary": "Validar código OTP de 6 dígitos e iniciar sessão (Passwordless / Auth)",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sessão encerrada com sucesso."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revogar sessão atual (Server-side logout)",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "operationId": "AuthController_logoutAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Todas as sessões encerradas."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revogar todas as sessões ativas do usuário",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/password/forgot": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Solicitação processada."
+          }
+        },
+        "summary": "Solicitar código OTP para redefinição de senha",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/password/reset": {
+      "post": {
+        "operationId": "AuthController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Senha redefinida com sucesso."
+          },
+          "400": {
+            "description": "Código inválido ou expirado."
+          }
+        },
+        "summary": "Redefinir senha utilizando o código OTP de verificação",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/trips": {
+      "post": {
+        "operationId": "TripsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar uma nova viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      },
+      "get": {
+        "operationId": "TripsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar as viagens do usuário logado",
+        "tags": [
+          "Trips - App"
+        ]
+      }
+    },
+    "/trips/{id}": {
+      "get": {
+        "operationId": "TripsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter detalhes de uma viagem específica",
+        "tags": [
+          "Trips - App"
+        ]
+      },
+      "patch": {
+        "operationId": "TripsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar uma viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      },
+      "delete": {
+        "operationId": "TripsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deletar uma viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      }
+    },
+    "/trips/{id}/days": {
+      "post": {
+        "operationId": "TripsController_createDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Adicionar um dia no roteiro da viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      }
+    },
+    "/trip-days/{id}": {
+      "patch": {
+        "operationId": "TripDaysController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar dados de um dia específico da viagem",
+        "tags": [
+          "Trip Days - App"
+        ]
+      },
+      "delete": {
+        "operationId": "TripDaysController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deletar um dia da viagem",
+        "tags": [
+          "Trip Days - App"
+        ]
+      }
+    },
+    "/trip-days/{id}/items": {
+      "post": {
+        "operationId": "TripDaysController_createItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Adicionar um novo item/atividade ao dia da viagem",
+        "tags": [
+          "Trip Days - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}": {
+      "patch": {
+        "operationId": "ItineraryController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar um item do roteiro",
+        "tags": [
+          "Itinerary - App"
+        ]
+      },
+      "delete": {
+        "operationId": "ItineraryController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deletar um item do roteiro",
+        "tags": [
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}/reorder": {
+      "patch": {
+        "operationId": "ItineraryController_reorder",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reordenar um item no roteiro",
+        "tags": [
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_getUsers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar usuários com paginação e filtro",
+        "tags": [
+          "Admin - Users"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um novo usuário (USER ou ADMIN)",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminController_getUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhar informações de um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar dados de um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/block": {
+      "patch": {
+        "operationId": "AdminController_blockUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bloquear um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/unblock": {
+      "patch": {
+        "operationId": "AdminController_unblockUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Desbloquear um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/logout-all": {
+      "post": {
+        "operationId": "AdminController_logoutAll",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revogar todos os tokens ativos de um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/trips": {
+      "get": {
+        "operationId": "AdminController_getUserTrips",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as viagens de um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/change-password": {
+      "patch": {
+        "operationId": "AdminController_changePassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alterar senha de um usuário",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/travel-profile": {
+      "patch": {
+        "operationId": "AdminController_updateTravelProfile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserTravelProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar perfil de viagem de um usuário (Admin)",
+        "tags": [
+          "Admin - Users"
+        ]
+      },
+      "get": {
+        "operationId": "UserTravelProfileController_getAdminUserTravelProfile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Visualizar perfil do viajante de um usuário específico (Admin)",
+        "tags": [
+          "Travel Profile - App",
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/archive": {
+      "patch": {
+        "operationId": "AdminController_archiveUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Arquivar a conta de um usuário (Admin)",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/restore": {
+      "patch": {
+        "operationId": "AdminController_restoreUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restaurar a conta de um usuário arquivado (Admin)",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/trips": {
+      "get": {
+        "operationId": "AdminTripsController_findAll",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destination",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "ACTIVE",
+                "COMPLETED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "premium",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": false,
+            "in": "query",
+            "description": "Formato YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": false,
+            "in": "query",
+            "description": "Formato YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as viagens com paginação e filtros",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Trips"
+        ]
+      }
+    },
+    "/admin/trips/{id}": {
+      "get": {
+        "operationId": "AdminTripsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhar viagem completa",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Trips"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminTripsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar viagem como ADMIN",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Trips"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminTripsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir viagem como ADMIN",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Trips"
+        ]
+      }
+    },
+    "/admin/users/{userId}/trips": {
+      "post": {
+        "operationId": "AdminTripsController_create",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar viagem para um usuário específico",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Trips"
+        ]
+      }
+    },
+    "/admin/trips/{tripId}/days": {
+      "post": {
+        "operationId": "AdminTripsController_createDay",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar dia em uma viagem",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/trip-days/{id}": {
+      "patch": {
+        "operationId": "AdminTripsController_updateDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar dia de viagem",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminTripsController_removeDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir dia de viagem",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/trip-days/{tripDayId}/items": {
+      "post": {
+        "operationId": "AdminTripsController_createItineraryItem",
+        "parameters": [
+          {
+            "name": "tripDayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar item no roteiro",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/itinerary-items/{id}": {
+      "patch": {
+        "operationId": "AdminTripsController_updateItineraryItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar item no roteiro",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminTripsController_removeItineraryItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir item no roteiro",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/itinerary-items/{id}/reorder": {
+      "patch": {
+        "operationId": "AdminTripsController_reorderItineraryItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderItineraryItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reordenar item no roteiro",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/trips/{tripId}/participants": {
+      "get": {
+        "operationId": "AdminTripsController_findParticipants",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar participantes",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Participants & Premium"
+        ]
+      },
+      "post": {
+        "operationId": "AdminTripsController_inviteParticipant",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteParticipantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Adicionar/convidar participante",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Participants & Premium"
+        ]
+      }
+    },
+    "/admin/trips/{tripId}/participants/{participantId}": {
+      "delete": {
+        "operationId": "AdminTripsController_removeParticipant",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover participante",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Participants & Premium"
+        ]
+      }
+    },
+    "/admin/trips/{id}/unlock-premium": {
+      "patch": {
+        "operationId": "AdminTripsController_unlockPremium",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Liberar acesso premium a uma viagem",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Participants & Premium"
+        ]
+      }
+    },
+    "/admin/trips/{id}/lock-premium": {
+      "patch": {
+        "operationId": "AdminTripsController_lockPremium",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bloquear/remover acesso premium a uma viagem",
+        "tags": [
+          "Admin - Trips",
+          "Admin - Participants & Premium"
+        ]
+      }
+    },
+    "/admin/base-trips": {
+      "post": {
+        "operationId": "BaseTripsController_createBaseTrip",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBaseTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar nova Base Trip",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "get": {
+        "operationId": "BaseTripsController_findAllBaseTrips",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as Base Trips",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-trips/{id}": {
+      "get": {
+        "operationId": "BaseTripsController_findOneBaseTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhar uma Base Trip",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "patch": {
+        "operationId": "BaseTripsController_updateBaseTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBaseTripDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar uma Base Trip",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "delete": {
+        "operationId": "BaseTripsController_removeBaseTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deletar uma Base Trip",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-trips/{id}/days": {
+      "post": {
+        "operationId": "BaseTripsController_createBaseTripDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBaseTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar dia para a Base Trip",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-trip-days/{id}/attractions": {
+      "post": {
+        "operationId": "BaseTripsController_createBaseAttraction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBaseAttractionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar atração em um dia base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-attractions/{id}": {
+      "patch": {
+        "operationId": "BaseTripsController_updateBaseAttraction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBaseAttractionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar atração base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "delete": {
+        "operationId": "BaseTripsController_removeBaseAttraction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover atração base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-trip-days/{id}/restaurants": {
+      "post": {
+        "operationId": "BaseTripsController_createBaseRestaurant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBaseRestaurantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar restaurante em um dia base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-restaurants/{id}": {
+      "patch": {
+        "operationId": "BaseTripsController_updateBaseRestaurant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBaseRestaurantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar restaurante base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "delete": {
+        "operationId": "BaseTripsController_removeBaseRestaurant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover restaurante base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/admin/base-trip-days/{id}": {
+      "patch": {
+        "operationId": "BaseTripsController_updateBaseTripDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBaseTripDayDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar dia base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      },
+      "delete": {
+        "operationId": "BaseTripsController_removeBaseTripDay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover dia base",
+        "tags": [
+          "Admin - Base Trips"
+        ]
+      }
+    },
+    "/trips/{tripId}/generate-itinerary": {
+      "post": {
+        "operationId": "AiController_generateItinerary",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Gerar um roteiro real via OpenAI (GPT)",
+        "tags": [
+          "Trips - App"
+        ]
+      }
+    },
+    "/admin/ai-requests": {
+      "get": {
+        "operationId": "AdminAiRequestsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tripId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "baseTripId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os logs de requisições de IA",
+        "tags": [
+          "Admin - AI"
+        ]
+      }
+    },
+    "/admin/ai-requests/{id}": {
+      "get": {
+        "operationId": "AdminAiRequestsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhar um log de requisição de IA",
+        "tags": [
+          "Admin - AI"
+        ]
+      }
+    },
+    "/trips/{tripId}/participants": {
+      "post": {
+        "operationId": "ParticipantsController_inviteParticipant",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteParticipantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Convidar um participante para a viagem",
+        "tags": [
+          "Participants - App"
+        ]
+      },
+      "get": {
+        "operationId": "ParticipantsController_findAllParticipants",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar participantes de uma viagem",
+        "tags": [
+          "Participants - App"
+        ]
+      }
+    },
+    "/trips/{tripId}/participants/{participantId}": {
+      "delete": {
+        "operationId": "ParticipantsController_removeParticipant",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover participante de uma viagem",
+        "tags": [
+          "Participants - App"
+        ]
+      }
+    },
+    "/trip-invites/accept": {
+      "post": {
+        "operationId": "ParticipantsController_acceptInvite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Aceitar um convite de viagem",
+        "tags": [
+          "Participants - App"
+        ]
+      }
+    },
+    "/users/me/shared-trips": {
+      "get": {
+        "operationId": "ParticipantsController_getSharedTrips",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar viagens compartilhadas com o usuário",
+        "tags": [
+          "Participants - App"
+        ]
+      }
+    },
+    "/users/me/travel-profile": {
+      "post": {
+        "operationId": "UserTravelProfileController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserTravelProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar perfil do viajante",
+        "tags": [
+          "Travel Profile - App",
+          "Travel Profile - App"
+        ]
+      },
+      "get": {
+        "operationId": "UserTravelProfileController_findOne",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Visualizar perfil do viajante",
+        "tags": [
+          "Travel Profile - App",
+          "Travel Profile - App"
+        ]
+      },
+      "patch": {
+        "operationId": "UserTravelProfileController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserTravelProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar perfil do viajante",
+        "tags": [
+          "Travel Profile - App",
+          "Travel Profile - App"
+        ]
+      },
+      "delete": {
+        "operationId": "UserTravelProfileController_remove",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover perfil do viajante",
+        "tags": [
+          "Travel Profile - App",
+          "Travel Profile - App"
+        ]
+      }
+    },
+    "/places/search": {
+      "get": {
+        "operationId": "PlacesController_searchPlaces",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buscar lugares (Google Places Text Search)",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/places/{providerPlaceId}": {
+      "get": {
+        "operationId": "PlacesController_getPlaceDetails",
+        "parameters": [
+          {
+            "name": "providerPlaceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter detalhes de um lugar específico",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichItineraryItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer ItineraryItem com dados reais de Place",
+        "tags": [
+          "Places - App",
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/admin/base-attractions/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichBaseAttraction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer BaseAttraction com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
+    "/admin/base-restaurants/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichBaseRestaurant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer BaseRestaurant com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
+    "/admin/itinerary-items/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichItineraryItemAdmin",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer ItineraryItem com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
+    "/media/upload/avatar": {
+      "post": {
+        "operationId": "MediaController_uploadAvatar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fazer upload do avatar do usuário",
+        "tags": [
+          "Media - App",
+          "Media - App"
+        ]
+      }
+    },
+    "/media/upload/admin/base-trip/{id}/cover": {
+      "post": {
+        "operationId": "MediaController_uploadBaseTripCover",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fazer upload da capa de uma BaseTrip (Admin)",
+        "tags": [
+          "Media - App",
+          "Admin - Media"
+        ]
+      }
+    },
+    "/media/upload/admin/base-attraction/{id}/image": {
+      "post": {
+        "operationId": "MediaController_uploadBaseAttractionImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fazer upload da imagem de uma BaseAttraction (Admin)",
+        "tags": [
+          "Media - App",
+          "Admin - Media"
+        ]
+      }
+    },
+    "/media/upload/admin/base-restaurant/{id}/image": {
+      "post": {
+        "operationId": "MediaController_uploadBaseRestaurantImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fazer upload da imagem de um BaseRestaurant (Admin)",
+        "tags": [
+          "Media - App",
+          "Admin - Media"
+        ]
+      }
+    },
+    "/media/upload/trips/{id}/cover": {
+      "post": {
+        "operationId": "MediaController_uploadTripCover",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fazer upload da capa de uma Trip própria",
+        "tags": [
+          "Media - App",
+          "Media - App"
+        ]
+      }
+    },
+    "/products": {
+      "get": {
+        "operationId": "BillingController_getProducts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar produtos ativos para compra",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/users/me/purchases": {
+      "get": {
+        "operationId": "BillingController_getMyPurchases",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar as compras do usuário logado",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/purchases/mock": {
+      "post": {
+        "operationId": "BillingController_createPurchase",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMockPurchaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar uma compra mockada (status PENDING)",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/purchases/{id}/confirm-mock-payment": {
+      "post": {
+        "operationId": "BillingController_confirmPayment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirmar pagamento mock (muda status para PAID)",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/admin/products": {
+      "post": {
+        "operationId": "AdminBillingController_createProduct",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um produto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      },
+      "get": {
+        "operationId": "AdminBillingController_getProducts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os produtos (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/products/{id}": {
+      "patch": {
+        "operationId": "AdminBillingController_updateProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar um produto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/products/{id}/deactivate": {
+      "patch": {
+        "operationId": "AdminBillingController_deactivateProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Desativar um produto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/purchases": {
+      "get": {
+        "operationId": "AdminBillingController_getPurchases",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tripId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as compras (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/purchases/{id}": {
+      "get": {
+        "operationId": "AdminBillingController_getPurchaseDetails",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de uma compra (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/dashboard/overview": {
+      "get": {
+        "operationId": "AnalyticsController_getOverview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resumo geral da plataforma (KPIs)",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/revenue": {
+      "get": {
+        "operationId": "AnalyticsController_getRevenue",
+        "parameters": [
+          {
+            "name": "startDate",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Analytics Financeiro / Faturamento",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/ai-usage": {
+      "get": {
+        "operationId": "AnalyticsController_getAiUsage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Analytics de Inteligência Artificial",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/top-destinations": {
+      "get": {
+        "operationId": "AnalyticsController_getTopDestinations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Destinos mais populares",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/users-growth": {
+      "get": {
+        "operationId": "AnalyticsController_getUsersGrowth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crescimento de base de usuários",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/trips-growth": {
+      "get": {
+        "operationId": "AnalyticsController_getTripsGrowth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crescimento de roteiros gerados",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/storage": {
+      "get": {
+        "operationId": "AnalyticsController_getStorageStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Monitoramento de mídia estática",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/admin/dashboard/system-health": {
+      "get": {
+        "operationId": "AnalyticsController_getSystemHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Status e integridade dos serviços",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Status de saúde do sistema",
+        "tags": [
+          "System"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "2GO / AppRoteiros API",
+    "description": "API de Roteiros de Viagem com IA e Autenticação OTP",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "SignupDto": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "email": {
+            "type": "string",
+            "example": "joao@email.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "senhaForte123",
+            "minLength": 6
+          }
+        },
+        "required": [
+          "fullName",
+          "email",
+          "password"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "joao@email.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "senhaForte123"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "RefreshTokenDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "example": "seu-refresh-token-aqui"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "RequestOtpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "usuario@email.com",
+            "description": "E-mail do usuário para recebimento do código de 6 dígitos"
+          },
+          "purpose": {
+            "type": "string",
+            "example": "LOGIN",
+            "enum": [
+              "SIGNUP",
+              "LOGIN",
+              "EMAIL_VERIFICATION",
+              "PASSWORD_RESET"
+            ],
+            "description": "Propósito do código OTP (SIGNUP, LOGIN, EMAIL_VERIFICATION, PASSWORD_RESET)"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "usuario@email.com",
+            "description": "E-mail do usuário"
+          },
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "Código OTP de 6 dígitos recebido por e-mail"
+          },
+          "purpose": {
+            "type": "string",
+            "example": "LOGIN",
+            "enum": [
+              "SIGNUP",
+              "LOGIN",
+              "EMAIL_VERIFICATION",
+              "PASSWORD_RESET"
+            ],
+            "description": "Propósito do código OTP (SIGNUP, LOGIN, EMAIL_VERIFICATION, PASSWORD_RESET)"
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ]
+      },
+      "ForgotPasswordDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "usuario@email.com",
+            "description": "E-mail cadastrado do usuário para recuperação de senha"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "usuario@email.com",
+            "description": "E-mail cadastrado do usuário"
+          },
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "Código OTP de 6 dígitos recebido para redefinição de senha"
+          },
+          "newPassword": {
+            "type": "string",
+            "example": "NovaSenhaSegura123!",
+            "description": "Nova senha do usuário (mínimo de 6 caracteres)"
+          }
+        },
+        "required": [
+          "email",
+          "code",
+          "newPassword"
+        ]
+      },
+      "CreateTripDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Viagem para Paris"
+          },
+          "destination": {
+            "type": "string",
+            "example": "Paris, França"
+          },
+          "coverImage": {
+            "type": "string",
+            "example": "https://exemplo.com/imagem.jpg"
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2027-01-10T00:00:00.000Z"
+          },
+          "endDate": {
+            "type": "string",
+            "example": "2027-01-20T00:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED"
+            ],
+            "default": "DRAFT"
+          },
+          "preferences": {
+            "type": "object",
+            "example": {
+              "focus": "cultural",
+              "pace": "relaxed"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "destination"
+        ]
+      },
+      "UpdateTripDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Viagem para Paris"
+          },
+          "destination": {
+            "type": "string",
+            "example": "Paris, França"
+          },
+          "coverImage": {
+            "type": "string",
+            "example": "https://exemplo.com/imagem.jpg"
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2027-01-10T00:00:00.000Z"
+          },
+          "endDate": {
+            "type": "string",
+            "example": "2027-01-20T00:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED"
+            ],
+            "default": "DRAFT"
+          },
+          "preferences": {
+            "type": "object",
+            "example": {
+              "focus": "cultural",
+              "pace": "relaxed"
+            }
+          }
+        }
+      },
+      "CreateTripDayDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2027-01-10T00:00:00.000Z"
+          },
+          "dayNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "example": "Chegada e Check-in"
+          },
+          "description": {
+            "type": "string",
+            "example": "Dia livre para explorar os arredores do hotel."
+          }
+        },
+        "required": [
+          "dayNumber"
+        ]
+      },
+      "UpdateTripDayDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2027-01-10T00:00:00.000Z"
+          },
+          "dayNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "example": "Chegada e Check-in"
+          },
+          "description": {
+            "type": "string",
+            "example": "Dia livre para explorar os arredores do hotel."
+          }
+        }
+      },
+      "CreateItineraryItemDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Visita ao Museu do Louvre"
+          },
+          "description": {
+            "type": "string",
+            "example": "Comprar ingressos antecipados."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "example": "Rue de Rivoli, 75001 Paris"
+          },
+          "googleMapsLink": {
+            "type": "string",
+            "example": "https://maps.google.com/?q=Louvre"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 48.8606111
+          },
+          "longitude": {
+            "type": "number",
+            "example": 2.337644
+          },
+          "timeLabel": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "period": {
+            "type": "string",
+            "example": "Manhã"
+          },
+          "duration": {
+            "type": "number",
+            "example": 120,
+            "description": "Duração em minutos"
+          },
+          "cost": {
+            "type": "number",
+            "example": 15.5
+          },
+          "currency": {
+            "type": "string",
+            "example": "EUR"
+          },
+          "externalLink": {
+            "type": "string",
+            "example": "https://louvre.fr"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Levar garrafa de água."
+          },
+          "order": {
+            "type": "number",
+            "example": 1
+          },
+          "isEditable": {
+            "type": "boolean",
+            "default": true
+          },
+          "isUserModified": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "order"
+        ]
+      },
+      "UpdateItineraryItemDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Visita ao Museu do Louvre"
+          },
+          "description": {
+            "type": "string",
+            "example": "Comprar ingressos antecipados."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "example": "Rue de Rivoli, 75001 Paris"
+          },
+          "googleMapsLink": {
+            "type": "string",
+            "example": "https://maps.google.com/?q=Louvre"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 48.8606111
+          },
+          "longitude": {
+            "type": "number",
+            "example": 2.337644
+          },
+          "timeLabel": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "period": {
+            "type": "string",
+            "example": "Manhã"
+          },
+          "duration": {
+            "type": "number",
+            "example": 120,
+            "description": "Duração em minutos"
+          },
+          "cost": {
+            "type": "number",
+            "example": 15.5
+          },
+          "currency": {
+            "type": "string",
+            "example": "EUR"
+          },
+          "externalLink": {
+            "type": "string",
+            "example": "https://louvre.fr"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Levar garrafa de água."
+          },
+          "order": {
+            "type": "number",
+            "example": 1
+          },
+          "isEditable": {
+            "type": "boolean",
+            "default": true
+          },
+          "isUserModified": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "ReorderItineraryItemDto": {
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "number",
+            "example": 2
+          }
+        },
+        "required": [
+          "order"
+        ]
+      },
+      "CreateUserAdminDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "joao@email.com"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "password": {
+            "type": "string",
+            "example": "senhaForte123",
+            "minLength": 6
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN"
+            ],
+            "default": "USER"
+          }
+        },
+        "required": [
+          "email",
+          "fullName",
+          "password",
+          "role"
+        ]
+      },
+      "UpdateUserAdminDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "joao@email.com"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN"
+            ]
+          }
+        }
+      },
+      "ChangePasswordAdminDto": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "example": "novaSenhaForte123",
+            "minLength": 6
+          }
+        },
+        "required": [
+          "password"
+        ]
+      },
+      "UpdateUserTravelProfileDto": {
+        "type": "object",
+        "properties": {
+          "bio": {
+            "type": "string"
+          },
+          "preferredStyles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ECONOMIC",
+                "COMFORT",
+                "LUXURY",
+                "ADVENTURE",
+                "FAMILY",
+                "ROMANTIC",
+                "PARTY",
+                "CULTURAL"
+              ]
+            }
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ]
+          },
+          "favoriteCountries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "favoriteCities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "foodPreferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accessibilityNeeds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "travelInterests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "travelCompanions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "avoidedDestinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredClimate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bucketListDestinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prefersNightlife": {
+            "type": "boolean"
+          },
+          "prefersNature": {
+            "type": "boolean"
+          },
+          "prefersGastronomy": {
+            "type": "boolean"
+          },
+          "prefersMuseums": {
+            "type": "boolean"
+          },
+          "prefersShopping": {
+            "type": "boolean"
+          },
+          "prefersRelaxing": {
+            "type": "boolean"
+          },
+          "averageTripDuration": {
+            "type": "number"
+          },
+          "passportCountry": {
+            "type": "string"
+          },
+          "instagramHandle": {
+            "type": "string"
+          }
+        }
+      },
+      "InviteParticipantDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "CreateBaseTripDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "numberOfDays": {
+            "type": "number"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "fullDescription": {
+            "type": "string"
+          },
+          "coverImage": {
+            "type": "string"
+          },
+          "bestTime": {
+            "type": "string"
+          },
+          "climate": {
+            "type": "string"
+          },
+          "averageBudget": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PUBLISHED",
+              "ARCHIVED"
+            ],
+            "default": "DRAFT"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "PUBLIC",
+              "PRIVATE",
+              "INTERNAL"
+            ],
+            "default": "PRIVATE"
+          }
+        },
+        "required": [
+          "title",
+          "destination",
+          "numberOfDays"
+        ]
+      },
+      "UpdateBaseTripDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "numberOfDays": {
+            "type": "number"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "fullDescription": {
+            "type": "string"
+          },
+          "coverImage": {
+            "type": "string"
+          },
+          "bestTime": {
+            "type": "string"
+          },
+          "climate": {
+            "type": "string"
+          },
+          "averageBudget": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PUBLISHED",
+              "ARCHIVED"
+            ],
+            "default": "DRAFT"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "PUBLIC",
+              "PRIVATE",
+              "INTERNAL"
+            ],
+            "default": "PRIVATE"
+          }
+        }
+      },
+      "CreateBaseTripDayDto": {
+        "type": "object",
+        "properties": {
+          "dayNumber": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "suggestedTransport": {
+            "type": "string"
+          },
+          "estimatedCost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dayNumber"
+        ]
+      },
+      "CreateBaseAttractionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ]
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "fullDescription": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "googleMapsLink": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "period": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "requiresTicket": {
+            "type": "boolean",
+            "default": false
+          },
+          "ticketLink": {
+            "type": "string"
+          },
+          "requiresReservation": {
+            "type": "boolean",
+            "default": false
+          },
+          "reservationLink": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "accessibility": {
+            "type": "string"
+          },
+          "goodForKids": {
+            "type": "boolean",
+            "default": false
+          },
+          "goodForElders": {
+            "type": "boolean",
+            "default": false
+          },
+          "observations": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "order"
+        ]
+      },
+      "UpdateBaseAttractionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ]
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "fullDescription": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "googleMapsLink": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "period": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "requiresTicket": {
+            "type": "boolean",
+            "default": false
+          },
+          "ticketLink": {
+            "type": "string"
+          },
+          "requiresReservation": {
+            "type": "boolean",
+            "default": false
+          },
+          "reservationLink": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "accessibility": {
+            "type": "string"
+          },
+          "goodForKids": {
+            "type": "boolean",
+            "default": false
+          },
+          "goodForElders": {
+            "type": "boolean",
+            "default": false
+          },
+          "observations": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        }
+      },
+      "CreateBaseRestaurantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "cuisineType": {
+            "type": "string"
+          },
+          "priceRange": {
+            "type": "string"
+          },
+          "priceLevel": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
+          },
+          "googleMapsLink": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "openingHours": {
+            "type": "string"
+          },
+          "reservationLink": {
+            "type": "string"
+          },
+          "recommendedDish": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "order"
+        ]
+      },
+      "UpdateBaseRestaurantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "cuisineType": {
+            "type": "string"
+          },
+          "priceRange": {
+            "type": "string"
+          },
+          "priceLevel": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
+          },
+          "googleMapsLink": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "openingHours": {
+            "type": "string"
+          },
+          "reservationLink": {
+            "type": "string"
+          },
+          "recommendedDish": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        }
+      },
+      "UpdateBaseTripDayDto": {
+        "type": "object",
+        "properties": {
+          "dayNumber": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "suggestedTransport": {
+            "type": "string"
+          },
+          "estimatedCost": {
+            "type": "number"
+          }
+        }
+      },
+      "AcceptInviteDto": {
+        "type": "object",
+        "properties": {
+          "inviteToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inviteToken"
+        ]
+      },
+      "CreateUserTravelProfileDto": {
+        "type": "object",
+        "properties": {
+          "bio": {
+            "type": "string"
+          },
+          "preferredStyles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ECONOMIC",
+                "COMFORT",
+                "LUXURY",
+                "ADVENTURE",
+                "FAMILY",
+                "ROMANTIC",
+                "PARTY",
+                "CULTURAL"
+              ]
+            }
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ]
+          },
+          "favoriteCountries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "favoriteCities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "foodPreferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accessibilityNeeds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "travelInterests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "travelCompanions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "avoidedDestinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredClimate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bucketListDestinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prefersNightlife": {
+            "type": "boolean"
+          },
+          "prefersNature": {
+            "type": "boolean"
+          },
+          "prefersGastronomy": {
+            "type": "boolean"
+          },
+          "prefersMuseums": {
+            "type": "boolean"
+          },
+          "prefersShopping": {
+            "type": "boolean"
+          },
+          "prefersRelaxing": {
+            "type": "boolean"
+          },
+          "averageTripDuration": {
+            "type": "number"
+          },
+          "passportCountry": {
+            "type": "string"
+          },
+          "instagramHandle": {
+            "type": "string"
+          }
+        }
+      },
+      "EnrichPlaceDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "providerPlaceId"
+        ]
+      },
+      "CreateMockPurchaseDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string"
+          },
+          "tripId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "productId"
+        ]
+      },
+      "CreateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ITINERARY_FULL_ACCESS",
+              "AI_CREDITS",
+              "PREMIUM_TEMPLATE"
+            ]
+          },
+          "price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "price"
+        ]
+      },
+      "UpdateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ITINERARY_FULL_ACCESS",
+              "AI_CREDITS",
+              "PREMIUM_TEMPLATE"
+            ]
+          },
+          "price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

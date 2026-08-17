@@ -15,24 +15,28 @@ export class OpenAIProvider implements AIProvider {
       this.openai = new OpenAI({ apiKey });
     } else {
       this.openai = null as any;
-      this.logger.warn('OpenAI API Key is not configured. AI integration will fail if called.');
+      this.logger.warn(
+        'OpenAI API Key is not configured. AI integration will fail if called.',
+      );
     }
   }
 
   async generateItinerary(input: GenerateItineraryInput) {
     if (!this.openai) {
-      throw new Error('OpenAI API Key is not configured. Please set the OPENAI_API_KEY environment variable.');
+      throw new Error(
+        'OpenAI API Key is not configured. Please set the OPENAI_API_KEY environment variable.',
+      );
     }
     const prompt = this.buildPrompt(input);
-    
+
     try {
       this.logger.log(`Calling OpenAI with model ${this.model}`);
-      
+
       const response = await this.openai.chat.completions.create({
         model: this.model,
         messages: [
           { role: 'system', content: this.getSystemPrompt() },
-          { role: 'user', content: prompt }
+          { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
         temperature: 0.7,
@@ -84,7 +88,7 @@ Você DEVE retornar a resposta EXATAMENTE no seguinte formato JSON, sem marcaç�
 
   private buildPrompt(input: GenerateItineraryInput): string {
     const { destination, numberOfDays, travelProfile, baseTrip } = input;
-    
+
     let prompt = `Crie um roteiro de ${numberOfDays} dias para ${destination}.\n\n`;
 
     if (travelProfile) {

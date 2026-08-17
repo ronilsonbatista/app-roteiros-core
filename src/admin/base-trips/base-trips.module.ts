@@ -4,6 +4,6 @@ import { BaseTripsController } from './base-trips.controller';
 
 @Module({
   providers: [BaseTripsService],
-  controllers: [BaseTripsController]
+  controllers: [BaseTripsController],
 })
 export class BaseTripsModule {}

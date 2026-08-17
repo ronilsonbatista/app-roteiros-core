@@ -4,6 +4,6 @@ import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [HealthController]
+  controllers: [HealthController],
 })
 export class HealthModule {}

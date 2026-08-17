@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserAdminDto } from './dto/create-user-admin.dto';
@@ -108,7 +113,9 @@ export class AdminService {
       },
     });
 
-    return { message: 'Todos os tokens ativos do usuário foram revogados com sucesso' };
+    return {
+      message: 'Todos os tokens ativos do usuário foram revogados com sucesso',
+    };
   }
 
   async getUserTrips(userId: string) {
@@ -122,7 +129,9 @@ export class AdminService {
   }
 
   async createUser(dto: CreateUserAdminDto) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (existing) {
       throw new BadRequestException('Email já está em uso');
     }
@@ -151,7 +160,9 @@ export class AdminService {
     }
 
     if (dto.email && dto.email !== user.email) {
-      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
       if (existing) {
         throw new BadRequestException('Email já está em uso');
       }
@@ -183,7 +194,10 @@ export class AdminService {
     return { message: 'Senha do usuário atualizada com sucesso' };
   }
 
-  async updateUserTravelProfile(userId: string, dto: UpdateUserTravelProfileDto) {
+  async updateUserTravelProfile(
+    userId: string,
+    dto: UpdateUserTravelProfileDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuário não encontrado');
 

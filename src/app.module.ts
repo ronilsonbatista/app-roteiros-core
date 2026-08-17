@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { EmailModule } from './email/email.module';
 import { TripsModule } from './trips/trips.module';
 import { TripDaysModule } from './trip-days/trip-days.module';
 import { ItineraryModule } from './itinerary/itinerary.module';
@@ -23,13 +24,25 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 100,
-    }]),
-    PrismaModule, UsersModule, AuthModule, TripsModule, TripDaysModule, 
-    ItineraryModule, AdminModule, AiModule, ParticipantsModule, 
-    UserTravelProfileModule, PlacesModule, MediaModule,
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
+    PrismaModule,
+    UsersModule,
+    AuthModule,
+    EmailModule,
+    TripsModule,
+    TripDaysModule,
+    ItineraryModule,
+    AdminModule,
+    AiModule,
+    ParticipantsModule,
+    UserTravelProfileModule,
+    PlacesModule,
+    MediaModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',

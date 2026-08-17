@@ -62,8 +62,13 @@ export class BaseTripsService {
     });
   }
 
-  async createBaseAttraction(baseTripDayId: string, dto: CreateBaseAttractionDto) {
-    const day = await this.prisma.baseTripDay.findUnique({ where: { id: baseTripDayId } });
+  async createBaseAttraction(
+    baseTripDayId: string,
+    dto: CreateBaseAttractionDto,
+  ) {
+    const day = await this.prisma.baseTripDay.findUnique({
+      where: { id: baseTripDayId },
+    });
     if (!day) throw new NotFoundException('Base Trip Day não encontrado');
     return this.prisma.baseAttraction.create({
       data: { ...dto, baseTripDayId },
@@ -82,8 +87,13 @@ export class BaseTripsService {
     return this.prisma.baseAttraction.delete({ where: { id } });
   }
 
-  async createBaseRestaurant(baseTripDayId: string, dto: CreateBaseRestaurantDto) {
-    const day = await this.prisma.baseTripDay.findUnique({ where: { id: baseTripDayId } });
+  async createBaseRestaurant(
+    baseTripDayId: string,
+    dto: CreateBaseRestaurantDto,
+  ) {
+    const day = await this.prisma.baseTripDay.findUnique({
+      where: { id: baseTripDayId },
+    });
     if (!day) throw new NotFoundException('Base Trip Day não encontrado');
     return this.prisma.baseRestaurant.create({
       data: { ...dto, baseTripDayId },

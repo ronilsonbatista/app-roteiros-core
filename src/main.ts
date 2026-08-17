@@ -20,15 +20,17 @@ async function bootstrap() {
     'MEDIA_BASE_URL',
     'MEDIA_STORAGE_PROVIDER',
   ];
-  const missingEnvs = requiredEnvs.filter(env => !process.env[env]);
-  
+  const missingEnvs = requiredEnvs.filter((env) => !process.env[env]);
+
   if (missingEnvs.length > 0) {
-    logger.error(`Faltam variáveis de ambiente obrigatórias: ${missingEnvs.join(', ')}`);
+    logger.error(
+      `Faltam variáveis de ambiente obrigatórias: ${missingEnvs.join(', ')}`,
+    );
     process.exit(1);
   }
 
   const app = await NestFactory.create(AppModule);
-  
+
   // Security Headers
   app.use(helmet());
 
@@ -41,20 +43,24 @@ async function bootstrap() {
     }
     corsOrigins = process.env.CORS_ORIGINS.split(',');
   } else {
-    corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:5173'];
+    corsOrigins = process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',')
+      : ['http://localhost:3000', 'http://localhost:5173'];
   }
-  
+
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
   });
 
   // Global Pipes, Filters and Interceptors
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalInterceptors(new GlobalResponseInterceptor());
 

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateTripDayDto } from './dto/update-trip-day.dto';
 import { CreateItineraryItemDto } from '../itinerary/dto/create-itinerary-item.dto';
@@ -14,7 +18,8 @@ export class TripDaysService {
     });
 
     if (!tripDay) throw new NotFoundException('Dia não encontrado');
-    if (tripDay.trip.userId !== userId) throw new ForbiddenException('Acesso negado');
+    if (tripDay.trip.userId !== userId)
+      throw new ForbiddenException('Acesso negado');
 
     return tripDay;
   }

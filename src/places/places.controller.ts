@@ -1,5 +1,18 @@
-import { Controller, Get, Patch, Query, Param, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Patch,
+  Query,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { PlacesService } from './places.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -35,20 +48,28 @@ export class PlacesController {
 
   @ApiTags('Itinerary - App')
   @Patch('itinerary-items/:id/place')
-  @ApiOperation({ summary: 'Enriquecer ItineraryItem com dados reais de Place' })
+  @ApiOperation({
+    summary: 'Enriquecer ItineraryItem com dados reais de Place',
+  })
   enrichItineraryItem(
     @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() dto: EnrichPlaceDto,
   ) {
-    return this.placesService.enrichItineraryItem(user.userId, id, dto.providerPlaceId);
+    return this.placesService.enrichItineraryItem(
+      user.userId,
+      id,
+      dto.providerPlaceId,
+    );
   }
 
   @ApiTags('Admin - Places')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Patch('admin/base-attractions/:id/place')
-  @ApiOperation({ summary: 'Enriquecer BaseAttraction com dados reais (Admin)' })
+  @ApiOperation({
+    summary: 'Enriquecer BaseAttraction com dados reais (Admin)',
+  })
   enrichBaseAttraction(@Param('id') id: string, @Body() dto: EnrichPlaceDto) {
     return this.placesService.enrichBaseAttraction(id, dto.providerPlaceId);
   }
@@ -57,7 +78,9 @@ export class PlacesController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @Patch('admin/base-restaurants/:id/place')
-  @ApiOperation({ summary: 'Enriquecer BaseRestaurant com dados reais (Admin)' })
+  @ApiOperation({
+    summary: 'Enriquecer BaseRestaurant com dados reais (Admin)',
+  })
   enrichBaseRestaurant(@Param('id') id: string, @Body() dto: EnrichPlaceDto) {
     return this.placesService.enrichBaseRestaurant(id, dto.providerPlaceId);
   }
@@ -67,7 +90,10 @@ export class PlacesController {
   @Roles(Role.ADMIN)
   @Patch('admin/itinerary-items/:id/place')
   @ApiOperation({ summary: 'Enriquecer ItineraryItem com dados reais (Admin)' })
-  enrichItineraryItemAdmin(@Param('id') id: string, @Body() dto: EnrichPlaceDto) {
+  enrichItineraryItemAdmin(
+    @Param('id') id: string,
+    @Body() dto: EnrichPlaceDto,
+  ) {
     return this.placesService.enrichItineraryItemAdmin(id, dto.providerPlaceId);
   }
 }

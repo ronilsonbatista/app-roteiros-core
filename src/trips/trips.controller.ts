@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TripsService } from './trips.service';
 import { CreateTripDto } from './dto/create-trip.dto';
@@ -34,7 +43,11 @@ export class TripsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Atualizar uma viagem' })
-  update(@CurrentUser() user: any, @Param('id') id: string, @Body() updateTripDto: UpdateTripDto) {
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() updateTripDto: UpdateTripDto,
+  ) {
     return this.tripsService.update(user.userId, id, updateTripDto);
   }
 
@@ -46,7 +59,11 @@ export class TripsController {
 
   @Post(':id/days')
   @ApiOperation({ summary: 'Adicionar um dia no roteiro da viagem' })
-  createDay(@CurrentUser() user: any, @Param('id') tripId: string, @Body() dto: CreateTripDayDto) {
+  createDay(
+    @CurrentUser() user: any,
+    @Param('id') tripId: string,
+    @Body() dto: CreateTripDayDto,
+  ) {
     return this.tripsService.createDay(user.userId, tripId, dto);
   }
 }

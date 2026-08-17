@@ -4,6 +4,6 @@ import { TripDaysController } from './trip-days.controller';
 
 @Module({
   providers: [TripDaysService],
-  controllers: [TripDaysController]
+  controllers: [TripDaysController],
 })
 export class TripDaysModule {}

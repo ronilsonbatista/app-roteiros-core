@@ -5,6 +5,6 @@ import { LocalMediaStorageProvider } from './providers/local-media-storage.provi
 
 @Module({
   providers: [MediaService, LocalMediaStorageProvider],
-  controllers: [MediaController]
+  controllers: [MediaController],
 })
 export class MediaModule {}

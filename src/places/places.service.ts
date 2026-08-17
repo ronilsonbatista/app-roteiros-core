@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GooglePlacesProvider } from './providers/google-places.provider';
 
@@ -15,18 +19,26 @@ export class PlacesService {
 
   async getPlaceDetails(providerPlaceId: string) {
     const details = await this.placesProvider.getPlaceDetails(providerPlaceId);
-    if (!details) throw new NotFoundException('Local não encontrado no provedor.');
+    if (!details)
+      throw new NotFoundException('Local não encontrado no provedor.');
     return details;
   }
 
-  async enrichItineraryItem(userId: string, itemId: string, providerPlaceId: string) {
+  async enrichItineraryItem(
+    userId: string,
+    itemId: string,
+    providerPlaceId: string,
+  ) {
     const item = await this.prisma.itineraryItem.findUnique({
       where: { id: itemId },
       include: { tripDay: { include: { trip: true } } },
     });
 
     if (!item) throw new NotFoundException('ItineraryItem não encontrado');
-    if (item.tripDay.trip.userId !== userId) throw new ForbiddenException('Não autorizado. Você não é o dono desta viagem.');
+    if (item.tripDay.trip.userId !== userId)
+      throw new ForbiddenException(
+        'Não autorizado. Você não é o dono desta viagem.',
+      );
 
     const details = await this.getPlaceDetails(providerPlaceId);
 

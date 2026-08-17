@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTripDto } from '../trips/dto/create-trip.dto';
 import { UpdateTripDto } from '../trips/dto/update-trip.dto';
@@ -25,7 +29,16 @@ export class AdminTripsService {
     page?: number;
     limit?: number;
   }) {
-    const { userId, destination, status, premium, startDate, endDate, page = 1, limit = 10 } = filters;
+    const {
+      userId,
+      destination,
+      status,
+      premium,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -212,7 +225,9 @@ export class AdminTripsService {
   }
 
   async createItineraryItem(tripDayId: string, dto: CreateItineraryItemDto) {
-    const day = await this.prisma.tripDay.findUnique({ where: { id: tripDayId } });
+    const day = await this.prisma.tripDay.findUnique({
+      where: { id: tripDayId },
+    });
     if (!day) {
       throw new NotFoundException('Dia de viagem não encontrado');
     }
@@ -226,7 +241,9 @@ export class AdminTripsService {
   }
 
   async updateItineraryItem(itemId: string, dto: UpdateItineraryItemDto) {
-    const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
+    const item = await this.prisma.itineraryItem.findUnique({
+      where: { id: itemId },
+    });
     if (!item) {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
@@ -241,7 +258,9 @@ export class AdminTripsService {
   }
 
   async removeItineraryItem(itemId: string) {
-    const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
+    const item = await this.prisma.itineraryItem.findUnique({
+      where: { id: itemId },
+    });
     if (!item) {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
@@ -252,7 +271,9 @@ export class AdminTripsService {
   }
 
   async reorderItineraryItem(itemId: string, dto: ReorderItineraryItemDto) {
-    const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
+    const item = await this.prisma.itineraryItem.findUnique({
+      where: { id: itemId },
+    });
     if (!item) {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
@@ -285,7 +306,11 @@ export class AdminTripsService {
     });
   }
 
-  async inviteParticipant(tripId: string, dto: InviteParticipantDto, adminId: string) {
+  async inviteParticipant(
+    tripId: string,
+    dto: InviteParticipantDto,
+    adminId: string,
+  ) {
     const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
     if (!trip) {
       throw new NotFoundException('Viagem não encontrada');
@@ -316,7 +341,9 @@ export class AdminTripsService {
       throw new NotFoundException('Viagem não encontrada');
     }
 
-    const participant = await this.prisma.tripParticipant.findUnique({ where: { id: participantId } });
+    const participant = await this.prisma.tripParticipant.findUnique({
+      where: { id: participantId },
+    });
     if (!participant || participant.tripId !== tripId) {
       throw new NotFoundException('Participante não encontrado nesta viagem');
     }
