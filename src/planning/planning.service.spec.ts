@@ -3,7 +3,7 @@ import { PlanningService } from './planning.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { GuestJourneyStatus, BudgetLevel, TravelStyle } from '@prisma/client';
+import { GuestJourneyStatus, BudgetLevel, ProductType, ItineraryCategory } from '@prisma/client';
 import { PlanningInterest } from './enums/planning-interests.enum';
 
 describe('PlanningService', () => {
@@ -17,6 +17,12 @@ describe('PlanningService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      product: {
+        findFirst: jest.fn(),
+      },
+      baseTrip: {
+        findFirst: jest.fn(),
       },
     };
     aiServiceMock = {
@@ -305,6 +311,196 @@ describe('PlanningService', () => {
       expect(result.id).toBe('journey-1');
       expect(result.status).toBe(GuestJourneyStatus.GENERATING);
       expect(result).not.toHaveProperty('generatedItinerary');
+    });
+  });
+
+  describe('getPreview (Phase H1 Core Preview & Server-Side Anti-Leakage)', () => {
+    const mockMultiDayItinerary = {
+      days: [
+        {
+          dayNumber: 1,
+          date: '2026-07-25',
+          destination: 'Roma',
+          title: 'Dia 1: Chegada em Roma',
+          description: 'Primeiro dia de passeios',
+          items: [
+            {
+              title: 'Coliseu',
+              description: 'Visita guiada ao monumento histórico',
+              category: ItineraryCategory.TOURIST_ATTRACTION,
+              period: 'Manhã',
+              cost: 20,
+              order: 1,
+              location: 'Piazza del Colosseo',
+              latitude: 41.8902,
+              longitude: 12.4922,
+              providerPlaceId: 'place-coliseu-123',
+              sourceType: 'BASE_ATTRACTION',
+              sourceId: 'base-attr-coliseu',
+            },
+          ],
+        },
+        {
+          dayNumber: 2,
+          date: '2026-07-26',
+          destination: 'Roma',
+          title: 'Dia 2: Arte Sacra no Vaticano',
+          description: 'Visita aos Museus do Vaticano',
+          items: [
+            {
+              title: 'Museu do Louvre Secreto de Roma',
+              description: 'Galeria privada e secreta',
+              category: ItineraryCategory.MUSEUM,
+              period: 'Manhã',
+              cost: 30,
+              order: 1,
+            },
+          ],
+        },
+        {
+          dayNumber: 3,
+          date: '2026-07-27',
+          destination: 'Roma',
+          title: 'Dia 3: Torre Eiffel Fictícia',
+          description: 'Passeio noturno privado',
+          items: [
+            {
+              title: 'Torre Eiffel Romana',
+              description: 'Jantar romântico secreto',
+              category: ItineraryCategory.RESTAURANT,
+              period: 'Noite',
+              cost: 100,
+              order: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    it('SERVER-SIDE ANTI-LEAKAGE: should return Day 1 visible and ZERO private activity content for locked days in JSON', async () => {
+      const readyJourney = {
+        id: 'journey-preview-123',
+        status: GuestJourneyStatus.PREVIEW_READY,
+        expiresAt: new Date(Date.now() + 100000),
+        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-27' }],
+        generatedItinerary: mockMultiDayItinerary,
+      };
+
+      prismaMock.product.findFirst.mockResolvedValue({
+        id: 'prod-full-access',
+        type: ProductType.ITINERARY_FULL_ACCESS,
+        name: 'Desbloqueio Completo 2GO',
+        price: 19.99,
+        currency: 'BRL',
+        active: true,
+      });
+
+      const result = await service.getPreview('journey-preview-123', readyJourney);
+
+      expect(result.id).toBe('journey-preview-123');
+      expect(result.status).toBe(GuestJourneyStatus.PREVIEW_READY);
+      expect(result.visibleDays).toHaveLength(1);
+      expect(result.lockedDays).toHaveLength(2);
+
+      // Check Visible Day 1
+      expect(result.visibleDays[0].dayNumber).toBe(1);
+      expect(result.visibleDays[0].activities[0].title).toBe('Coliseu');
+      expect(result.visibleDays[0].activities[0].sourceType).toBe('BASE_ATTRACTION');
+      expect(result.visibleDays[0].activities[0].providerPlaceId).toBe('place-coliseu-123');
+
+      // Check Locked Days (Day 2 & 3) minimal metadata
+      expect(result.lockedDays[0].dayNumber).toBe(2);
+      expect(result.lockedDays[0].locked).toBe(true);
+      expect(result.lockedDays[0]).not.toHaveProperty('activities');
+      expect(result.lockedDays[1].dayNumber).toBe(3);
+      expect(result.lockedDays[1].locked).toBe(true);
+      expect(result.lockedDays[1]).not.toHaveProperty('activities');
+
+      // CRITICAL ANTI-LEAKAGE ASSERTION: Serialized JSON MUST NOT CONTAIN locked day titles/activities
+      const serializedJson = JSON.stringify(result);
+      expect(serializedJson).toContain('Coliseu');
+      expect(serializedJson).not.toContain('Museu do Louvre Secreto de Roma');
+      expect(serializedJson).not.toContain('Torre Eiffel Romana');
+      expect(serializedJson).not.toContain('Galeria privada e secreta');
+      expect(serializedJson).not.toContain('Jantar romântico secreto');
+    });
+
+    it('POLICY CONFIGURABILITY: should respect visibleDayCount when policy is changed in Core', async () => {
+      const readyJourney = {
+        id: 'journey-preview-config',
+        status: GuestJourneyStatus.PREVIEW_READY,
+        expiresAt: new Date(Date.now() + 100000),
+        destinations: [{ name: 'Roma' }],
+        generatedItinerary: mockMultiDayItinerary,
+      };
+
+      prismaMock.product.findFirst.mockResolvedValue(null);
+
+      // Change policy configuration in Core to 2 visible days
+      service.setVisibleDayCountConfig(2);
+
+      const result = await service.getPreview('journey-preview-config', readyJourney);
+
+      expect(result.previewPolicy.visibleDayCount).toBe(2);
+      expect(result.visibleDays).toHaveLength(2);
+      expect(result.lockedDays).toHaveLength(1);
+
+      // Reset policy to 1 day default
+      service.setVisibleDayCountConfig(1);
+    });
+
+    it('PRODUCT OFFER: should load active product from database or use available=false fallback if missing', async () => {
+      const readyJourney = {
+        id: 'journey-preview-product',
+        status: GuestJourneyStatus.PREVIEW_READY,
+        expiresAt: new Date(Date.now() + 100000),
+        destinations: [{ name: 'Roma' }],
+        generatedItinerary: mockMultiDayItinerary,
+      };
+
+      // Case 1: Active Product in Database
+      prismaMock.product.findFirst.mockResolvedValue({
+        id: 'prod-custom-99',
+        type: ProductType.ITINERARY_FULL_ACCESS,
+        name: 'Acesso Premium Especial',
+        price: 24.9,
+        currency: 'BRL',
+        active: true,
+      });
+
+      const res1 = await service.getPreview('journey-preview-product', readyJourney);
+      expect(res1.unlockOffer.available).toBe(true);
+      expect(res1.unlockOffer.price).toBe(24.9);
+      expect(res1.unlockOffer.name).toBe('Acesso Premium Especial');
+
+      // Case 2: Inactive or Missing Product in Database
+      prismaMock.product.findFirst.mockResolvedValue(null);
+
+      const res2 = await service.getPreview('journey-preview-product', readyJourney);
+      expect(res2.unlockOffer.available).toBe(false);
+      expect(res2.unlockOffer.code).toBe(ProductType.ITINERARY_FULL_ACCESS);
+    });
+
+    it('SECURITY & STATUS CONSTRAINTS: should reject preview when status is not PREVIEW_READY or CLAIMED', async () => {
+      const collectingJourney = {
+        id: 'journey-preview-invalid',
+        status: GuestJourneyStatus.COLLECTING,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      await expect(
+        service.getPreview('journey-preview-invalid', collectingJourney),
+      ).rejects.toThrow(BadRequestException);
+
+      const failedJourney = {
+        id: 'journey-preview-failed',
+        status: GuestJourneyStatus.FAILED,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      await expect(
+        service.getPreview('journey-preview-failed', failedJourney),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

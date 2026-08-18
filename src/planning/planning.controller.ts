@@ -26,6 +26,7 @@ import {
   CreatePlanningSessionResponseDto,
   GenerationStatusResponseDto,
 } from './dto/planning-session-response.dto';
+import { PlanningPreviewResponseDto } from './dto/planning-preview-response.dto';
 import { GuestTokenGuard } from './guards/guest-token.guard';
 import { LogSanitizerInterceptor } from './interceptors/log-sanitizer.interceptor';
 
@@ -201,5 +202,36 @@ export class PlanningController {
     @Req() req: any,
   ): Promise<GenerationStatusResponseDto> {
     return this.planningService.getGenerationStatus(id, req.guestJourney);
+  }
+
+  @Get(':id/preview')
+  @UseGuards(GuestTokenGuard)
+  @ApiOperation({
+    summary: 'Consultar preview seguro do roteiro gerado',
+    description:
+      'Retorna projeção segura contendo apenas o Dia 1 totalmente liberado com atividades, metadados mínimos dos dias bloqueados (sem conteúdo privado) e oferta de desbloqueio vinda do banco Core.',
+  })
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    description: 'Chave secreta da jornada anônima obtida na criação',
+    required: true,
+  })
+  @ApiParam({ name: 'id', description: 'UUID da jornada de planejamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Preview do roteiro retornado com sucesso',
+    type: PlanningPreviewResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Status atual não permite visualizar o preview (PLANNING_NOT_READY_FOR_PREVIEW ou PLANNING_GENERATION_FAILED)',
+  })
+  @ApiResponse({ status: 401, description: 'Token inválido ou sessão expirada' })
+  @ApiResponse({ status: 404, description: 'Jornada não encontrada' })
+  async getPreview(
+    @Param('id') id: string,
+    @Req() req: any,
+  ): Promise<PlanningPreviewResponseDto> {
+    return this.planningService.getPreview(id, req.guestJourney);
   }
 }

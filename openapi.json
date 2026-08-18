@@ -3840,6 +3840,57 @@
           "Planning Sessions (Anonymous)"
         ]
       }
+    },
+    "/planning-sessions/{id}/preview": {
+      "get": {
+        "description": "Retorna projeção segura contendo apenas o Dia 1 totalmente liberado com atividades, metadados mínimos dos dias bloqueados (sem conteúdo privado) e oferta de desbloqueio vinda do banco Core.",
+        "operationId": "PlanningController_getPreview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview do roteiro retornado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningPreviewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Status atual não permite visualizar o preview (PLANNING_NOT_READY_FOR_PREVIEW ou PLANNING_GENERATION_FAILED)"
+          },
+          "401": {
+            "description": "Token inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Consultar preview seguro do roteiro gerado",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
     }
   },
   "info": {
@@ -5647,6 +5698,318 @@
         "required": [
           "id",
           "status"
+        ]
+      },
+      "PlanningPreviewSummaryDto": {
+        "type": "object",
+        "properties": {
+          "destinations": {
+            "example": [
+              {
+                "name": "Roma",
+                "arrivalDate": "2026-07-25",
+                "departureDate": "2026-07-28"
+              }
+            ],
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "startDate": {
+            "type": "string",
+            "example": "2026-07-25"
+          },
+          "endDate": {
+            "type": "string",
+            "example": "2026-07-28"
+          },
+          "totalDays": {
+            "type": "number",
+            "example": 4
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://images.unsplash.com/photo-roma"
+          }
+        },
+        "required": [
+          "destinations",
+          "totalDays"
+        ]
+      },
+      "PlanningPreviewPolicyDto": {
+        "type": "object",
+        "properties": {
+          "visibleDayCount": {
+            "type": "number",
+            "example": 1,
+            "description": "Número de dias totalmente liberados no preview"
+          },
+          "autoPaywallDelaySeconds": {
+            "type": "number",
+            "example": 10,
+            "description": "Delay em segundos para exibição automática do Paywall no cliente"
+          }
+        },
+        "required": [
+          "visibleDayCount",
+          "autoPaywallDelaySeconds"
+        ]
+      },
+      "PlanningVisibleActivityDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Coliseu"
+          },
+          "description": {
+            "type": "string",
+            "example": "Visita guiada ao monumento histórico"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ],
+            "example": "TOURIST_ATTRACTION"
+          },
+          "period": {
+            "type": "string",
+            "example": "Manhã"
+          },
+          "cost": {
+            "type": "number",
+            "example": 20
+          },
+          "order": {
+            "type": "number",
+            "example": 1
+          },
+          "location": {
+            "type": "string",
+            "example": "Piazza del Colosseo, 1, Roma"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 41.8902
+          },
+          "longitude": {
+            "type": "number",
+            "example": 12.4922
+          },
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ3S-g4DlhLxMRw6s2Z2U187A"
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-coliseu"
+          },
+          "reservationUrl": {
+            "type": "string",
+            "example": "https://tickets.colosseo.it"
+          },
+          "ticketUrl": {
+            "type": "string",
+            "example": "https://tickets.colosseo.it"
+          },
+          "sourceType": {
+            "type": "string",
+            "example": "BASE_ATTRACTION",
+            "description": "Origem comprovada do item (BASE_TRIP, BASE_ATTRACTION, BASE_RESTAURANT, PLACES ou AI)"
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true,
+            "example": "base-attr-123"
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "cost",
+          "order",
+          "sourceType"
+        ]
+      },
+      "PlanningVisibleDayDto": {
+        "type": "object",
+        "properties": {
+          "dayNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "date": {
+            "type": "string",
+            "example": "2026-07-25"
+          },
+          "destination": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "title": {
+            "type": "string",
+            "example": "Dia 1: Chegada em Roma"
+          },
+          "description": {
+            "type": "string",
+            "example": "Primeiro dia de passeios"
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningVisibleActivityDto"
+            }
+          }
+        },
+        "required": [
+          "dayNumber",
+          "destination",
+          "title",
+          "activities"
+        ]
+      },
+      "PlanningLockedDayDto": {
+        "type": "object",
+        "properties": {
+          "dayNumber": {
+            "type": "number",
+            "example": 2
+          },
+          "date": {
+            "type": "string",
+            "example": "2026-07-26"
+          },
+          "destination": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "title": {
+            "type": "string",
+            "example": "Dia 2"
+          },
+          "locked": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "dayNumber",
+          "destination",
+          "title",
+          "locked"
+        ]
+      },
+      "PlanningUnlockOfferDto": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "prod-uuid-123"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "ITINERARY_FULL_ACCESS",
+              "AI_CREDITS",
+              "PREMIUM_TEMPLATE"
+            ],
+            "example": "ITINERARY_FULL_ACCESS"
+          },
+          "name": {
+            "type": "string",
+            "example": "Roteiro Completo 2GO"
+          },
+          "price": {
+            "type": "number",
+            "example": 19.99
+          },
+          "currency": {
+            "type": "string",
+            "example": "BRL"
+          },
+          "available": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "price",
+          "currency",
+          "available"
+        ]
+      },
+      "PlanningPreviewResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLLECTING",
+              "READY_TO_GENERATE",
+              "GENERATING",
+              "PREVIEW_READY",
+              "AUTH_REQUIRED",
+              "CLAIMED",
+              "CHECKOUT_PENDING",
+              "PAID",
+              "EXPIRED",
+              "FAILED"
+            ],
+            "example": "PREVIEW_READY"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PlanningPreviewSummaryDto"
+          },
+          "previewPolicy": {
+            "$ref": "#/components/schemas/PlanningPreviewPolicyDto"
+          },
+          "visibleDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningVisibleDayDto"
+            }
+          },
+          "lockedDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningLockedDayDto"
+            }
+          },
+          "unlockOffer": {
+            "$ref": "#/components/schemas/PlanningUnlockOfferDto"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "summary",
+          "previewPolicy",
+          "visibleDays",
+          "lockedDays",
+          "unlockOffer"
         ]
       }
     }

@@ -13,7 +13,13 @@ import {
   CreatePlanningSessionResponseDto,
   GenerationStatusResponseDto,
 } from './dto/planning-session-response.dto';
-import { GuestJourneyStatus } from '@prisma/client';
+import {
+  PlanningPreviewResponseDto,
+  PlanningVisibleActivityDto,
+  PlanningVisibleDayDto,
+  PlanningLockedDayDto,
+} from './dto/planning-preview-response.dto';
+import { GuestJourneyStatus, ProductType, ItineraryCategory } from '@prisma/client';
 import { AiService } from '../ai/ai.service';
 import * as crypto from 'crypto';
 
@@ -21,10 +27,19 @@ import * as crypto from 'crypto';
 export class PlanningService {
   private readonly logger = new Logger(PlanningService.name);
 
+  // Configurable policy settings in Core (Admin Policy Gaps registered)
+  private visibleDayCountConfig = 1;
+  private autoPaywallDelaySecondsConfig = 10;
+
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
   ) {}
+
+  // Helper method for testing configurable policy
+  setVisibleDayCountConfig(count: number) {
+    this.visibleDayCountConfig = count;
+  }
 
   async createSession(
     dto: CreatePlanningSessionDto,
@@ -290,7 +305,6 @@ export class PlanningService {
         : 0;
 
       if (elapsedMinutes < 3) {
-        // Active generation in progress -> return current status immediately
         return this.mapToGenerationStatusResponse(journey);
       } else {
         this.logger.warn(
@@ -337,7 +351,6 @@ export class PlanningService {
         },
       });
 
-      // Trigger async AI generation background task without awaiting HTTP controller response
       this.aiService
         .generateGuestItinerary(updated)
         .catch((err) =>
@@ -346,7 +359,6 @@ export class PlanningService {
 
       return this.mapToGenerationStatusResponse(updated);
     } catch (error) {
-      // In case of concurrency race condition where another process updated the record
       const current = await this.findAndValidate(id);
       return this.mapToGenerationStatusResponse(current);
     }
@@ -361,6 +373,158 @@ export class PlanningService {
     this.checkExpiration(journey);
 
     return this.mapToGenerationStatusResponse(journey);
+  }
+
+  async getPreview(
+    id: string,
+    journeyFromGuard?: any,
+  ): Promise<PlanningPreviewResponseDto> {
+    const journey = journeyFromGuard || (await this.findAndValidate(id));
+
+    this.checkExpiration(journey);
+
+    if (journey.status === GuestJourneyStatus.FAILED) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_GENERATION_FAILED',
+        message: 'A geração do roteiro falhou. Tente gerar novamente.',
+      });
+    }
+
+    if (
+      journey.status !== GuestJourneyStatus.PREVIEW_READY &&
+      journey.status !== GuestJourneyStatus.CLAIMED
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_NOT_READY_FOR_PREVIEW',
+        message: `Status atual (${journey.status}) não permite visualizar o preview. Aguarde a conclusão da geração.`,
+      });
+    }
+
+    const generatedItinerary = journey.generatedItinerary as any;
+    if (!generatedItinerary || !Array.isArray(generatedItinerary.days)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_ITINERARY_NOT_FOUND',
+        message: 'Roteiro gerado não encontrado na jornada.',
+      });
+    }
+
+    const allDays: any[] = generatedItinerary.days;
+    const destinations: any[] = (journey.destinations as any[]) || [];
+
+    // Summary metadata
+    const startDate = destinations[0]?.arrivalDate || undefined;
+    const endDate = destinations[destinations.length - 1]?.departureDate || undefined;
+
+    // Cover image resolution
+    let coverImageUrl: string | undefined = undefined;
+    if (destinations.length > 0) {
+      const baseTripMatch = await this.prisma.baseTrip.findFirst({
+        where: {
+          destination: {
+            contains: destinations[0].name,
+            mode: 'insensitive',
+          },
+          coverImage: { not: null },
+        },
+        select: { coverImage: true },
+      });
+      if (baseTripMatch?.coverImage) {
+        coverImageUrl = baseTripMatch.coverImage;
+      }
+    }
+
+    const summary = {
+      destinations,
+      startDate,
+      endDate,
+      totalDays: allDays.length,
+      coverImageUrl,
+    };
+
+    const visibleDayCount = this.visibleDayCountConfig;
+
+    // SERVER-SIDE FILTERING: Visible Days
+    const visibleDays: PlanningVisibleDayDto[] = allDays
+      .slice(0, visibleDayCount)
+      .map((day: any, idx: number) => ({
+        dayNumber: day.dayNumber || idx + 1,
+        date: day.date,
+        destination: day.destination || destinations[0]?.name || 'Destino',
+        title: day.title || `Dia ${idx + 1}`,
+        description: day.description || '',
+        activities: (day.items || []).map((item: any, itemIdx: number) => {
+          const categoryMatch = Object.values(ItineraryCategory).find(
+            (c) => c === item.category,
+          );
+          return {
+            title: item.title || 'Atividade',
+            description: item.description || '',
+            category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
+            period: item.period || 'Manhã',
+            cost: Number(item.cost || item.estimatedCost || 0),
+            order: item.order || itemIdx + 1,
+            location: item.location || '',
+            latitude: item.latitude || undefined,
+            longitude: item.longitude || undefined,
+            providerPlaceId: item.providerPlaceId || undefined,
+            imageUrl: item.imageUrl || undefined,
+            reservationUrl: item.reservationUrl || undefined,
+            ticketUrl: item.ticketUrl || undefined,
+            sourceType: item.sourceType || 'AI',
+            sourceId: item.sourceId || undefined,
+          };
+        }),
+      }));
+
+    // SERVER-SIDE FILTERING: Locked Days (MINIMAL METADATA, ZERO ACTIVITY LEAKAGE)
+    const lockedDays: PlanningLockedDayDto[] = allDays
+      .slice(visibleDayCount)
+      .map((day: any, idx: number) => ({
+        dayNumber: day.dayNumber || visibleDayCount + idx + 1,
+        date: day.date,
+        destination: day.destination || destinations[0]?.name || 'Destino',
+        title: day.title || `Dia ${visibleDayCount + idx + 1}`,
+        locked: true,
+      }));
+
+    // Unlock Offer from Product table
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const unlockOffer = product
+      ? {
+          productId: product.id,
+          code: product.type,
+          name: product.name,
+          price: product.price,
+          currency: product.currency,
+          available: product.active,
+        }
+      : {
+          code: ProductType.ITINERARY_FULL_ACCESS,
+          name: 'Acesso Completo ao Roteiro',
+          price: 19.99,
+          currency: 'BRL',
+          available: false,
+        };
+
+    return {
+      id: journey.id,
+      status: journey.status,
+      summary,
+      previewPolicy: {
+        visibleDayCount,
+        autoPaywallDelaySeconds: this.autoPaywallDelaySecondsConfig,
+      },
+      visibleDays,
+      lockedDays,
+      unlockOffer,
+    };
   }
 
   private mapToResponse(journey: any): PlanningSessionResponseDto {
