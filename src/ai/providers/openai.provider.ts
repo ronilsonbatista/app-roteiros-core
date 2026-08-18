@@ -135,12 +135,13 @@ Você DEVE retornar a resposta EXATAMENTE no seguinte formato JSON, sem marcaç�
     return `Você é um especialista em viagens premium da plataforma 2GO.
 Sua missão é criar um roteiro completo, hiper-personalizado e otimizado para o usuário anônimo em processo de planejamento.
 Regras estritas:
-1. Respeite rigorousamente as datas de chegada e partida de cada destino.
+1. Respeite rigorosamente as datas de chegada e partida de cada destino.
 2. Respeite os horários de chegada no primeiro dia e partida no último dia (ex: se o voo chega às 19h, programe apenas jantar/noite no Dia 1).
 3. Respeite a janela diária de atividades informada (ex: das 09:00 às 18:30).
 4. As categorias dos itens devem ser exclusivamente um dos seguintes valores ENUM:
    TOURIST_ATTRACTION, MUSEUM, RESTAURANT, CAFE, BAR, BEACH, PARK, SHOPPING, EXPERIENCE, TRANSPORT, EVENT, NIGHTLIFE, FREE_ACTIVITY, PAID_ACTIVITY.
-5. Retorne a resposta EXATAMENTE no seguinte formato JSON, sem texto fora do JSON:
+5. Quando forem fornecidas referências curadas, incorpore os itens recomendados preservando os metadados de proveniência (sourceType, sourceId, providerPlaceId).
+6. Retorne a resposta EXATAMENTE no seguinte formato JSON, sem texto fora do JSON:
 {
   "days": [
     {
@@ -156,7 +157,10 @@ Regras estritas:
           "category": "TOURIST_ATTRACTION",
           "location": "Endereço ou bairro",
           "period": "Manhã | Tarde | Noite",
-          "estimatedCost": 0.0
+          "estimatedCost": 0.0,
+          "sourceType": "BASE_TRIP | BASE_ATTRACTION | BASE_RESTAURANT | PLACES | AI",
+          "sourceId": "UUID da entidade curada se aplicável",
+          "providerPlaceId": "Google Place ID se aplicável"
         }
       ]
     }
@@ -190,7 +194,15 @@ Regras estritas:
   }
 
   private buildGuestPrompt(input: GenerateGuestItineraryInput): string {
-    const { destinations, travelers, interests, activityHours, budgetLevel, travelStyle } = input;
+    const {
+      destinations,
+      travelers,
+      interests,
+      activityHours,
+      budgetLevel,
+      travelStyle,
+      curatedContext,
+    } = input;
 
     let prompt = `Crie um roteiro detalhado para os seguintes destinos e especificações:\n\n`;
 
@@ -243,7 +255,42 @@ Regras estritas:
       prompt += `- Estilo de viagem: ${travelStyle}\n`;
     }
 
+    if (curatedContext && curatedContext.destinations) {
+      prompt += `\n### Conhecimento Curado 2GO por Destino:\n`;
+      for (const destCtx of curatedContext.destinations) {
+        prompt += `\nDestino: ${destCtx.destinationName} (Cobertura: ${destCtx.coverage})\n`;
+        if (destCtx.bestBaseTrip) {
+          const bt = destCtx.bestBaseTrip.baseTrip;
+          prompt += `[BaseTrip Curada de Referência - ID: ${bt.id}]\n`;
+          prompt += `Título: ${bt.title}\nDescrição: ${bt.shortDescription || ''}\n`;
+          if (destCtx.attractions && destCtx.attractions.length > 0) {
+            prompt += `Atrações Curadas Recomendadas:\n`;
+            destCtx.attractions.forEach((a) => {
+              const attr = a.attraction;
+              prompt += `- ${attr.name} [ID: ${attr.id}, PlaceID: ${attr.providerPlaceId || 'N/A'}, Categoria: ${attr.category}]: ${attr.shortDescription || ''}\n`;
+            });
+          }
+          if (destCtx.restaurants && destCtx.restaurants.length > 0) {
+            prompt += `Restaurantes Curados Recomendados:\n`;
+            destCtx.restaurants.forEach((r) => {
+              const rest = r.restaurant;
+              prompt += `- ${rest.name} [ID: ${rest.id}, PlaceID: ${rest.providerPlaceId || 'N/A'}, Culinária: ${rest.cuisineType || 'Geral'}]: ${rest.recommendedDish ? `Prato: ${rest.recommendedDish}` : ''}\n`;
+            });
+          }
+        } else if (destCtx.coverage === 'PARTIAL') {
+          if (destCtx.attractions && destCtx.attractions.length > 0) {
+            prompt += `Atrações Curadas Avulsas:\n`;
+            destCtx.attractions.forEach((a) => {
+              const attr = a.attraction;
+              prompt += `- ${attr.name} [ID: ${attr.id}, PlaceID: ${attr.providerPlaceId || 'N/A'}]: ${attr.shortDescription || ''}\n`;
+            });
+          }
+        } else {
+          prompt += `- Sem base curada cadastrada. Crie um roteiro de alta qualidade utilizando conhecimentos de referência do local.\n`;
+        }
+      }
+    }
+
     return prompt;
   }
 }
-

@@ -277,16 +277,31 @@ export class PlanningService {
 
     this.checkExpiration(journey);
 
-    // Idempotency: if already generating or preview ready, return current status
-    if (
-      journey.status === GuestJourneyStatus.GENERATING ||
-      journey.status === GuestJourneyStatus.PREVIEW_READY
-    ) {
+    // Idempotency: if PREVIEW_READY, return status
+    if (journey.status === GuestJourneyStatus.PREVIEW_READY) {
       return this.mapToGenerationStatusResponse(journey);
+    }
+
+    // Idempotency & Stale Check for GENERATING status
+    if (journey.status === GuestJourneyStatus.GENERATING) {
+      const elapsedMinutes = journey.generationStartedAt
+        ? (new Date().getTime() - new Date(journey.generationStartedAt).getTime()) /
+          (1000 * 60)
+        : 0;
+
+      if (elapsedMinutes < 3) {
+        // Active generation in progress -> return current status immediately
+        return this.mapToGenerationStatusResponse(journey);
+      } else {
+        this.logger.warn(
+          `Geração estagnada detectada para jornada ${id} (iniciada há ${Math.round(elapsedMinutes)} min). Permitindo reinício.`,
+        );
+      }
     }
 
     if (
       journey.status !== GuestJourneyStatus.READY_TO_GENERATE &&
+      journey.status !== GuestJourneyStatus.GENERATING &&
       journey.status !== GuestJourneyStatus.FAILED
     ) {
       throw new BadRequestException({
@@ -310,25 +325,31 @@ export class PlanningService {
       }
     }
 
-    // Atomic update to GENERATING status
-    const updated = await this.prisma.guestJourney.update({
-      where: { id },
-      data: {
-        status: GuestJourneyStatus.GENERATING,
-        generationStartedAt: new Date(),
-        generationFailedAt: null,
-        generationErrorCode: null,
-      },
-    });
+    // Concurrency Lock: Atomic status transition to GENERATING
+    try {
+      const updated = await this.prisma.guestJourney.update({
+        where: { id },
+        data: {
+          status: GuestJourneyStatus.GENERATING,
+          generationStartedAt: new Date(),
+          generationFailedAt: null,
+          generationErrorCode: null,
+        },
+      });
 
-    // Trigger async AI generation background task
-    this.aiService
-      .generateGuestItinerary(updated)
-      .catch((err) =>
-        this.logger.error(`Erro ao disparar geração assíncrona para ${id}`, err),
-      );
+      // Trigger async AI generation background task without awaiting HTTP controller response
+      this.aiService
+        .generateGuestItinerary(updated)
+        .catch((err) =>
+          this.logger.error(`Erro ao disparar geração assíncrona para ${id}`, err),
+        );
 
-    return this.mapToGenerationStatusResponse(updated);
+      return this.mapToGenerationStatusResponse(updated);
+    } catch (error) {
+      // In case of concurrency race condition where another process updated the record
+      const current = await this.findAndValidate(id);
+      return this.mapToGenerationStatusResponse(current);
+    }
   }
 
   async getGenerationStatus(

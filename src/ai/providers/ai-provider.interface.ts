@@ -1,3 +1,5 @@
+import { CuratedContextResult } from '../curation/curation-retrieval.service';
+
 export interface GenerateItineraryInput {
   destination: string;
   numberOfDays: number;
@@ -33,6 +35,7 @@ export interface GenerateGuestItineraryInput {
   activityHours?: GuestActivityHoursInput;
   budgetLevel?: string;
   travelStyle?: string;
+  curatedContext?: CuratedContextResult;
 }
 
 export interface AIProviderResult {

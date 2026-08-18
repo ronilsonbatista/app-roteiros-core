@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenAIProvider } from './providers/openai.provider';
+import { CurationRetrievalService } from './curation/curation-retrieval.service';
 import { ItineraryCategory, GuestJourneyStatus } from '@prisma/client';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class AiService {
   constructor(
     private prisma: PrismaService,
     private openAIProvider: OpenAIProvider,
+    private curationRetrievalService: CurationRetrievalService,
   ) {}
 
   async generateItinerary(userId: string, tripId: string, body: any) {
@@ -159,30 +161,51 @@ export class AiService {
 
   async generateGuestItinerary(journey: any): Promise<void> {
     try {
+      const destinations = (journey.destinations as any[]) || [];
+
+      // Phase G2: Retrieve Curated Knowledge Context from PostgreSQL
+      const curatedContext = await this.curationRetrievalService.retrieveCuratedContext({
+        destinations: destinations.map((d, idx) => ({
+          name: d.name,
+          providerPlaceId: d.placeId || d.providerPlaceId,
+          arrivalDate: d.arrivalDate,
+          arrivalTime: d.arrivalTime,
+          departureDate: d.departureDate,
+          departureTime: d.departureTime,
+        })),
+        interests: (journey.interests as string[]) || [],
+        budgetLevel: journey.budgetLevel,
+        travelers: (journey.travelers as any) || { adults: 1, children: 0, elders: 0 },
+        travelStyle: journey.travelStyle,
+      });
+
       const input = {
         journeyId: journey.id,
-        destinations: (journey.destinations as any[]) || [],
+        destinations,
         travelers: (journey.travelers as any) || { adults: 1, children: 0, elders: 0 },
         interests: (journey.interests as string[]) || [],
         activityHours: journey.activityHours as any,
         budgetLevel: journey.budgetLevel,
         travelStyle: journey.travelStyle,
+        curatedContext,
       };
 
       const aiResult = await this.openAIProvider.generateGuestItinerary(input);
 
+      // Save AIRequest Audit Log
       await this.prisma.aIRequest.create({
         data: {
           guestJourneyId: journey.id,
           provider: aiResult.provider,
           model: aiResult.model,
-          prompt: 'Guest System Prompt + Session Context',
+          prompt: 'Guest System Prompt + Curated Context',
           response: aiResult.parsedData,
           status: 'SUCCESS',
           tokensUsed: aiResult.tokensUsed,
         },
       });
 
+      // Normalize itinerary and add Provenance metadata
       const normalizedDays = (aiResult.parsedData.days || []).map((day: any, idx: number) => ({
         dayNumber: day.dayNumber || idx + 1,
         date: day.date,
@@ -193,6 +216,18 @@ export class AiService {
           const categoryMatch = Object.values(ItineraryCategory).find(
             (c) => c === item.category,
           );
+
+          // Provenance resolution
+          let sourceType = item.sourceType || 'AI';
+          let sourceId = item.sourceId || null;
+          let providerPlaceId = item.providerPlaceId || null;
+
+          if (sourceType === 'AI' || !sourceType) {
+            if (providerPlaceId) {
+              sourceType = 'PLACES';
+            }
+          }
+
           return {
             title: item.title || 'Atividade',
             description: item.description || '',
@@ -201,12 +236,16 @@ export class AiService {
             period: item.period || 'Manhã',
             cost: Number(item.estimatedCost || item.cost || 0),
             order: itemIdx + 1,
+            sourceType,
+            sourceId,
+            providerPlaceId,
           };
         }),
       }));
 
       const normalizedItinerary = {
         days: normalizedDays,
+        overallCoverage: curatedContext.overallCoverage,
       };
 
       await this.prisma.guestJourney.update({
@@ -218,7 +257,9 @@ export class AiService {
         },
       });
 
-      this.logger.log(`Geração de roteiro anônimo concluída com sucesso para jornada ${journey.id}`);
+      this.logger.log(
+        `Geração de roteiro anônimo (Coverage: ${curatedContext.overallCoverage}) concluída com sucesso para jornada ${journey.id}`,
+      );
     } catch (error) {
       this.logger.error(`Falha na geração de roteiro anônimo para jornada ${journey.id}`, error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido na IA';
@@ -228,7 +269,7 @@ export class AiService {
           guestJourneyId: journey.id,
           provider: 'OPENAI',
           model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-          prompt: 'Guest System Prompt + Session Context',
+          prompt: 'Guest System Prompt + Curated Context',
           status: 'FAILED',
           errorMessage,
         },
@@ -284,4 +325,3 @@ export class AiService {
     return req;
   }
 }
-
