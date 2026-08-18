@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PlanningService } from './planning.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiService } from '../ai/ai.service';
 import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { GuestJourneyStatus, BudgetLevel, TravelStyle } from '@prisma/client';
 import { PlanningInterest } from './enums/planning-interests.enum';
@@ -8,6 +9,7 @@ import { PlanningInterest } from './enums/planning-interests.enum';
 describe('PlanningService', () => {
   let service: PlanningService;
   let prismaMock: any;
+  let aiServiceMock: any;
 
   beforeEach(async () => {
     prismaMock = {
@@ -17,11 +19,15 @@ describe('PlanningService', () => {
         update: jest.fn(),
       },
     };
+    aiServiceMock = {
+      generateGuestItinerary: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PlanningService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: AiService, useValue: aiServiceMock },
       ],
     }).compile();
 
@@ -214,6 +220,91 @@ describe('PlanningService', () => {
 
       expect(result.status).toBe(GuestJourneyStatus.READY_TO_GENERATE);
       expect(result.currentStep).toBe(6);
+    });
+  });
+
+  describe('startGeneration', () => {
+    it('should start generation asynchronously when status is READY_TO_GENERATE', async () => {
+      const readyJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.READY_TO_GENERATE,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      const generatingJourney = {
+        ...readyJourney,
+        status: GuestJourneyStatus.GENERATING,
+        generationStartedAt: new Date(),
+      };
+
+      prismaMock.guestJourney.update.mockResolvedValue(generatingJourney);
+
+      const result = await service.startGeneration('journey-1', readyJourney);
+
+      expect(result.status).toBe(GuestJourneyStatus.GENERATING);
+      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith({
+        where: { id: 'journey-1' },
+        data: expect.objectContaining({
+          status: GuestJourneyStatus.GENERATING,
+        }),
+      });
+      expect(aiServiceMock.generateGuestItinerary).toHaveBeenCalled();
+    });
+
+    it('should return current status idempotently when already GENERATING', async () => {
+      const generatingJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.GENERATING,
+        generationStartedAt: new Date(),
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      const result = await service.startGeneration('journey-1', generatingJourney);
+
+      expect(result.status).toBe(GuestJourneyStatus.GENERATING);
+      expect(prismaMock.guestJourney.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw PLANNING_NOT_READY_FOR_GENERATION if status is COLLECTING', async () => {
+      const collectingJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.COLLECTING,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      await expect(
+        service.startGeneration('journey-1', collectingJourney),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should enforce 60s cooldown if status is FAILED and generationFailedAt is recent', async () => {
+      const failedJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.FAILED,
+        generationFailedAt: new Date(Date.now() - 10000), // 10s ago
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      await expect(
+        service.startGeneration('journey-1', failedJourney),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getGenerationStatus', () => {
+    it('should return generation metadata without full itinerary', async () => {
+      const generatingJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.GENERATING,
+        generationStartedAt: new Date('2026-08-18T15:00:00Z'),
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      const result = await service.getGenerationStatus('journey-1', generatingJourney);
+
+      expect(result.id).toBe('journey-1');
+      expect(result.status).toBe(GuestJourneyStatus.GENERATING);
+      expect(result).not.toHaveProperty('generatedItinerary');
     });
   });
 });

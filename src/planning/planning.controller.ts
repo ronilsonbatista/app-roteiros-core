@@ -24,6 +24,7 @@ import { UpdatePlanningSessionDto } from './dto/update-planning-session.dto';
 import {
   PlanningSessionResponseDto,
   CreatePlanningSessionResponseDto,
+  GenerationStatusResponseDto,
 } from './dto/planning-session-response.dto';
 import { GuestTokenGuard } from './guards/guest-token.guard';
 import { LogSanitizerInterceptor } from './interceptors/log-sanitizer.interceptor';
@@ -141,5 +142,64 @@ export class PlanningController {
     @Req() req: any,
   ): Promise<PlanningSessionResponseDto> {
     return this.planningService.finalizeQuestionnaire(id, req.guestJourney);
+  }
+
+  @Post(':id/generate')
+  @UseGuards(GuestTokenGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Iniciar geração assíncrona do roteiro via IA',
+    description:
+      'Dispara a geração de roteiro por IA em segundo plano. Retorna 202 Accepted imediatamente com status GENERATING. O progresso deve ser acompanhado via GET /planning-sessions/:id/generation-status.',
+  })
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    description: 'Chave secreta da jornada anônima obtida na criação',
+    required: true,
+  })
+  @ApiParam({ name: 'id', description: 'UUID da jornada de planejamento' })
+  @ApiResponse({
+    status: 202,
+    description: 'Geração iniciada com sucesso (status GENERATING ou PREVIEW_READY)',
+    type: GenerationStatusResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Jornada não está no status READY_TO_GENERATE/FAILED ou em cooldown',
+  })
+  @ApiResponse({ status: 401, description: 'Token inválido ou sessão expirada' })
+  @ApiResponse({ status: 404, description: 'Jornada não encontrada' })
+  async startGeneration(
+    @Param('id') id: string,
+    @Req() req: any,
+  ): Promise<GenerationStatusResponseDto> {
+    return this.planningService.startGeneration(id, req.guestJourney);
+  }
+
+  @Get(':id/generation-status')
+  @UseGuards(GuestTokenGuard)
+  @ApiOperation({
+    summary: 'Consultar status de geração do roteiro',
+    description:
+      'Retorna metadados de progresso da geração (status, timestamps, código de erro). NUNCA retorna o roteiro completo nesta rota.',
+  })
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    description: 'Chave secreta da jornada anônima obtida na criação',
+    required: true,
+  })
+  @ApiParam({ name: 'id', description: 'UUID da jornada de planejamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Status da geração retornado',
+    type: GenerationStatusResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Token inválido ou sessão expirada' })
+  @ApiResponse({ status: 404, description: 'Jornada não encontrada' })
+  async getGenerationStatus(
+    @Param('id') id: string,
+    @Req() req: any,
+  ): Promise<GenerationStatusResponseDto> {
+    return this.planningService.getGenerationStatus(id, req.guestJourney);
   }
 }

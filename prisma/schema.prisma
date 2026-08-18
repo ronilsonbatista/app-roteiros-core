@@ -379,8 +379,11 @@ enum AIRequestStatus {
 model AIRequest {
   id            String          @id @default(uuid())
 
-  userId        String
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guestJourneyId String?
+  guestJourney  GuestJourney?   @relation(fields: [guestJourneyId], references: [id], onDelete: SetNull)
 
   tripId        String?
   trip          Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -404,6 +407,7 @@ model AIRequest {
   updatedAt     DateTime        @updatedAt
 
   @@index([userId])
+  @@index([guestJourneyId])
   @@index([tripId])
   @@index([baseTripId])
   @@index([status])
@@ -624,6 +628,8 @@ model GuestJourney {
 
   createdTripId        String?
   createdTrip          Trip?              @relation("CreatedTripGuestJourneys", fields: [createdTripId], references: [id], onDelete: SetNull)
+
+  aiRequests           AIRequest[]
 
   generationStartedAt  DateTime?
   generationCompletedAt DateTime?

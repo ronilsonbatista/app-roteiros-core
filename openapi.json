@@ -2635,11 +2635,6 @@
             "description": ""
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "summary": "Buscar lugares (Google Places Text Search)",
         "tags": [
           "Places - App",
@@ -2665,11 +2660,6 @@
             "description": ""
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "summary": "Obter detalhes de um lugar específico",
         "tags": [
           "Places - App",
@@ -2785,11 +2775,6 @@
             "description": ""
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "summary": "Enriquecer BaseRestaurant com dados reais (Admin)",
         "tags": [
           "Places - App",
@@ -2825,11 +2810,6 @@
             "description": ""
           }
         },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
         "summary": "Enriquecer ItineraryItem com dados reais (Admin)",
         "tags": [
           "Places - App",
@@ -3757,6 +3737,105 @@
           }
         },
         "summary": "Finalizar o questionário e congelar as respostas",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
+    },
+    "/planning-sessions/{id}/generate": {
+      "post": {
+        "description": "Dispara a geração de roteiro por IA em segundo plano. Retorna 202 Accepted imediatamente com status GENERATING. O progresso deve ser acompanhado via GET /planning-sessions/:id/generation-status.",
+        "operationId": "PlanningController_startGeneration",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Geração iniciada com sucesso (status GENERATING ou PREVIEW_READY)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationStatusResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Jornada não está no status READY_TO_GENERATE/FAILED ou em cooldown"
+          },
+          "401": {
+            "description": "Token inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Iniciar geração assíncrona do roteiro via IA",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
+    },
+    "/planning-sessions/{id}/generation-status": {
+      "get": {
+        "description": "Retorna metadados de progresso da geração (status, timestamps, código de erro). NUNCA retorna o roteiro completo nesta rota.",
+        "operationId": "PlanningController_getGenerationStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status da geração retornado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationStatusResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Consultar status de geração do roteiro",
         "tags": [
           "Planning Sessions (Anonymous)"
         ]
@@ -5521,6 +5600,54 @@
             "example": "MEDIUM"
           }
         }
+      },
+      "GenerationStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLLECTING",
+              "READY_TO_GENERATE",
+              "GENERATING",
+              "PREVIEW_READY",
+              "AUTH_REQUIRED",
+              "CLAIMED",
+              "CHECKOUT_PENDING",
+              "PAID",
+              "EXPIRED",
+              "FAILED"
+            ],
+            "example": "GENERATING"
+          },
+          "generationStartedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:00.000Z"
+          },
+          "generationCompletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:10.000Z"
+          },
+          "generationFailedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:10.000Z"
+          },
+          "generationErrorCode": {
+            "type": "string",
+            "example": "OPENAI_ERROR"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ]
       }
     }
   }

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenAIProvider } from './providers/openai.provider';
-import { ItineraryCategory } from '@prisma/client';
+import { ItineraryCategory, GuestJourneyStatus } from '@prisma/client';
 
 @Injectable()
 export class AiService {
@@ -157,6 +157,94 @@ export class AiService {
     }
   }
 
+  async generateGuestItinerary(journey: any): Promise<void> {
+    try {
+      const input = {
+        journeyId: journey.id,
+        destinations: (journey.destinations as any[]) || [],
+        travelers: (journey.travelers as any) || { adults: 1, children: 0, elders: 0 },
+        interests: (journey.interests as string[]) || [],
+        activityHours: journey.activityHours as any,
+        budgetLevel: journey.budgetLevel,
+        travelStyle: journey.travelStyle,
+      };
+
+      const aiResult = await this.openAIProvider.generateGuestItinerary(input);
+
+      await this.prisma.aIRequest.create({
+        data: {
+          guestJourneyId: journey.id,
+          provider: aiResult.provider,
+          model: aiResult.model,
+          prompt: 'Guest System Prompt + Session Context',
+          response: aiResult.parsedData,
+          status: 'SUCCESS',
+          tokensUsed: aiResult.tokensUsed,
+        },
+      });
+
+      const normalizedDays = (aiResult.parsedData.days || []).map((day: any, idx: number) => ({
+        dayNumber: day.dayNumber || idx + 1,
+        date: day.date,
+        destination: day.destination || (journey.destinations?.[0]?.name ?? 'Destino'),
+        title: day.title || `Dia ${idx + 1}`,
+        description: day.description || '',
+        items: (day.items || []).map((item: any, itemIdx: number) => {
+          const categoryMatch = Object.values(ItineraryCategory).find(
+            (c) => c === item.category,
+          );
+          return {
+            title: item.title || 'Atividade',
+            description: item.description || '',
+            category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
+            location: item.location || '',
+            period: item.period || 'Manhã',
+            cost: Number(item.estimatedCost || item.cost || 0),
+            order: itemIdx + 1,
+          };
+        }),
+      }));
+
+      const normalizedItinerary = {
+        days: normalizedDays,
+      };
+
+      await this.prisma.guestJourney.update({
+        where: { id: journey.id },
+        data: {
+          generatedItinerary: normalizedItinerary as any,
+          generationCompletedAt: new Date(),
+          status: GuestJourneyStatus.PREVIEW_READY,
+        },
+      });
+
+      this.logger.log(`Geração de roteiro anônimo concluída com sucesso para jornada ${journey.id}`);
+    } catch (error) {
+      this.logger.error(`Falha na geração de roteiro anônimo para jornada ${journey.id}`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido na IA';
+
+      await this.prisma.aIRequest.create({
+        data: {
+          guestJourneyId: journey.id,
+          provider: 'OPENAI',
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          prompt: 'Guest System Prompt + Session Context',
+          status: 'FAILED',
+          errorMessage,
+        },
+      }).catch((err) => this.logger.error('Erro ao registrar falha de AIRequest', err));
+
+      await this.prisma.guestJourney.update({
+        where: { id: journey.id },
+        data: {
+          generationFailedAt: new Date(),
+          generationErrorCode: 'OPENAI_ERROR',
+          status: GuestJourneyStatus.FAILED,
+        },
+      }).catch((err) => this.logger.error('Erro ao atualizar status FAILED em GuestJourney', err));
+    }
+  }
+
   async getAdminAiRequests(page: number, limit: number, filters: any) {
     const skip = (page - 1) * limit;
     const where: any = {};
@@ -196,3 +284,4 @@ export class AiService {
     return req;
   }
 }
+

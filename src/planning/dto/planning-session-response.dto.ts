@@ -55,3 +55,23 @@ export class CreatePlanningSessionResponseDto extends PlanningSessionResponseDto
   })
   guestToken: string;
 }
+
+export class GenerationStatusResponseDto {
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  id: string;
+
+  @ApiProperty({ enum: GuestJourneyStatus, example: GuestJourneyStatus.GENERATING })
+  status: GuestJourneyStatus;
+
+  @ApiProperty({ required: false, example: '2026-08-18T15:00:00.000Z' })
+  generationStartedAt?: Date;
+
+  @ApiProperty({ required: false, example: '2026-08-18T15:00:10.000Z' })
+  generationCompletedAt?: Date;
+
+  @ApiProperty({ required: false, example: '2026-08-18T15:00:10.000Z' })
+  generationFailedAt?: Date;
+
+  @ApiProperty({ required: false, example: 'OPENAI_ERROR' })
+  generationErrorCode?: string;
+}

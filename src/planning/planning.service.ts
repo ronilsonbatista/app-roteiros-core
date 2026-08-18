@@ -11,15 +11,20 @@ import { UpdatePlanningSessionDto } from './dto/update-planning-session.dto';
 import {
   PlanningSessionResponseDto,
   CreatePlanningSessionResponseDto,
+  GenerationStatusResponseDto,
 } from './dto/planning-session-response.dto';
 import { GuestJourneyStatus } from '@prisma/client';
+import { AiService } from '../ai/ai.service';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class PlanningService {
   private readonly logger = new Logger(PlanningService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private aiService: AiService,
+  ) {}
 
   async createSession(
     dto: CreatePlanningSessionDto,
@@ -264,6 +269,79 @@ export class PlanningService {
     }
   }
 
+  async startGeneration(
+    id: string,
+    journeyFromGuard?: any,
+  ): Promise<GenerationStatusResponseDto> {
+    const journey = journeyFromGuard || (await this.findAndValidate(id));
+
+    this.checkExpiration(journey);
+
+    // Idempotency: if already generating or preview ready, return current status
+    if (
+      journey.status === GuestJourneyStatus.GENERATING ||
+      journey.status === GuestJourneyStatus.PREVIEW_READY
+    ) {
+      return this.mapToGenerationStatusResponse(journey);
+    }
+
+    if (
+      journey.status !== GuestJourneyStatus.READY_TO_GENERATE &&
+      journey.status !== GuestJourneyStatus.FAILED
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_NOT_READY_FOR_GENERATION',
+        message: `Status atual (${journey.status}) não permite iniciar geração. A jornada deve estar no status READY_TO_GENERATE ou FAILED.`,
+      });
+    }
+
+    // Cooldown check for retries
+    if (journey.status === GuestJourneyStatus.FAILED && journey.generationFailedAt) {
+      const elapsedSeconds =
+        (new Date().getTime() - new Date(journey.generationFailedAt).getTime()) / 1000;
+      if (elapsedSeconds < 60) {
+        const remaining = Math.ceil(60 - elapsedSeconds);
+        throw new BadRequestException({
+          statusCode: 400,
+          code: 'PLANNING_GENERATION_COOLDOWN',
+          message: `Aguarde ${remaining} segundos antes de tentar gerar novamente.`,
+        });
+      }
+    }
+
+    // Atomic update to GENERATING status
+    const updated = await this.prisma.guestJourney.update({
+      where: { id },
+      data: {
+        status: GuestJourneyStatus.GENERATING,
+        generationStartedAt: new Date(),
+        generationFailedAt: null,
+        generationErrorCode: null,
+      },
+    });
+
+    // Trigger async AI generation background task
+    this.aiService
+      .generateGuestItinerary(updated)
+      .catch((err) =>
+        this.logger.error(`Erro ao disparar geração assíncrona para ${id}`, err),
+      );
+
+    return this.mapToGenerationStatusResponse(updated);
+  }
+
+  async getGenerationStatus(
+    id: string,
+    journeyFromGuard?: any,
+  ): Promise<GenerationStatusResponseDto> {
+    const journey = journeyFromGuard || (await this.findAndValidate(id));
+
+    this.checkExpiration(journey);
+
+    return this.mapToGenerationStatusResponse(journey);
+  }
+
   private mapToResponse(journey: any): PlanningSessionResponseDto {
     return {
       id: journey.id,
@@ -279,6 +357,17 @@ export class PlanningService {
       expiresAt: journey.expiresAt,
       createdAt: journey.createdAt,
       updatedAt: journey.updatedAt,
+    };
+  }
+
+  private mapToGenerationStatusResponse(journey: any): GenerationStatusResponseDto {
+    return {
+      id: journey.id,
+      status: journey.status,
+      generationStartedAt: journey.generationStartedAt || undefined,
+      generationCompletedAt: journey.generationCompletedAt || undefined,
+      generationFailedAt: journey.generationFailedAt || undefined,
+      generationErrorCode: journey.generationErrorCode || undefined,
     };
   }
 }
