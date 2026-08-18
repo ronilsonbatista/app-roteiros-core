@@ -37,6 +37,7 @@ model User {
 
   travelProfile       UserTravelProfile?
   purchases           Purchase[]
+  claimedGuestJourneys GuestJourney[] @relation("ClaimedGuestJourneys")
 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -121,6 +122,7 @@ model Trip {
   aiRequests  AIRequest[]
   participants TripParticipant[]
   purchases   Purchase[]
+  createdFromGuestJourneys GuestJourney[] @relation("CreatedTripGuestJourneys")
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -583,3 +585,57 @@ model Purchase {
 
   @@map("purchases")
 }
+
+enum GuestJourneyStatus {
+  COLLECTING
+  READY_TO_GENERATE
+  GENERATING
+  PREVIEW_READY
+  AUTH_REQUIRED
+  CLAIMED
+  CHECKOUT_PENDING
+  PAID
+  EXPIRED
+  FAILED
+}
+
+model GuestJourney {
+  id                   String             @id @default(uuid())
+  guestTokenHash       String             @unique
+
+  status               GuestJourneyStatus @default(COLLECTING)
+
+  answersVersion       Int                @default(1)
+  currentStep          Int                @default(1)
+
+  destinations         Json?
+  travelers            Json?              // { adults: Int, children: Int, elders: Int }
+  interests            String[]           // Array of interest keys
+  activityHours        Json?              // { startTime: String, endTime: String }
+
+  travelStyle          TravelStyle?
+  budgetLevel          BudgetLevel?
+
+  generatedItinerary   Json?
+  previewDayNumber     Int                @default(1)
+
+  claimedUserId        String?
+  claimedUser          User?              @relation("ClaimedGuestJourneys", fields: [claimedUserId], references: [id], onDelete: SetNull)
+
+  createdTripId        String?
+  createdTrip          Trip?              @relation("CreatedTripGuestJourneys", fields: [createdTripId], references: [id], onDelete: SetNull)
+
+  generationStartedAt  DateTime?
+  generationCompletedAt DateTime?
+  generationFailedAt   DateTime?
+  generationErrorCode  String?
+
+  expiresAt            DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([status])
+  @@index([expiresAt])
+  @@map("guest_journeys")
+}
+

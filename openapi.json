@@ -3570,6 +3570,197 @@
           "System"
         ]
       }
+    },
+    "/planning-sessions": {
+      "post": {
+        "description": "Retorna um guestJourneyId e um guestToken de alta entropia. O guestToken é retornado UMA ÚNICA VEZ neste response e deve ser armazenado com segurança no dispositivo (FlutterSecureStorage).",
+        "operationId": "PlanningController_createSession",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanningSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sessão criada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePlanningSessionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Criar nova sessão anônima de planejamento de roteiro",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
+    },
+    "/planning-sessions/{id}": {
+      "get": {
+        "description": "Requer header X-Guest-Token. Permite restaurar o progresso do questionário.",
+        "operationId": "PlanningController_getSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado da jornada retornado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningSessionResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Recuperar estado da sessão de planejamento",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      },
+      "patch": {
+        "description": "Requer header X-Guest-Token. Permite salvar incrementalmente destinos, passageiros, interesses, horários e orçamento/estilo.",
+        "operationId": "PlanningController_updateProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanningSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Jornada atualizada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningSessionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos ou jornada já finalizada (PLANNING_JOURNEY_LOCKED)"
+          },
+          "401": {
+            "description": "Token inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Atualizar progressivamente as respostas do questionário",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
+    },
+    "/planning-sessions/{id}/finalize": {
+      "post": {
+        "description": "Valida que todas as seções obrigatórias foram preenchidas e altera o status da jornada de COLLECTING para READY_TO_GENERATE. Após a finalização, respostas ficam bloqueadas contra alterações.",
+        "operationId": "PlanningController_finalizeQuestionnaire",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Questionário finalizado com sucesso (status READY_TO_GENERATE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningSessionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Questionário incompleto (PLANNING_INCOMPLETE) ou jornada já congelada (PLANNING_JOURNEY_LOCKED)"
+          },
+          "401": {
+            "description": "Token inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Finalizar o questionário e congelar as respostas",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
     }
   },
   "info": {
@@ -4971,6 +5162,363 @@
           },
           "active": {
             "type": "boolean"
+          }
+        }
+      },
+      "CreatePlanningSessionDto": {
+        "type": "object",
+        "properties": {
+          "answersVersion": {
+            "type": "number",
+            "description": "Versão do contrato do questionário",
+            "example": 1
+          },
+          "initialStep": {
+            "type": "number",
+            "description": "Etapa inicial do questionário (1..6)",
+            "example": 1
+          }
+        }
+      },
+      "PlanningDestinationDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJaX7xOX1gLxMRFC23l00vM-Q"
+          },
+          "name": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "city": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "country": {
+            "type": "string",
+            "example": "Itália"
+          },
+          "coverImage": {
+            "type": "string",
+            "example": "https://images.unsplash.com/photo-roma"
+          },
+          "arrivalDate": {
+            "type": "string",
+            "example": "2026-07-25"
+          },
+          "arrivalTime": {
+            "type": "string",
+            "example": "11:00"
+          },
+          "departureDate": {
+            "type": "string",
+            "example": "2026-07-28"
+          },
+          "departureTime": {
+            "type": "string",
+            "example": "19:00"
+          },
+          "order": {
+            "type": "number",
+            "example": 1
+          }
+        }
+      },
+      "PlanningTravelersDto": {
+        "type": "object",
+        "properties": {
+          "adults": {
+            "type": "number",
+            "example": 2
+          },
+          "children": {
+            "type": "number",
+            "example": 1
+          },
+          "elders": {
+            "type": "number",
+            "example": 0
+          }
+        }
+      },
+      "PlanningActivityWindowDto": {
+        "type": "object",
+        "properties": {
+          "startTime": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "endTime": {
+            "type": "string",
+            "example": "18:30"
+          }
+        }
+      },
+      "CreatePlanningSessionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLLECTING",
+              "READY_TO_GENERATE",
+              "GENERATING",
+              "PREVIEW_READY",
+              "AUTH_REQUIRED",
+              "CLAIMED",
+              "CHECKOUT_PENDING",
+              "PAID",
+              "EXPIRED",
+              "FAILED"
+            ],
+            "example": "COLLECTING"
+          },
+          "answersVersion": {
+            "type": "number",
+            "example": 1
+          },
+          "currentStep": {
+            "type": "number",
+            "example": 1
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningDestinationDto"
+            }
+          },
+          "travelers": {
+            "$ref": "#/components/schemas/PlanningTravelersDto"
+          },
+          "interests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activityHours": {
+            "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "travelStyle": {
+            "type": "string",
+            "enum": [
+              "ECONOMIC",
+              "COMFORT",
+              "LUXURY",
+              "ADVENTURE",
+              "FAMILY",
+              "ROMANTIC",
+              "PARTY",
+              "CULTURAL"
+            ]
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ]
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-25T15:00:00.000Z"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:00.000Z"
+          },
+          "guestToken": {
+            "type": "string",
+            "description": "Chave secreta de alta entropia gerada UMA ÚNICA VEZ. Deve ser armazenada com segurança no dispositivo móvel e enviada via header X-Guest-Token.",
+            "example": "8f9a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a2b3c4d5e6f7a8b9c0d1e2f3a"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "answersVersion",
+          "currentStep",
+          "expiresAt",
+          "createdAt",
+          "updatedAt",
+          "guestToken"
+        ]
+      },
+      "PlanningSessionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLLECTING",
+              "READY_TO_GENERATE",
+              "GENERATING",
+              "PREVIEW_READY",
+              "AUTH_REQUIRED",
+              "CLAIMED",
+              "CHECKOUT_PENDING",
+              "PAID",
+              "EXPIRED",
+              "FAILED"
+            ],
+            "example": "COLLECTING"
+          },
+          "answersVersion": {
+            "type": "number",
+            "example": 1
+          },
+          "currentStep": {
+            "type": "number",
+            "example": 1
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningDestinationDto"
+            }
+          },
+          "travelers": {
+            "$ref": "#/components/schemas/PlanningTravelersDto"
+          },
+          "interests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activityHours": {
+            "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "travelStyle": {
+            "type": "string",
+            "enum": [
+              "ECONOMIC",
+              "COMFORT",
+              "LUXURY",
+              "ADVENTURE",
+              "FAMILY",
+              "ROMANTIC",
+              "PARTY",
+              "CULTURAL"
+            ]
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ]
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-25T15:00:00.000Z"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-08-18T15:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "answersVersion",
+          "currentStep",
+          "expiresAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdatePlanningSessionDto": {
+        "type": "object",
+        "properties": {
+          "currentStep": {
+            "type": "number",
+            "example": 2
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningDestinationDto"
+            }
+          },
+          "travelers": {
+            "$ref": "#/components/schemas/PlanningTravelersDto"
+          },
+          "interests": {
+            "type": "array",
+            "example": [
+              "GASTRONOMY",
+              "ARCHITECTURE",
+              "NATURE"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "ART",
+                "GASTRONOMY",
+                "SPORTS",
+                "ARCHITECTURE",
+                "OUTDOOR",
+                "MUSIC",
+                "GEEK_CULTURE",
+                "LOCAL_HISTORY",
+                "NATURE"
+              ]
+            }
+          },
+          "activityWindow": {
+            "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "travelStyle": {
+            "type": "string",
+            "enum": [
+              "ECONOMIC",
+              "COMFORT",
+              "LUXURY",
+              "ADVENTURE",
+              "FAMILY",
+              "ROMANTIC",
+              "PARTY",
+              "CULTURAL"
+            ],
+            "example": "COMFORT"
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ],
+            "example": "MEDIUM"
           }
         }
       }

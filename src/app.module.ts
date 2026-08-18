@@ -21,6 +21,7 @@ import { join } from 'path';
 import { BillingModule } from './billing/billing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health.module';
+import { PlanningModule } from './planning/planning.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { HealthModule } from './health/health.module';
     BillingModule,
     AnalyticsModule,
     HealthModule,
+    PlanningModule,
   ],
   controllers: [AppController],
   providers: [
