@@ -23,8 +23,6 @@ import { EnrichPlaceDto } from './dto/enrich-place.dto';
 import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('Places - App')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller()
 export class PlacesController {
   constructor(private readonly placesService: PlacesService) {}
@@ -47,6 +45,8 @@ export class PlacesController {
   }
 
   @ApiTags('Itinerary - App')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Patch('itinerary-items/:id/place')
   @ApiOperation({
     summary: 'Enriquecer ItineraryItem com dados reais de Place',
@@ -64,7 +64,8 @@ export class PlacesController {
   }
 
   @ApiTags('Admin - Places')
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Patch('admin/base-attractions/:id/place')
   @ApiOperation({
