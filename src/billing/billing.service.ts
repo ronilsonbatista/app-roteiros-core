@@ -6,10 +6,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MockPaymentProvider } from './providers/mock-payment.provider';
+import { MercadoPagoPaymentProvider } from './providers/mercadopago-payment.provider';
+import { PaymentProvider } from './providers/payment-provider.interface';
 import {
   CreateProductDto,
   UpdateProductDto,
   CreateMockPurchaseDto,
+  CheckoutPurchaseDto,
+  CheckoutSummaryDto,
+  CheckoutResponseDto,
 } from './dto/billing.dto';
 import { PurchaseStatus, ProductType } from '@prisma/client';
 
@@ -17,7 +22,8 @@ import { PurchaseStatus, ProductType } from '@prisma/client';
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly paymentProvider: MockPaymentProvider,
+    private readonly mockProvider: MockPaymentProvider,
+    private readonly mercadoPagoProvider: MercadoPagoPaymentProvider,
   ) {}
 
   public isMockPaymentEnabled(): boolean {
@@ -38,6 +44,192 @@ export class BillingService {
         'Mock payments are disabled in this environment',
       );
     }
+  }
+
+  public resolvePaymentProvider(): PaymentProvider {
+    const providerName = (process.env.PAYMENT_PROVIDER || '').toLowerCase();
+    const env = (process.env.NODE_ENV || 'development').toLowerCase();
+
+    if (providerName === 'mercadopago') {
+      return this.mercadoPagoProvider;
+    }
+
+    if (providerName === 'mock' || this.isMockPaymentEnabled()) {
+      return this.mockProvider;
+    }
+
+    if (env === 'production' || env === 'staging') {
+      throw new ForbiddenException(
+        'Invalid or unconfigured PAYMENT_PROVIDER in production/staging environment',
+      );
+    }
+
+    return this.mockProvider;
+  }
+
+  // CHECKOUT SUMMARY & REAL PURCHASE API
+  async getCheckoutSummary(userId: string, tripId: string): Promise<CheckoutSummaryDto> {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+    });
+    if (!trip) throw new NotFoundException('Trip não encontrada');
+    if (trip.userId !== userId) {
+      throw new ForbiddenException('Não autorizado. A viagem pertence a outro usuário.');
+    }
+
+    const alreadyUnlocked = trip.premiumUnlockedAt != null;
+
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+    });
+    if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
+
+    const existingPurchase = await this.prisma.purchase.findFirst({
+      where: { userId, tripId, productId: product.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      tripId,
+      alreadyUnlocked,
+      product: {
+        id: product.id,
+        type: product.type,
+        name: product.name,
+        description: product.description || undefined,
+      },
+      pricing: {
+        originalAmount: Number(product.price),
+        discountAmount: 0,
+        finalAmount: Number(product.price),
+        currency: product.currency,
+      },
+      existingPurchaseId: existingPurchase?.id,
+      existingPurchaseStatus: existingPurchase?.status,
+      supportedPaymentMethods: ['PIX', 'CARD'],
+    };
+  }
+
+  async processCheckoutPurchase(
+    userId: string,
+    dto: CheckoutPurchaseDto,
+    idempotencyKey?: string,
+    userEmail?: string,
+  ): Promise<CheckoutResponseDto> {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: dto.tripId },
+    });
+    if (!trip) throw new NotFoundException('Trip não encontrada');
+    if (trip.userId !== userId) {
+      throw new ForbiddenException('Não autorizado. A viagem pertence a outro usuário.');
+    }
+
+    if (trip.premiumUnlockedAt != null) {
+      throw new BadRequestException('Esta viagem já possui acesso premium liberado.');
+    }
+
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+    });
+    if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
+
+    // Idempotency key check
+    if (idempotencyKey) {
+      const existingKeyPurchase = await this.prisma.purchase.findUnique({
+        where: { idempotencyKey },
+      });
+      if (existingKeyPurchase) {
+        if (existingKeyPurchase.userId !== userId) {
+          throw new ForbiddenException('Chave de idempotência pertence a outro usuário');
+        }
+        return {
+          purchaseId: existingKeyPurchase.id,
+          status: existingKeyPurchase.status,
+          amount: Number(existingKeyPurchase.finalAmount),
+          currency: existingKeyPurchase.currency,
+          paymentMethod: existingKeyPurchase.paymentMethod || dto.paymentMethod,
+        };
+      }
+    }
+
+    // Reuse existing PENDING purchase or create new
+    let purchase = await this.prisma.purchase.findFirst({
+      where: {
+        userId,
+        tripId: dto.tripId,
+        productId: product.id,
+        status: PurchaseStatus.PENDING,
+      },
+    });
+
+    if (!purchase) {
+      purchase = await this.prisma.purchase.create({
+        data: {
+          userId,
+          productId: product.id,
+          tripId: dto.tripId,
+          status: PurchaseStatus.PENDING,
+          amount: product.price,
+          originalAmount: product.price,
+          discountAmount: 0,
+          finalAmount: product.price,
+          currency: product.currency,
+          idempotencyKey,
+        },
+      });
+    }
+
+    const provider = this.resolvePaymentProvider();
+
+    const paymentResult = await provider.processPayment({
+      userId,
+      purchaseId: purchase.id,
+      amount: Number(purchase.finalAmount),
+      currency: purchase.currency,
+      description: `2GO - ${product.name}`,
+      paymentMethod: dto.paymentMethod,
+      cardToken: dto.cardToken,
+      installments: dto.installments,
+      idempotencyKey,
+      payerEmail: userEmail,
+    });
+
+    if (!paymentResult.success && paymentResult.status === 'REJECTED') {
+      throw new BadRequestException(
+        paymentResult.error || 'Pagamento recusado pelo provedor de pagamento',
+      );
+    }
+
+    const providerName =
+      provider instanceof MercadoPagoPaymentProvider ? 'MERCADOPAGO' : 'MOCK';
+
+    const updatedPurchase = await this.prisma.purchase.update({
+      where: { id: purchase.id },
+      data: {
+        provider: providerName,
+        providerPaymentId: paymentResult.providerPaymentId,
+        paymentMethod: dto.paymentMethod,
+        mockPaymentId: paymentResult.transactionId || paymentResult.providerPaymentId,
+      },
+    });
+
+    return {
+      purchaseId: updatedPurchase.id,
+      status: updatedPurchase.status,
+      amount: Number(updatedPurchase.finalAmount),
+      currency: updatedPurchase.currency,
+      paymentMethod: dto.paymentMethod,
+      pixDetails: paymentResult.pixDetails
+        ? {
+            copyPaste: paymentResult.pixDetails.copyPaste,
+            qrCodeBase64: paymentResult.pixDetails.qrCodeBase64,
+            expiresAt: paymentResult.pixDetails.expiresAt
+              ? String(paymentResult.pixDetails.expiresAt)
+              : undefined,
+            ticketUrl: paymentResult.pixDetails.ticketUrl,
+          }
+        : undefined,
+    };
   }
 
   // USER
@@ -136,7 +328,7 @@ export class BillingService {
       throw new BadRequestException('A compra não está mais pendente');
 
     // Chamar MockPaymentProvider
-    const paymentResult = await this.paymentProvider.processPayment({
+    const paymentResult = await this.mockProvider.processPayment({
       userId,
       amount: Number(purchase.amount),
       currency: purchase.currency,

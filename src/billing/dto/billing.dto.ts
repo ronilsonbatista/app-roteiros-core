@@ -9,6 +9,11 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductType } from '@prisma/client';
 
+export enum PaymentMethodType {
+  PIX = 'PIX',
+  CARD = 'CARD',
+}
+
 export class CreateProductDto {
   @ApiProperty()
   @IsString()
@@ -81,4 +86,110 @@ export class CreateMockPurchaseDto {
   @IsString()
   @IsOptional()
   idempotencyKey?: string;
+}
+
+export class CheckoutPurchaseDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  tripId: string;
+
+  @ApiProperty({ enum: PaymentMethodType })
+  @IsEnum(PaymentMethodType)
+  paymentMethod: PaymentMethodType;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  cardToken?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsNumber()
+  @IsOptional()
+  installments?: number;
+}
+
+export class CheckoutPricingDto {
+  @ApiProperty()
+  originalAmount: number;
+
+  @ApiProperty()
+  discountAmount: number;
+
+  @ApiProperty()
+  finalAmount: number;
+
+  @ApiProperty()
+  currency: string;
+}
+
+export class CheckoutProductDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  type: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiPropertyOptional()
+  description?: string;
+}
+
+export class CheckoutSummaryDto {
+  @ApiProperty()
+  tripId: string;
+
+  @ApiProperty()
+  alreadyUnlocked: boolean;
+
+  @ApiProperty()
+  product: CheckoutProductDto;
+
+  @ApiProperty()
+  pricing: CheckoutPricingDto;
+
+  @ApiPropertyOptional()
+  existingPurchaseId?: string;
+
+  @ApiPropertyOptional()
+  existingPurchaseStatus?: string;
+
+  @ApiProperty({ type: [String] })
+  supportedPaymentMethods: string[];
+}
+
+export class PixDetailsDto {
+  @ApiPropertyOptional()
+  copyPaste?: string;
+
+  @ApiPropertyOptional()
+  qrCodeBase64?: string;
+
+  @ApiPropertyOptional()
+  expiresAt?: string;
+
+  @ApiPropertyOptional()
+  ticketUrl?: string;
+}
+
+export class CheckoutResponseDto {
+  @ApiProperty()
+  purchaseId: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
+  amount: number;
+
+  @ApiProperty()
+  currency: string;
+
+  @ApiProperty()
+  paymentMethod: string;
+
+  @ApiPropertyOptional({ type: PixDetailsDto })
+  pixDetails?: PixDetailsDto;
 }

@@ -3078,6 +3078,74 @@
         ]
       }
     },
+    "/trips/{tripId}/checkout-summary": {
+      "get": {
+        "operationId": "BillingController_getCheckoutSummary",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter resumo de checkout para uma viagem",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/purchases/checkout": {
+      "post": {
+        "operationId": "BillingController_processCheckout",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": false,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutPurchaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar cobrança real e iniciar pagamento (PIX ou CARTÃO)",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
     "/purchases/mock": {
       "post": {
         "operationId": "BillingController_createPurchase",
@@ -5272,6 +5340,32 @@
         },
         "required": [
           "providerPlaceId"
+        ]
+      },
+      "CheckoutPurchaseDto": {
+        "type": "object",
+        "properties": {
+          "tripId": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "PIX",
+              "CARD"
+            ]
+          },
+          "cardToken": {
+            "type": "string"
+          },
+          "installments": {
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "tripId",
+          "paymentMethod"
         ]
       },
       "CreateMockPurchaseDto": {
