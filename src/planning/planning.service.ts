@@ -19,7 +19,8 @@ import {
   PlanningVisibleDayDto,
   PlanningLockedDayDto,
 } from './dto/planning-preview-response.dto';
-import { GuestJourneyStatus, ProductType, ItineraryCategory } from '@prisma/client';
+import { ClaimGuestJourneyResponseDto } from './dto/claim-guest-journey-response.dto';
+import { GuestJourneyStatus, ProductType, ItineraryCategory, TripStatus } from '@prisma/client';
 import { AiService } from '../ai/ai.service';
 import * as crypto from 'crypto';
 
@@ -525,6 +526,240 @@ export class PlanningService {
       lockedDays,
       unlockOffer,
     };
+  }
+
+  async claimJourney(
+    id: string,
+    userId: string,
+    journeyFromGuard?: any,
+  ): Promise<ClaimGuestJourneyResponseDto> {
+    const journey =
+      journeyFromGuard ||
+      (await this.prisma.guestJourney.findUnique({
+        where: { id },
+      }));
+
+    if (!journey) {
+      throw new NotFoundException({
+        statusCode: 404,
+        code: 'PLANNING_JOURNEY_NOT_FOUND',
+        message: 'Jornada de planejamento não encontrada',
+      });
+    }
+
+    // Expiration check
+    if (journey.expiresAt && new Date() > new Date(journey.expiresAt)) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        code: 'PLANNING_JOURNEY_EXPIRED',
+        message: 'Sessão de planejamento expirada',
+      });
+    }
+
+    // 1. Claim by another user check
+    if (journey.claimedUserId && journey.claimedUserId !== userId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_JOURNEY_ALREADY_CLAIMED',
+        message: 'Jornada já vinculada a outra conta',
+      });
+    }
+
+    // 2. Idempotent re-claim by the SAME user check
+    if (journey.claimedUserId === userId && journey.createdTripId) {
+      return {
+        journeyId: journey.id,
+        tripId: journey.createdTripId,
+        status: GuestJourneyStatus.CLAIMED,
+        nextAction: 'CHECKOUT',
+      };
+    }
+
+    // 3. Status eligibility check
+    if (
+      journey.status !== GuestJourneyStatus.PREVIEW_READY &&
+      journey.status !== GuestJourneyStatus.CLAIMED
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_JOURNEY_NOT_CLAIMABLE',
+        message:
+          'Jornada de planejamento não está elegível para reivindicação (status deve ser PREVIEW_READY)',
+      });
+    }
+
+    // 4. Validate generatedItinerary structure
+    const generatedItinerary = journey.generatedItinerary as any;
+    if (
+      !generatedItinerary ||
+      !Array.isArray(generatedItinerary.days) ||
+      generatedItinerary.days.length === 0
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_JOURNEY_NOT_CLAIMABLE',
+        message: 'Roteiro gerado não encontrado ou inválido para materialização',
+      });
+    }
+
+    // Atomic transaction for Trip creation and GuestJourney linking
+    return this.prisma.$transaction(async (tx) => {
+      // Re-fetch inside transaction for concurrency safety
+      const currentJourney = await tx.guestJourney.findUnique({
+        where: { id },
+      });
+
+      if (!currentJourney) {
+        throw new NotFoundException({
+          statusCode: 404,
+          code: 'PLANNING_JOURNEY_NOT_FOUND',
+          message: 'Jornada não encontrada',
+        });
+      }
+
+      // Check again inside transaction for race conditions
+      if (
+        currentJourney.claimedUserId &&
+        currentJourney.claimedUserId !== userId
+      ) {
+        throw new BadRequestException({
+          statusCode: 400,
+          code: 'PLANNING_JOURNEY_ALREADY_CLAIMED',
+          message: 'Jornada já vinculada a outra conta',
+        });
+      }
+
+      if (
+        currentJourney.claimedUserId === userId &&
+        currentJourney.createdTripId
+      ) {
+        return {
+          journeyId: currentJourney.id,
+          tripId: currentJourney.createdTripId,
+          status: GuestJourneyStatus.CLAIMED,
+          nextAction: 'CHECKOUT',
+        };
+      }
+
+      const destinations = Array.isArray(currentJourney.destinations)
+        ? (currentJourney.destinations as any[])
+        : [];
+      const primaryDestination = destinations[0]?.name || 'Destino';
+      const tripTitle =
+        destinations.length > 0
+          ? `Viagem para ${destinations.map((d: any) => d.name).join(' & ')}`
+          : 'Minha Viagem 2GO';
+
+      let coverImage: string | null = destinations[0]?.coverImage || null;
+      if (!coverImage && primaryDestination) {
+        const baseMatch = await tx.baseTrip.findFirst({
+          where: {
+            destination: { contains: primaryDestination, mode: 'insensitive' },
+            coverImage: { not: null },
+          },
+          select: { coverImage: true },
+        });
+        if (baseMatch?.coverImage) {
+          coverImage = baseMatch.coverImage;
+        }
+      }
+
+      const startDateStr = destinations[0]?.arrivalDate;
+      const endDateStr = destinations[destinations.length - 1]?.departureDate;
+      const startDate = startDateStr ? new Date(startDateStr) : null;
+      const endDate = endDateStr ? new Date(endDateStr) : null;
+
+      // Materialize Trip
+      const trip = await tx.trip.create({
+        data: {
+          userId,
+          title: tripTitle,
+          destination: primaryDestination,
+          coverImage,
+          startDate,
+          endDate,
+          status: TripStatus.DRAFT,
+          premiumUnlockedAt: null,
+          preferences: {
+            travelers: currentJourney.travelers,
+            interests: currentJourney.interests,
+            activityHours: currentJourney.activityHours,
+            budgetLevel: currentJourney.budgetLevel,
+            travelStyle: currentJourney.travelStyle,
+          },
+        },
+      });
+
+      // Materialize Days & Items
+      for (const [dayIdx, day] of generatedItinerary.days.entries()) {
+        const dayNumber = day.dayNumber || dayIdx + 1;
+        const dayDate = day.date ? new Date(day.date) : null;
+
+        const tripDay = await tx.tripDay.create({
+          data: {
+            tripId: trip.id,
+            dayNumber,
+            date: dayDate,
+            title: day.title || `Dia ${dayNumber}`,
+            description: day.description || null,
+          },
+        });
+
+        const items = Array.isArray(day.items) ? day.items : [];
+        for (const [itemIdx, item] of items.entries()) {
+          const categoryMatch =
+            Object.values(ItineraryCategory).find((c) => c === item.category) ||
+            ItineraryCategory.TOURIST_ATTRACTION;
+
+          await tx.itineraryItem.create({
+            data: {
+              tripDayId: tripDay.id,
+              title: item.title || 'Atividade',
+              description: item.description || null,
+              category: categoryMatch,
+              location: item.location || null,
+              googleMapsLink: item.googleMapsLink || null,
+              latitude: item.latitude != null ? Number(item.latitude) : null,
+              longitude:
+                item.longitude != null ? Number(item.longitude) : null,
+              timeLabel: item.period || item.timeLabel || null,
+              period: item.period || null,
+              duration: item.duration != null ? Number(item.duration) : null,
+              cost: item.cost != null ? Number(item.cost) : null,
+              currency: item.currency || 'BRL',
+              externalLink:
+                item.ticketUrl ||
+                item.reservationUrl ||
+                item.externalLink ||
+                null,
+              order: item.order || itemIdx + 1,
+              providerPlaceId: item.providerPlaceId || null,
+              placeProvider:
+                item.sourceType === 'PLACES' || item.providerPlaceId
+                  ? 'GOOGLE'
+                  : null,
+            },
+          });
+        }
+      }
+
+      // Link GuestJourney to User and Trip and set status CLAIMED
+      await tx.guestJourney.update({
+        where: { id },
+        data: {
+          claimedUserId: userId,
+          createdTripId: trip.id,
+          status: GuestJourneyStatus.CLAIMED,
+        },
+      });
+
+      return {
+        journeyId: currentJourney.id,
+        tripId: trip.id,
+        status: GuestJourneyStatus.CLAIMED,
+        nextAction: 'CHECKOUT',
+      };
+    });
   }
 
   private mapToResponse(journey: any): PlanningSessionResponseDto {

@@ -3891,6 +3891,57 @@
           "Planning Sessions (Anonymous)"
         ]
       }
+    },
+    "/planning-sessions/{id}/claim": {
+      "post": {
+        "description": "Requer simultaneamente autenticação de usuário (JWT Bearer Token) e credencial da jornada anônima (header X-Guest-Token). Transforma o roteiro gerado em uma Trip relacional completa de forma atômica e idempotente.",
+        "operationId": "PlanningController_claimJourney",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UUID da jornada de planejamento",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Guest-Token",
+            "in": "header",
+            "description": "Chave secreta da jornada anônima obtida na criação",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Jornada reivindicada e Trip materializada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimGuestJourneyResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Jornada não está em PREVIEW_READY ou já foi reivindicada por outra conta (PLANNING_JOURNEY_ALREADY_CLAIMED / PLANNING_JOURNEY_NOT_CLAIMABLE)"
+          },
+          "401": {
+            "description": "JWT ou Guest Token ausente, inválido ou sessão expirada"
+          },
+          "404": {
+            "description": "Jornada não encontrada"
+          }
+        },
+        "summary": "Reivindicar jornada anônima e materializar Trip para o usuário autenticado",
+        "tags": [
+          "Planning Sessions (Anonymous)"
+        ]
+      }
     }
   },
   "info": {
@@ -6010,6 +6061,49 @@
           "visibleDays",
           "lockedDays",
           "unlockOffer"
+        ]
+      },
+      "ClaimGuestJourneyResponseDto": {
+        "type": "object",
+        "properties": {
+          "journeyId": {
+            "type": "string",
+            "example": "123e4567-e89b-12d3-a456-426614174000",
+            "description": "UUID da jornada de planejamento reivindicada"
+          },
+          "tripId": {
+            "type": "string",
+            "example": "987f6543-e21b-12d3-a456-426614174000",
+            "description": "UUID da Trip criada e materializada no banco de dados"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLLECTING",
+              "READY_TO_GENERATE",
+              "GENERATING",
+              "PREVIEW_READY",
+              "AUTH_REQUIRED",
+              "CLAIMED",
+              "CHECKOUT_PENDING",
+              "PAID",
+              "EXPIRED",
+              "FAILED"
+            ],
+            "example": "CLAIMED",
+            "description": "Novo status da jornada de planejamento após o claim"
+          },
+          "nextAction": {
+            "type": "string",
+            "example": "CHECKOUT",
+            "description": "Próxima ação esperada no fluxo do cliente"
+          }
+        },
+        "required": [
+          "journeyId",
+          "tripId",
+          "status",
+          "nextAction"
         ]
       }
     }

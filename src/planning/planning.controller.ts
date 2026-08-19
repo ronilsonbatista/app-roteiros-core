@@ -27,7 +27,9 @@ import {
   GenerationStatusResponseDto,
 } from './dto/planning-session-response.dto';
 import { PlanningPreviewResponseDto } from './dto/planning-preview-response.dto';
+import { ClaimGuestJourneyResponseDto } from './dto/claim-guest-journey-response.dto';
 import { GuestTokenGuard } from './guards/guest-token.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LogSanitizerInterceptor } from './interceptors/log-sanitizer.interceptor';
 
 @ApiTags('Planning Sessions (Anonymous)')
@@ -233,5 +235,38 @@ export class PlanningController {
     @Req() req: any,
   ): Promise<PlanningPreviewResponseDto> {
     return this.planningService.getPreview(id, req.guestJourney);
+  }
+
+  @Post(':id/claim')
+  @UseGuards(JwtAuthGuard, GuestTokenGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reivindicar jornada anônima e materializar Trip para o usuário autenticado',
+    description:
+      'Requer simultaneamente autenticação de usuário (JWT Bearer Token) e credencial da jornada anônima (header X-Guest-Token). Transforma o roteiro gerado em uma Trip relacional completa de forma atômica e idempotente.',
+  })
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    description: 'Chave secreta da jornada anônima obtida na criação',
+    required: true,
+  })
+  @ApiParam({ name: 'id', description: 'UUID da jornada de planejamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Jornada reivindicada e Trip materializada com sucesso',
+    type: ClaimGuestJourneyResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Jornada não está em PREVIEW_READY ou já foi reivindicada por outra conta (PLANNING_JOURNEY_ALREADY_CLAIMED / PLANNING_JOURNEY_NOT_CLAIMABLE)',
+  })
+  @ApiResponse({ status: 401, description: 'JWT ou Guest Token ausente, inválido ou sessão expirada' })
+  @ApiResponse({ status: 404, description: 'Jornada não encontrada' })
+  async claimJourney(
+    @Param('id') id: string,
+    @Req() req: any,
+  ): Promise<ClaimGuestJourneyResponseDto> {
+    return this.planningService.claimJourney(id, req.user.id, req.guestJourney);
   }
 }

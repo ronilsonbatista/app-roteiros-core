@@ -24,6 +24,7 @@ describe('PlanningService', () => {
       baseTrip: {
         findFirst: jest.fn(),
       },
+      $transaction: jest.fn(),
     };
     aiServiceMock = {
       generateGuestItinerary: jest.fn().mockResolvedValue(undefined),
@@ -503,4 +504,170 @@ describe('PlanningService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('claimJourney (Phase I1 Core Guest Journey Claim + Materialization)', () => {
+    const mockFullItinerary = {
+      days: [
+        {
+          dayNumber: 1,
+          date: '2026-07-25',
+          destination: 'Roma',
+          title: 'Dia 1: Chegada em Roma',
+          items: [
+            {
+              title: 'Coliseu de Roma',
+              description: 'Passeio Histórico Guiado',
+              category: ItineraryCategory.TOURIST_ATTRACTION,
+              period: 'Manhã',
+              cost: 25.0,
+              order: 1,
+              sourceType: 'BASE_ATTRACTION',
+              providerPlaceId: 'coliseu-place-1',
+            },
+          ],
+        },
+        {
+          dayNumber: 2,
+          date: '2026-07-26',
+          destination: 'Roma',
+          title: 'Dia 2: Vaticano',
+          items: [
+            {
+              title: 'Museus do Vaticano',
+              description: 'Capela Sistina',
+              category: ItineraryCategory.MUSEUM,
+              period: 'Tarde',
+              cost: 30.0,
+              order: 1,
+              sourceType: 'BASE_ATTRACTION',
+              providerPlaceId: 'vaticano-place-2',
+            },
+          ],
+        },
+      ],
+    };
+
+    it('ATOMIC MATERIALIZATION: should materialize Trip, TripDays, ItineraryItems and update status to CLAIMED with premiumUnlockedAt=null', async () => {
+      const readyJourney = {
+        id: 'journey-claim-1',
+        status: GuestJourneyStatus.PREVIEW_READY,
+        expiresAt: new Date(Date.now() + 100000),
+        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-26' }],
+        generatedItinerary: mockFullItinerary,
+        claimedUserId: null,
+        createdTripId: null,
+      };
+
+      const mockCreatedTrip = {
+        id: 'trip-materialized-123',
+        userId: 'user-auth-456',
+        title: 'Viagem para Roma',
+        destination: 'Roma',
+        premiumUnlockedAt: null,
+      };
+
+      const mockCreatedDay1 = { id: 'day-1-uuid', tripId: 'trip-materialized-123', dayNumber: 1 };
+      const mockCreatedDay2 = { id: 'day-2-uuid', tripId: 'trip-materialized-123', dayNumber: 2 };
+
+      const txMock = {
+        guestJourney: {
+          findUnique: jest.fn().mockResolvedValue(readyJourney),
+          update: jest.fn().mockResolvedValue({ ...readyJourney, status: GuestJourneyStatus.CLAIMED, claimedUserId: 'user-auth-456', createdTripId: 'trip-materialized-123' }),
+        },
+        baseTrip: { findFirst: jest.fn().mockResolvedValue(null) },
+        trip: { create: jest.fn().mockResolvedValue(mockCreatedTrip) },
+        tripDay: {
+          create: jest.fn()
+            .mockResolvedValueOnce(mockCreatedDay1)
+            .mockResolvedValueOnce(mockCreatedDay2),
+        },
+        itineraryItem: { create: jest.fn().mockResolvedValue({}) },
+      };
+
+      prismaMock.$transaction = jest.fn().mockImplementation((cb) => cb(txMock));
+
+      const result = await service.claimJourney('journey-claim-1', 'user-auth-456', readyJourney);
+
+      expect(result.journeyId).toBe('journey-claim-1');
+      expect(result.tripId).toBe('trip-materialized-123');
+      expect(result.status).toBe(GuestJourneyStatus.CLAIMED);
+      expect(result.nextAction).toBe('CHECKOUT');
+
+      // Assert zero AI calls during claim
+      expect(aiServiceMock.generateGuestItinerary).not.toHaveBeenCalled();
+
+      // Assert Trip materialized with user owner from JWT and premiumUnlockedAt=null
+      expect(txMock.trip.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-auth-456',
+          destination: 'Roma',
+          premiumUnlockedAt: null,
+        }),
+      });
+
+      // Assert all days materialized
+      expect(txMock.tripDay.create).toHaveBeenCalledTimes(2);
+      expect(txMock.itineraryItem.create).toHaveBeenCalledTimes(2);
+
+      // Assert GuestJourney linked and status updated to CLAIMED
+      expect(txMock.guestJourney.update).toHaveBeenCalledWith({
+        where: { id: 'journey-claim-1' },
+        data: {
+          claimedUserId: 'user-auth-456',
+          createdTripId: 'trip-materialized-123',
+          status: GuestJourneyStatus.CLAIMED,
+        },
+      });
+    });
+
+    it('IDEMPOTENCY (SAME USER): re-claiming by same user returns existing tripId without creating new Trip', async () => {
+      const alreadyClaimedJourney = {
+        id: 'journey-claim-idempotent',
+        status: GuestJourneyStatus.CLAIMED,
+        expiresAt: new Date(Date.now() + 100000),
+        claimedUserId: 'user-auth-456',
+        createdTripId: 'trip-existing-999',
+        generatedItinerary: mockFullItinerary,
+      };
+
+      const result = await service.claimJourney(
+        'journey-claim-idempotent',
+        'user-auth-456',
+        alreadyClaimedJourney,
+      );
+
+      expect(result.journeyId).toBe('journey-claim-idempotent');
+      expect(result.tripId).toBe('trip-existing-999');
+      expect(result.status).toBe(GuestJourneyStatus.CLAIMED);
+      expect(result.nextAction).toBe('CHECKOUT');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('REJECTION (DIFFERENT USER): claiming a journey already claimed by another user throws PLANNING_JOURNEY_ALREADY_CLAIMED', async () => {
+      const claimedByOtherUser = {
+        id: 'journey-claimed-other',
+        status: GuestJourneyStatus.CLAIMED,
+        expiresAt: new Date(Date.now() + 100000),
+        claimedUserId: 'user-original-owner-111',
+        createdTripId: 'trip-other-user',
+      };
+
+      await expect(
+        service.claimJourney('journey-claimed-other', 'user-intruder-999', claimedByOtherUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('INELIGIBLE STATUS: claiming in status GENERATING or FAILED throws PLANNING_JOURNEY_NOT_CLAIMABLE', async () => {
+      const generatingJourney = {
+        id: 'journey-generating',
+        status: GuestJourneyStatus.GENERATING,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      await expect(
+        service.claimJourney('journey-generating', 'user-1', generatingJourney),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });
+
