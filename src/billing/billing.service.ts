@@ -20,12 +20,34 @@ export class BillingService {
     private readonly paymentProvider: MockPaymentProvider,
   ) {}
 
+  public isMockPaymentEnabled(): boolean {
+    const env = (process.env.NODE_ENV || 'development').toLowerCase();
+    if (env === 'production' || env === 'staging') {
+      return false;
+    }
+    const flag = (process.env.BILLING_MOCK_PAYMENTS_ENABLED || '').toLowerCase();
+    if (env === 'test') {
+      return flag !== 'false';
+    }
+    return flag === 'true';
+  }
+
+  private checkMockEnabled() {
+    if (!this.isMockPaymentEnabled()) {
+      throw new ForbiddenException(
+        'Mock payments are disabled in this environment',
+      );
+    }
+  }
+
   // USER
   async getActiveProducts() {
     return this.prisma.product.findMany({ where: { active: true } });
   }
 
   async createMockPurchase(userId: string, dto: CreateMockPurchaseDto) {
+    this.checkMockEnabled();
+
     // Idempotency key check
     if (dto.idempotencyKey) {
       const existingKeyPurchase = await this.prisma.purchase.findUnique({
@@ -95,12 +117,7 @@ export class BillingService {
   }
 
   async confirmMockPayment(userId: string, purchaseId: string) {
-    // CRITICAL SECURITY FIX (BILLING_CRITICAL_SECURITY_GAP)
-    if (process.env.NODE_ENV === 'production') {
-      throw new ForbiddenException(
-        'Mock payment confirmation is disabled in production environment',
-      );
-    }
+    this.checkMockEnabled();
 
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },

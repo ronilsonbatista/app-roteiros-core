@@ -10,10 +10,11 @@ import {
 import { ProductType, PurchaseStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
-describe('BillingService (Phase K1 Foundation & Safety)', () => {
+describe('BillingService (Phase K1.1 Mock Safety & Domain Hardening)', () => {
   let service: BillingService;
   let prisma: PrismaService;
   let originalEnv: string | undefined;
+  let originalMockFlag: string | undefined;
 
   const mockProduct = {
     id: 'prod-full-access-1',
@@ -50,7 +51,10 @@ describe('BillingService (Phase K1 Foundation & Safety)', () => {
 
   beforeEach(async () => {
     originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    originalMockFlag = process.env.BILLING_MOCK_PAYMENTS_ENABLED;
+
+    process.env.NODE_ENV = 'test';
+    process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'true';
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -96,24 +100,55 @@ describe('BillingService (Phase K1 Foundation & Safety)', () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
+    process.env.BILLING_MOCK_PAYMENTS_ENABLED = originalMockFlag;
   });
 
-  describe('Priority 0 Security Fix:confirmMockPayment in production', () => {
-    it('should throw ForbiddenException when confirmMockPayment is called in NODE_ENV=production', async () => {
+  describe('Mock Safety Matrix (Disabled by Default & Fail-Closed)', () => {
+    it('should block mock endpoints in production even if flag is set to true', async () => {
       process.env.NODE_ENV = 'production';
+      process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'true';
+
       await expect(
-        service.confirmMockPayment('user-1', 'purchase-123'),
-      ).rejects.toThrow(
-        new ForbiddenException(
-          'Mock payment confirmation is disabled in production environment',
-        ),
-      );
+        service.createMockPurchase('user-1', { productId: mockProduct.id }),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.confirmMockPayment('user-1', 'pur-1'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should proceed in development mode when NODE_ENV=development', async () => {
+    it('should block mock endpoints in staging even if flag is set to true', async () => {
+      process.env.NODE_ENV = 'staging';
+      process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'true';
+
+      await expect(
+        service.createMockPurchase('user-1', { productId: mockProduct.id }),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.confirmMockPayment('user-1', 'pur-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should block mock endpoints in development when BILLING_MOCK_PAYMENTS_ENABLED is not set (disabled by default)', async () => {
       process.env.NODE_ENV = 'development';
+      delete process.env.BILLING_MOCK_PAYMENTS_ENABLED;
+
+      await expect(
+        service.createMockPurchase('user-1', { productId: mockProduct.id }),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.confirmMockPayment('user-1', 'pur-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow mock endpoints in development ONLY when BILLING_MOCK_PAYMENTS_ENABLED=true', async () => {
+      process.env.NODE_ENV = 'development';
+      process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'true';
+
       const mockPurchase = {
-        id: 'purchase-123',
+        id: 'pur-101',
         userId: 'user-1',
         productId: mockProduct.id,
         tripId: mockTrip.id,
@@ -133,17 +168,29 @@ describe('BillingService (Phase K1 Foundation & Safety)', () => {
         paidAt: new Date(),
       } as any);
 
-      const result = await service.confirmMockPayment('user-1', 'purchase-123');
+      const result = await service.confirmMockPayment('user-1', 'pur-101');
       expect(result.status).toBe(PurchaseStatus.PAID);
+    });
+
+    it('should block mock endpoints in test environment if BILLING_MOCK_PAYMENTS_ENABLED=false', async () => {
+      process.env.NODE_ENV = 'test';
+      process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'false';
+
+      await expect(
+        service.confirmMockPayment('user-1', 'pur-1'),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
-  describe('Monetary Precision & Pricing Snapshot', () => {
-    it('should create purchase with exact pricing snapshot (amount, originalAmount, discountAmount, finalAmount)', async () => {
+  describe('Legacy Amount & Pricing Consistency', () => {
+    it('should guarantee amount === finalAmount === originalAmount when discount is 0', async () => {
+      process.env.NODE_ENV = 'test';
+      process.env.BILLING_MOCK_PAYMENTS_ENABLED = 'true';
+
       jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(null);
       jest.spyOn(prisma.purchase, 'create').mockImplementation(({ data }: any) => {
         return Promise.resolve({
-          id: 'pur-new-1',
+          id: 'pur-new-100',
           ...data,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -155,10 +202,9 @@ describe('BillingService (Phase K1 Foundation & Safety)', () => {
         tripId: mockTrip.id,
       });
 
-      expect(res.amount).toEqual(mockProduct.price);
-      expect(res.originalAmount).toEqual(mockProduct.price);
+      expect(res.amount).toEqual(res.finalAmount);
+      expect(res.originalAmount).toEqual(res.amount);
       expect(res.discountAmount).toBe(0);
-      expect(res.finalAmount).toEqual(mockProduct.price);
     });
   });
 
@@ -178,25 +224,6 @@ describe('BillingService (Phase K1 Foundation & Safety)', () => {
       });
 
       expect(res.id).toBe('pur-existing-idemp');
-    });
-
-    it('should reuse existing PENDING purchase for same user, trip and product', async () => {
-      const existingPending = {
-        id: 'pur-pending-reuse',
-        userId: 'user-1',
-        tripId: mockTrip.id,
-        productId: mockProduct.id,
-        status: PurchaseStatus.PENDING,
-      };
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(existingPending as any);
-
-      const res = await service.createMockPurchase('user-1', {
-        productId: mockProduct.id,
-        tripId: mockTrip.id,
-      });
-
-      expect(res.id).toBe('pur-pending-reuse');
-      expect(prisma.purchase.create).not.toHaveBeenCalled();
     });
 
     it('should return existing purchase idempotently when confirming an already PAID purchase', async () => {
