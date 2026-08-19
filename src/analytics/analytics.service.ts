@@ -108,7 +108,7 @@ export class AnalyticsService {
         const p = products.find((prod) => prod.id === curr.productId);
         if (p) {
           if (!acc[p.type]) acc[p.type] = 0;
-          acc[p.type] += curr._sum.amount || 0;
+          acc[p.type] += Number(curr._sum.amount || 0);
         }
         return acc;
       },

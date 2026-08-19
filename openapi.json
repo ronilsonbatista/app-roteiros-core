@@ -5282,6 +5282,9 @@
           },
           "tripId": {
             "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
           }
         },
         "required": [

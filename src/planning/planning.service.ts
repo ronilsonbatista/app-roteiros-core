@@ -502,7 +502,7 @@ export class PlanningService {
           productId: product.id,
           code: product.type,
           name: product.name,
-          price: product.price,
+          price: Number(product.price),
           currency: product.currency,
           available: product.active,
         }

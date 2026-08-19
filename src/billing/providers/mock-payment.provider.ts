@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   PaymentProvider,
   ProcessPaymentInput,
   PaymentResult,
 } from './payment-provider.interface';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class MockPaymentProvider implements PaymentProvider {
@@ -21,7 +21,7 @@ export class MockPaymentProvider implements PaymentProvider {
     // Mock sempre aprova no desenvolvimento
     return {
       success: true,
-      transactionId: `mock_txn_${uuidv4().replace(/-/g, '')}`,
+      transactionId: `mock_txn_${randomUUID().replace(/-/g, '')}`,
     };
   }
 }

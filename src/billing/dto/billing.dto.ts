@@ -76,4 +76,9 @@ export class CreateMockPurchaseDto {
   @IsString()
   @IsOptional()
   tripId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  idempotencyKey?: string;
 }

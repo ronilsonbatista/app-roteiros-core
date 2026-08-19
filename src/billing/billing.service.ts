@@ -26,6 +26,19 @@ export class BillingService {
   }
 
   async createMockPurchase(userId: string, dto: CreateMockPurchaseDto) {
+    // Idempotency key check
+    if (dto.idempotencyKey) {
+      const existingKeyPurchase = await this.prisma.purchase.findUnique({
+        where: { idempotencyKey: dto.idempotencyKey },
+      });
+      if (existingKeyPurchase) {
+        if (existingKeyPurchase.userId !== userId) {
+          throw new ForbiddenException('Chave de idempotência pertence a outro usuário');
+        }
+        return existingKeyPurchase;
+      }
+    }
+
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
     });
@@ -41,6 +54,28 @@ export class BillingService {
         throw new ForbiddenException(
           'Não autorizado. Você só pode comprar para a sua própria viagem.',
         );
+
+      if (
+        product.type === ProductType.ITINERARY_FULL_ACCESS &&
+        trip.premiumUnlockedAt != null
+      ) {
+        throw new BadRequestException(
+          'Esta viagem já possui acesso premium liberado.',
+        );
+      }
+
+      // Reuse existing PENDING purchase for same user, trip, and product to avoid duplicates
+      const existingPending = await this.prisma.purchase.findFirst({
+        where: {
+          userId,
+          tripId: dto.tripId,
+          productId: product.id,
+          status: PurchaseStatus.PENDING,
+        },
+      });
+      if (existingPending) {
+        return existingPending;
+      }
     }
 
     return this.prisma.purchase.create({
@@ -50,12 +85,23 @@ export class BillingService {
         tripId: dto.tripId,
         status: PurchaseStatus.PENDING,
         amount: product.price,
+        originalAmount: product.price,
+        discountAmount: 0,
+        finalAmount: product.price,
         currency: product.currency,
+        idempotencyKey: dto.idempotencyKey,
       },
     });
   }
 
   async confirmMockPayment(userId: string, purchaseId: string) {
+    // CRITICAL SECURITY FIX (BILLING_CRITICAL_SECURITY_GAP)
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException(
+        'Mock payment confirmation is disabled in production environment',
+      );
+    }
+
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       include: { product: true },
@@ -64,13 +110,18 @@ export class BillingService {
     if (!purchase) throw new NotFoundException('Compra não encontrada');
     if (purchase.userId !== userId)
       throw new ForbiddenException('Acesso negado');
+
+    if (purchase.status === PurchaseStatus.PAID) {
+      return purchase;
+    }
+
     if (purchase.status !== PurchaseStatus.PENDING)
       throw new BadRequestException('A compra não está mais pendente');
 
     // Chamar MockPaymentProvider
     const paymentResult = await this.paymentProvider.processPayment({
       userId,
-      amount: purchase.amount,
+      amount: Number(purchase.amount),
       currency: purchase.currency,
     });
 
@@ -78,28 +129,64 @@ export class BillingService {
       throw new BadRequestException('Falha no processamento do pagamento');
     }
 
-    // Sucesso, atualizar purchase
-    const updatedPurchase = await this.prisma.purchase.update({
+    return this.confirmPaidPurchase(
+      purchaseId,
+      paymentResult.transactionId,
+      'MOCK',
+      'MOCK',
+    );
+  }
+
+  /**
+   * Reusable atomic method for payment confirmation and entitlement unlock.
+   */
+  async confirmPaidPurchase(
+    purchaseId: string,
+    providerPaymentId?: string,
+    provider: string = 'MOCK',
+    paymentMethod: string = 'MOCK',
+  ) {
+    const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
-      data: {
-        status: PurchaseStatus.PAID,
-        paidAt: new Date(),
-        mockPaymentId: paymentResult.transactionId,
-      },
+      include: { product: true },
     });
 
-    // Desbloquear Trip caso ITINERARY_FULL_ACCESS
-    if (
-      purchase.product.type === ProductType.ITINERARY_FULL_ACCESS &&
-      purchase.tripId
-    ) {
-      await this.prisma.trip.update({
-        where: { id: purchase.tripId },
-        data: { premiumUnlockedAt: new Date() },
-      });
+    if (!purchase) throw new NotFoundException('Compra não encontrada');
+
+    // Idempotent return if already paid
+    if (purchase.status === PurchaseStatus.PAID) {
+      return purchase;
     }
 
-    return updatedPurchase;
+    if (purchase.status !== PurchaseStatus.PENDING) {
+      throw new BadRequestException('A compra não está mais pendente');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedPurchase = await tx.purchase.update({
+        where: { id: purchaseId },
+        data: {
+          status: PurchaseStatus.PAID,
+          paidAt: new Date(),
+          mockPaymentId: providerPaymentId,
+          providerPaymentId: providerPaymentId,
+          provider,
+          paymentMethod,
+        },
+      });
+
+      if (
+        purchase.product.type === ProductType.ITINERARY_FULL_ACCESS &&
+        purchase.tripId
+      ) {
+        await tx.trip.update({
+          where: { id: purchase.tripId },
+          data: { premiumUnlockedAt: new Date() },
+        });
+      }
+
+      return updatedPurchase;
+    });
   }
 
   async getUserPurchases(userId: string) {
