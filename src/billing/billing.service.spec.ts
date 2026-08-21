@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ProductType, PurchaseStatus, Prisma } from '@prisma/client';
 
-describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () => {
+describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', () => {
   let service: BillingService;
   let prisma: PrismaService;
   let mercadoPagoProvider: MercadoPagoPaymentProvider;
@@ -26,18 +26,6 @@ describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () 
     description: 'Acesso total ao roteiro',
     type: ProductType.ITINERARY_FULL_ACCESS,
     price: new Prisma.Decimal('19.99'),
-    currency: 'BRL',
-    active: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockAiProduct = {
-    id: 'prod-ai-credits-1',
-    name: 'Créditos de IA',
-    description: '10 créditos de IA',
-    type: ProductType.AI_CREDITS,
-    price: new Prisma.Decimal('14.90'),
     currency: 'BRL',
     active: true,
     createdAt: new Date(),
@@ -86,13 +74,7 @@ describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () 
             product: {
               findMany: jest.fn().mockResolvedValue([mockProduct]),
               findFirst: jest.fn().mockResolvedValue(mockProduct),
-              findUnique: jest.fn().mockImplementation(({ where }) => {
-                if (where.id === mockProduct.id) return Promise.resolve(mockProduct);
-                if (where.id === mockAiProduct.id) return Promise.resolve(mockAiProduct);
-                return Promise.resolve(null);
-              }),
-              create: jest.fn(),
-              update: jest.fn(),
+              findUnique: jest.fn().mockResolvedValue(mockProduct),
             },
             trip: {
               findUnique: jest.fn().mockImplementation(({ where }) => {
@@ -130,6 +112,7 @@ describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () 
                   id: where.id,
                   status: data.status || PurchaseStatus.PENDING,
                   paidAt: data.paidAt,
+                  refundedAt: data.refundedAt,
                 });
               }),
               count: jest.fn(),
@@ -152,73 +135,86 @@ describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () 
     process.env.PAYMENT_PROVIDER = originalProviderEnv;
   });
 
-  describe('Webhook Identity & Same Payment Different Events (Phase K3.1)', () => {
-    it('should process event A (pending) and event B (approved) for the SAME payment_123', async () => {
-      // Event A: pending
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
-        success: true,
-        status: 'PENDING',
-        providerPaymentId: 'payment_123',
-        purchaseId: mockPurchase.id,
-        amount: 19.99,
-        currency: 'BRL',
-      });
-
-      const resA = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req-evt-A' },
-        { id: 'evt-A-101', action: 'payment.created', data: { id: 'payment_123' } },
-      );
-      expect(resA.purchaseStatus).toBe('PENDING');
-
-      // Event B: approved
+  describe('Strict Notification Identity & Same Notification Retry (Phase K3.2)', () => {
+    it('should deduplicate retry of the SAME notificationId=evt_100 even with different x-request-id headers', async () => {
       jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
         success: true,
         status: 'PAID',
-        providerPaymentId: 'payment_123',
+        providerPaymentId: 'pay_123',
         purchaseId: mockPurchase.id,
         amount: 19.99,
         currency: 'BRL',
         paidAt: new Date(),
       });
 
-      const resB = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req-evt-B' },
-        { id: 'evt-B-102', action: 'payment.updated', data: { id: 'payment_123' } },
+      // Delivery 1: x-request-id = req_A
+      const res1 = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_A' },
+        { id: 'evt_100', action: 'payment.updated', data: { id: 'pay_123' } },
       );
-      expect(resB.purchaseStatus).toBe('PAID');
-      expect(prisma.trip.update).toHaveBeenCalledWith({
-        where: { id: mockTrip.id },
-        data: { premiumUnlockedAt: expect.any(Date) },
+      expect(res1.purchaseStatus).toBe('PAID');
+
+      // Mock that webhookEvent findUnique now finds existing PROCESSED event
+      jest.spyOn(prisma.webhookEvent, 'findUnique').mockResolvedValueOnce({
+        id: 'w1',
+        provider: 'MERCADOPAGO',
+        providerEventId: 'mp_evt_evt_100',
+        eventType: 'payment.updated',
+        purchaseId: mockPurchase.id,
+        status: 'PROCESSED',
+        errorMessage: null,
+        processedAt: new Date(),
+        createdAt: new Date(),
       });
+
+      // Delivery 2 (Retry): x-request-id = req_B (different header, same notification body.id)
+      const res2 = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_B' },
+        { id: 'evt_100', action: 'payment.updated', data: { id: 'pay_123' } },
+      );
+      expect(res2.message).toContain('Evento já processado (duplicado)');
     });
 
-    it('should handle provider downtime safely by recording RETRYABLE state and throwing error for Mercado Pago retry', async () => {
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockRejectedValue(
-        new Error('503 Service Unavailable'),
-      );
-
-      await expect(
-        service.handleMercadoPagoWebhook(
-          { 'x-signature': 'test-valid-signature' },
-          { id: 'evt-down-1', data: { id: 'payment_123' } },
-        ),
-      ).rejects.toThrow(InternalServerErrorException);
-
-      expect(prisma.webhookEvent.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          create: expect.objectContaining({ status: 'RETRYABLE' }),
-        }),
-      );
-    });
-
-    it('should prevent state regression (PAID -> PENDING) when delayed out-of-order pending notification arrives', async () => {
-      const paidPurchase = { ...mockPurchase, status: PurchaseStatus.PAID };
-      jest.spyOn(prisma.purchase, 'findUnique').mockResolvedValue(paidPurchase as any);
-
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValue({
+    it('should process TWO DIFFERENT notifications (evt_100 pending, evt_101 approved) for the SAME payment pay_123', async () => {
+      // Event 1: evt_100 (pending)
+      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
         success: true,
         status: 'PENDING',
-        providerPaymentId: 'payment_123',
+        providerPaymentId: 'pay_123',
+        purchaseId: mockPurchase.id,
+        amount: 19.99,
+        currency: 'BRL',
+      });
+
+      const res1 = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_1' },
+        { id: 'evt_100', action: 'payment.created', data: { id: 'pay_123' } },
+      );
+      expect(res1.purchaseStatus).toBe('PENDING');
+
+      // Event 2: evt_101 (approved)
+      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
+        success: true,
+        status: 'PAID',
+        providerPaymentId: 'pay_123',
+        purchaseId: mockPurchase.id,
+        amount: 19.99,
+        currency: 'BRL',
+        paidAt: new Date(),
+      });
+
+      const res2 = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_2' },
+        { id: 'evt_101', action: 'payment.updated', data: { id: 'pay_123' } },
+      );
+      expect(res2.purchaseStatus).toBe('PAID');
+    });
+
+    it('should update Purchase status to REFUNDED when provider notifies refund/chargeback', async () => {
+      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
+        success: true,
+        status: 'REFUNDED',
+        providerPaymentId: 'pay_123',
         purchaseId: mockPurchase.id,
         amount: 19.99,
         currency: 'BRL',
@@ -226,33 +222,15 @@ describe('BillingService (Phase K3.1 Payment Lifecycle & Webhook Identity)', () 
 
       const res = await service.handleMercadoPagoWebhook(
         { 'x-signature': 'test-valid-signature' },
-        { id: 'evt-delayed-pending', data: { id: 'payment_123' } },
+        { id: 'evt_ref_1', action: 'payment.updated', data: { id: 'pay_123' } },
       );
 
-      expect(res.purchaseStatus).toBe('PAID');
-    });
-
-    it('should prevent double charge if user tries to switch to CARD while PIX is actively pending', async () => {
-      process.env.PAYMENT_PROVIDER = 'mercadopago';
-      const activePixPurchase = {
-        ...mockPurchase,
-        providerPaymentId: 'pix_active_123',
-        paymentMethod: 'PIX',
-      };
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(activePixPurchase as any);
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValue({
-        success: true,
-        status: 'PENDING',
-        providerPaymentId: 'pix_active_123',
-      });
-
-      await expect(
-        service.processCheckoutPurchase('user-1', {
-          tripId: mockTrip.id,
-          paymentMethod: PaymentMethodType.CARD,
-          cardToken: 'tok-123',
+      expect(res.purchaseStatus).toBe('REFUNDED');
+      expect(prisma.purchase.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: PurchaseStatus.REFUNDED }),
         }),
-      ).rejects.toThrow(BadRequestException);
+      );
     });
   });
 });

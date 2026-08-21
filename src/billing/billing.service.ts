@@ -212,6 +212,8 @@ export class BillingService {
       });
     }
 
+    const providerIdempotencyKey = idempotencyKey || purchase.idempotencyKey || `pur_idemp_${purchase.id}`;
+
     const paymentResult = await provider.processPayment({
       userId,
       purchaseId: purchase.id,
@@ -221,7 +223,7 @@ export class BillingService {
       paymentMethod: dto.paymentMethod,
       cardToken: dto.cardToken,
       installments: dto.installments,
-      idempotencyKey,
+      idempotencyKey: providerIdempotencyKey,
       payerEmail: userEmail,
     });
 
@@ -263,15 +265,19 @@ export class BillingService {
     };
   }
 
-  // WEBHOOK HANDLING (PHASE K3 & K3.1 HARDENED)
+  // WEBHOOK HANDLING (PHASE K3 & K3.1 & K3.2 HARDENED)
   async handleMercadoPagoWebhook(headers: Record<string, string>, body: any) {
     const xSignature = headers['x-signature'] || headers['X-Signature'];
     const xRequestId = headers['x-request-id'] || headers['X-Request-Id'];
 
     const dataId =
-      body?.data?.id ||
-      body?.id ||
-      (typeof body?.resource === 'string' ? body.resource.split('/').pop() : undefined);
+      body?.data?.id != null
+        ? String(body.data.id)
+        : body?.id != null
+        ? String(body.id)
+        : typeof body?.resource === 'string'
+        ? body.resource.split('/').pop()
+        : undefined;
 
     const isValidSignature = this.mercadoPagoProvider.verifyWebhookSignature(
       xSignature,
@@ -283,12 +289,17 @@ export class BillingService {
       throw new ForbiddenException('Assinatura do webhook inválida ou ausente');
     }
 
-    // Explicitly distinguish providerEventId from providerPaymentId
-    const eventId = body?.id
-      ? `mp_evt_${body.id}`
-      : xRequestId
-      ? `mp_req_${xRequestId}_${dataId || ''}`
-      : `mp_act_${body?.action || 'update'}_${dataId || ''}_${Date.now()}`;
+    // Strict notificationId identity from body.id
+    const notificationId = body?.id != null ? String(body.id) : undefined;
+    const eventId = notificationId
+      ? `mp_evt_${notificationId}`
+      : dataId
+      ? `mp_pay_${dataId}`
+      : undefined;
+
+    if (!eventId) {
+      throw new BadRequestException('Notificação inválida: ID de notificação ausente');
+    }
 
     // Deduplication check (Idempotency) via compound unique constraint
     const existingEvent = await this.prisma.webhookEvent.findUnique({
@@ -478,8 +489,9 @@ export class BillingService {
 
         return { status: 'OK', purchaseStatus: 'PAID', purchaseId: updatedPurchase.id };
       } else if (paymentResult.status === 'REFUNDED') {
-        // Financial status update to REFUNDED.
+        // Financial status update to REFUNDED. Handles both refund and chargeback.
         // ENTITLEMENT_ORIGIN_GAP: automatic revocation of Trip.premiumUnlockedAt is deferred to preserve manual admin overrides.
+        this.logger.warn(`[FINANCIAL_ALERT] Purchase ${purchase.id} foi alterada para REFUNDED/CHARGEBACK`);
         const updatedPurchase = await tx.purchase.update({
           where: { id: purchase.id },
           data: {
