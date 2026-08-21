@@ -3136,6 +3136,45 @@
         ]
       }
     },
+    "/trips/{tripId}/checkout-quote": {
+      "post": {
+        "operationId": "BillingController_getCheckoutQuote",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutQuoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Simular quote de checkout com cupom (opcional)",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
     "/purchases/checkout": {
       "post": {
         "operationId": "BillingController_processCheckout",
@@ -3377,6 +3416,149 @@
           }
         ],
         "summary": "Desativar um produto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/coupons": {
+      "post": {
+        "operationId": "AdminBillingController_createCoupon",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCouponDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um cupom de desconto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      },
+      "get": {
+        "operationId": "AdminBillingController_getCoupons",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os cupons de desconto (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/coupons/{id}": {
+      "get": {
+        "operationId": "AdminBillingController_getCouponDetails",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de um cupom (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminBillingController_updateCoupon",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCouponDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar um cupom (Admin)",
+        "tags": [
+          "Admin - Billing"
+        ]
+      }
+    },
+    "/admin/coupons/{id}/deactivate": {
+      "patch": {
+        "operationId": "AdminBillingController_deactivateCoupon",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Desativar um cupom (Admin)",
         "tags": [
           "Admin - Billing"
         ]
@@ -5403,6 +5585,14 @@
           "providerPlaceId"
         ]
       },
+      "CheckoutQuoteDto": {
+        "type": "object",
+        "properties": {
+          "couponCode": {
+            "type": "string"
+          }
+        }
+      },
       "CheckoutPurchaseDto": {
         "type": "object",
         "properties": {
@@ -5415,6 +5605,9 @@
               "PIX",
               "CARD"
             ]
+          },
+          "couponCode": {
+            "type": "string"
           },
           "cardToken": {
             "type": "string"
@@ -5497,6 +5690,83 @@
             "type": "number"
           },
           "currency": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateCouponDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "PERCENTAGE",
+              "FIXED"
+            ]
+          },
+          "discountValue": {
+            "type": "number"
+          },
+          "productType": {
+            "type": "string",
+            "enum": [
+              "ITINERARY_FULL_ACCESS",
+              "AI_CREDITS",
+              "PREMIUM_TEMPLATE"
+            ],
+            "default": "ITINERARY_FULL_ACCESS"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "code",
+          "discountType",
+          "discountValue"
+        ]
+      },
+      "UpdateCouponDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "PERCENTAGE",
+              "FIXED"
+            ]
+          },
+          "discountValue": {
+            "type": "number"
+          },
+          "productType": {
+            "type": "string",
+            "enum": [
+              "ITINERARY_FULL_ACCESS",
+              "AI_CREDITS",
+              "PREMIUM_TEMPLATE"
+            ]
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "expiresAt": {
             "type": "string"
           },
           "active": {

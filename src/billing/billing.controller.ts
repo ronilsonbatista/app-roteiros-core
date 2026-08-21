@@ -15,8 +15,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import {
   CreateMockPurchaseDto,
+  CheckoutQuoteDto,
   CheckoutPurchaseDto,
   CheckoutSummaryDto,
+  CheckoutQuoteResponseDto,
   CheckoutResponseDto,
 } from './dto/billing.dto';
 
@@ -58,6 +60,18 @@ export class BillingController {
     @Param('tripId') tripId: string,
   ): Promise<CheckoutSummaryDto> {
     return this.billingService.getCheckoutSummary(user.userId, tripId);
+  }
+
+  @Post('trips/:tripId/checkout-quote')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Simular quote de checkout com cupom (opcional)' })
+  getCheckoutQuote(
+    @CurrentUser() user: any,
+    @Param('tripId') tripId: string,
+    @Body() dto: CheckoutQuoteDto,
+  ): Promise<CheckoutQuoteResponseDto> {
+    return this.billingService.getCheckoutQuote(user.userId, tripId, dto);
   }
 
   @Post('purchases/checkout')

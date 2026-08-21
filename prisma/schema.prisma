@@ -523,12 +523,35 @@ enum PurchaseStatus {
   CANCELLED
   EXPIRED
   REFUNDED
+  CHARGEBACK
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
 }
 
 enum ProductType {
   ITINERARY_FULL_ACCESS
   AI_CREDITS
   PREMIUM_TEMPLATE
+}
+
+model Coupon {
+  id            String       @id @default(uuid())
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2)
+  active        Boolean      @default(true)
+  productType   ProductType? @default(ITINERARY_FULL_ACCESS)
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  purchases     Purchase[]
+
+  @@map("coupons")
 }
 
 model Product {
@@ -564,6 +587,9 @@ model Purchase {
   productId       String
   product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  couponId        String?
+  coupon          Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
   tripId          String?
   trip            Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
@@ -587,12 +613,14 @@ model Purchase {
   cancelledAt     DateTime?
   expiredAt       DateTime?
   refundedAt      DateTime?
+  chargebackAt    DateTime?
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   @@index([userId])
   @@index([productId])
+  @@index([couponId])
   @@index([tripId])
   @@index([status])
 

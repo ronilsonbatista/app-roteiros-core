@@ -19,7 +19,12 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { CreateProductDto, UpdateProductDto } from '../dto/billing.dto';
+import {
+  CreateProductDto,
+  UpdateProductDto,
+  CreateCouponDto,
+  UpdateCouponDto,
+} from '../dto/billing.dto';
 
 @ApiTags('Admin - Billing')
 @ApiBearerAuth()
@@ -51,6 +56,36 @@ export class AdminBillingController {
   @ApiOperation({ summary: 'Desativar um produto (Admin)' })
   deactivateProduct(@Param('id') id: string) {
     return this.billingService.deactivateProduct(id);
+  }
+
+  @Post('coupons')
+  @ApiOperation({ summary: 'Criar um cupom de desconto (Admin)' })
+  createCoupon(@Body() dto: CreateCouponDto) {
+    return this.billingService.createCoupon(dto);
+  }
+
+  @Get('coupons')
+  @ApiOperation({ summary: 'Listar todos os cupons de desconto (Admin)' })
+  getCoupons() {
+    return this.billingService.getAdminCoupons();
+  }
+
+  @Get('coupons/:id')
+  @ApiOperation({ summary: 'Detalhes de um cupom (Admin)' })
+  getCouponDetails(@Param('id') id: string) {
+    return this.billingService.getAdminCouponDetails(id);
+  }
+
+  @Patch('coupons/:id')
+  @ApiOperation({ summary: 'Editar um cupom (Admin)' })
+  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
+    return this.billingService.updateCoupon(id, dto);
+  }
+
+  @Patch('coupons/:id/deactivate')
+  @ApiOperation({ summary: 'Desativar um cupom (Admin)' })
+  deactivateCoupon(@Param('id') id: string) {
+    return this.billingService.deactivateCoupon(id);
   }
 
   @Get('purchases')

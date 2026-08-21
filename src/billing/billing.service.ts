@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
@@ -13,12 +14,22 @@ import { PaymentProvider } from './providers/payment-provider.interface';
 import {
   CreateProductDto,
   UpdateProductDto,
+  CreateCouponDto,
+  UpdateCouponDto,
   CreateMockPurchaseDto,
+  CheckoutQuoteDto,
   CheckoutPurchaseDto,
   CheckoutSummaryDto,
+  CheckoutQuoteResponseDto,
   CheckoutResponseDto,
 } from './dto/billing.dto';
-import { PurchaseStatus, ProductType, GuestJourneyStatus } from '@prisma/client';
+import {
+  PurchaseStatus,
+  ProductType,
+  DiscountType,
+  GuestJourneyStatus,
+  Prisma,
+} from '@prisma/client';
 
 @Injectable()
 export class BillingService {
@@ -71,7 +82,82 @@ export class BillingService {
     return this.mockProvider;
   }
 
-  // CHECKOUT SUMMARY & REAL PURCHASE API
+  public normalizeCouponCode(code?: string): string | undefined {
+    if (!code) return undefined;
+    const trimmed = code.trim().toUpperCase();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  public async validateAndCalculateCoupon(
+    couponCode: string | undefined,
+    originalPrice: Prisma.Decimal,
+    productType: ProductType,
+  ) {
+    const normalizedCode = this.normalizeCouponCode(couponCode);
+    if (!normalizedCode) {
+      return {
+        coupon: null,
+        discountAmount: new Prisma.Decimal('0.00'),
+        finalAmount: originalPrice,
+      };
+    }
+
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { code: normalizedCode },
+    });
+
+    if (!coupon) {
+      throw new BadRequestException('Cupom inválido');
+    }
+
+    if (!coupon.active) {
+      throw new BadRequestException('Cupom inativo');
+    }
+
+    const now = new Date();
+    if (coupon.startsAt && now < coupon.startsAt) {
+      throw new BadRequestException('Cupom ainda não vigente');
+    }
+
+    if (coupon.expiresAt && now > coupon.expiresAt) {
+      throw new BadRequestException('Cupom expirado');
+    }
+
+    if (coupon.productType && coupon.productType !== productType) {
+      throw new BadRequestException('Cupom não aplicável a este produto');
+    }
+
+    let discountAmount: Prisma.Decimal;
+    if (coupon.discountType === DiscountType.PERCENTAGE) {
+      discountAmount = originalPrice
+        .mul(coupon.discountValue)
+        .div(new Prisma.Decimal(100))
+        .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    } else {
+      discountAmount = coupon.discountValue;
+    }
+
+    // Ensure discount does not exceed original price
+    if (discountAmount.gt(originalPrice)) {
+      discountAmount = originalPrice;
+    }
+
+    const finalAmount = originalPrice.sub(discountAmount);
+
+    if (finalAmount.lte(new Prisma.Decimal(0))) {
+      throw new BadRequestException(
+        'Cupons que resultam em valor zero não são suportados nesta versão',
+      );
+    }
+
+    return {
+      coupon,
+      discountAmount,
+      finalAmount,
+    };
+  }
+
+  // CHECKOUT SUMMARY, QUOTE & REAL PURCHASE API
   async getCheckoutSummary(userId: string, tripId: string): Promise<CheckoutSummaryDto> {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
@@ -114,6 +200,62 @@ export class BillingService {
     };
   }
 
+  async getCheckoutQuote(
+    userId: string,
+    tripId: string,
+    dto: CheckoutQuoteDto,
+  ): Promise<CheckoutQuoteResponseDto> {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+    });
+    if (!trip) throw new NotFoundException('Trip não encontrada');
+    if (trip.userId !== userId) {
+      throw new ForbiddenException('Não autorizado. A viagem pertence a outro usuário.');
+    }
+
+    const alreadyUnlocked = trip.premiumUnlockedAt != null;
+
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+    });
+    if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
+
+    const calc = await this.validateAndCalculateCoupon(dto.couponCode, product.price, product.type);
+
+    const existingPurchase = await this.prisma.purchase.findFirst({
+      where: { userId, tripId, productId: product.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      tripId,
+      alreadyUnlocked,
+      product: {
+        id: product.id,
+        type: product.type,
+        name: product.name,
+        description: product.description || undefined,
+      },
+      pricing: {
+        originalAmount: Number(product.price),
+        discountAmount: Number(calc.discountAmount),
+        finalAmount: Number(calc.finalAmount),
+        currency: product.currency,
+      },
+      coupon: calc.coupon
+        ? {
+            code: calc.coupon.code,
+            applied: true,
+            discountType: calc.coupon.discountType,
+            discountValue: Number(calc.coupon.discountValue),
+          }
+        : undefined,
+      supportedPaymentMethods: ['PIX', 'CARD'],
+      existingPurchaseId: existingPurchase?.id,
+      existingPurchaseStatus: existingPurchase?.status,
+    };
+  }
+
   async processCheckoutPurchase(
     userId: string,
     dto: CheckoutPurchaseDto,
@@ -137,6 +279,9 @@ export class BillingService {
     });
     if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
 
+    // Revalidate coupon and calculate final price at creation time
+    const calc = await this.validateAndCalculateCoupon(dto.couponCode, product.price, product.type);
+
     // Idempotency key check
     if (idempotencyKey) {
       const existingKeyPurchase = await this.prisma.purchase.findUnique({
@@ -146,12 +291,26 @@ export class BillingService {
         if (existingKeyPurchase.userId !== userId) {
           throw new ForbiddenException('Chave de idempotência pertence a outro usuário');
         }
+        if (
+          existingKeyPurchase.tripId !== dto.tripId ||
+          existingKeyPurchase.paymentMethod !== dto.paymentMethod
+        ) {
+          throw new ConflictException(
+            'Conflito de idempotência: a chave foi utilizada com parâmetros diferentes',
+          );
+        }
         return {
           purchaseId: existingKeyPurchase.id,
           status: existingKeyPurchase.status,
           amount: Number(existingKeyPurchase.finalAmount),
           currency: existingKeyPurchase.currency,
           paymentMethod: existingKeyPurchase.paymentMethod || dto.paymentMethod,
+          pricing: {
+            originalAmount: Number(existingKeyPurchase.originalAmount),
+            discountAmount: Number(existingKeyPurchase.discountAmount),
+            finalAmount: Number(existingKeyPurchase.finalAmount),
+            currency: existingKeyPurchase.currency,
+          },
         };
       }
     }
@@ -174,16 +333,20 @@ export class BillingService {
         const currentStatus = await provider.getPaymentStatus(purchase.providerPaymentId);
         if (currentStatus.status === 'PENDING') {
           if (dto.paymentMethod === purchase.paymentMethod) {
-            // Same payment method: return existing active charge
             return {
               purchaseId: purchase.id,
               status: purchase.status,
               amount: Number(purchase.finalAmount),
               currency: purchase.currency,
               paymentMethod: dto.paymentMethod,
+              pricing: {
+                originalAmount: Number(purchase.originalAmount),
+                discountAmount: Number(purchase.discountAmount),
+                finalAmount: Number(purchase.finalAmount),
+                currency: purchase.currency,
+              },
             };
           } else {
-            // User tries to switch payment method while previous is still active
             throw new BadRequestException(
               'Existe uma cobrança ativa pendente. Conclua a cobrança existente ou aguarde a expiração.',
             );
@@ -200,14 +363,27 @@ export class BillingService {
         data: {
           userId,
           productId: product.id,
+          couponId: calc.coupon?.id,
           tripId: dto.tripId,
           status: PurchaseStatus.PENDING,
-          amount: product.price,
+          amount: calc.finalAmount,
           originalAmount: product.price,
-          discountAmount: 0,
-          finalAmount: product.price,
+          discountAmount: calc.discountAmount,
+          finalAmount: calc.finalAmount,
           currency: product.currency,
           idempotencyKey,
+        },
+      });
+    } else {
+      // Update existing PENDING purchase with latest pricing snapshot and coupon
+      purchase = await this.prisma.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          couponId: calc.coupon?.id,
+          amount: calc.finalAmount,
+          originalAmount: product.price,
+          discountAmount: calc.discountAmount,
+          finalAmount: calc.finalAmount,
         },
       });
     }
@@ -262,10 +438,16 @@ export class BillingService {
             ticketUrl: paymentResult.pixDetails.ticketUrl,
           }
         : undefined,
+      pricing: {
+        originalAmount: Number(updatedPurchase.originalAmount),
+        discountAmount: Number(updatedPurchase.discountAmount),
+        finalAmount: Number(updatedPurchase.finalAmount),
+        currency: updatedPurchase.currency,
+      },
     };
   }
 
-  // WEBHOOK HANDLING (PHASE K3 & K3.1 & K3.2 HARDENED)
+  // WEBHOOK HANDLING (PHASE K3, K3.1, K3.2 & K4 HARDENED)
   async handleMercadoPagoWebhook(headers: Record<string, string>, body: any) {
     const xSignature = headers['x-signature'] || headers['X-Signature'];
     const xRequestId = headers['x-request-id'] || headers['X-Request-Id'];
@@ -289,7 +471,6 @@ export class BillingService {
       throw new ForbiddenException('Assinatura do webhook inválida ou ausente');
     }
 
-    // Strict notificationId identity from body.id
     const notificationId = body?.id != null ? String(body.id) : undefined;
     const eventId = notificationId
       ? `mp_evt_${notificationId}`
@@ -301,7 +482,6 @@ export class BillingService {
       throw new BadRequestException('Notificação inválida: ID de notificação ausente');
     }
 
-    // Deduplication check (Idempotency) via compound unique constraint
     const existingEvent = await this.prisma.webhookEvent.findUnique({
       where: {
         provider_providerEventId: {
@@ -316,7 +496,6 @@ export class BillingService {
     }
 
     if (!dataId) {
-      // Event received without data.id (e.g. ping test)
       await this.prisma.webhookEvent.upsert({
         where: {
           provider_providerEventId: {
@@ -337,7 +516,6 @@ export class BillingService {
       return { status: 'OK', message: 'Ping recebido' };
     }
 
-    // Reconcile payment status via server-to-server API call with Provider Down resilience
     let paymentResult;
     try {
       paymentResult = await this.mercadoPagoProvider.getPaymentStatus(String(dataId));
@@ -433,7 +611,6 @@ export class BillingService {
       throw new BadRequestException('Moeda do pagamento divergente da moeda da compra');
     }
 
-    // Atomic Entitlement & State Machine Transaction
     return this.prisma.$transaction(async (tx) => {
       await tx.webhookEvent.upsert({
         where: {
@@ -488,10 +665,19 @@ export class BillingService {
         }
 
         return { status: 'OK', purchaseStatus: 'PAID', purchaseId: updatedPurchase.id };
+      } else if (paymentResult.status === 'CHARGEBACK') {
+        this.logger.warn(`[FINANCIAL_ALERT] Purchase ${purchase.id} foi alterada para CHARGEBACK`);
+        const updatedPurchase = await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            status: PurchaseStatus.CHARGEBACK,
+            chargebackAt: new Date(),
+            refundedAt: new Date(),
+          },
+        });
+        return { status: 'OK', purchaseStatus: 'CHARGEBACK', purchaseId: updatedPurchase.id };
       } else if (paymentResult.status === 'REFUNDED') {
-        // Financial status update to REFUNDED. Handles both refund and chargeback.
-        // ENTITLEMENT_ORIGIN_GAP: automatic revocation of Trip.premiumUnlockedAt is deferred to preserve manual admin overrides.
-        this.logger.warn(`[FINANCIAL_ALERT] Purchase ${purchase.id} foi alterada para REFUNDED/CHARGEBACK`);
+        this.logger.warn(`[FINANCIAL_ALERT] Purchase ${purchase.id} foi alterada para REFUNDED`);
         const updatedPurchase = await tx.purchase.update({
           where: { id: purchase.id },
           data: {
@@ -501,7 +687,6 @@ export class BillingService {
         });
         return { status: 'OK', purchaseStatus: 'REFUNDED', purchaseId: updatedPurchase.id };
       } else {
-        // State Monotonicity: Do not regress a PAID purchase back to PENDING from a delayed out-of-order notification!
         if (purchase.status === PurchaseStatus.PAID) {
           return { status: 'OK', purchaseStatus: 'PAID', purchaseId: purchase.id };
         }
@@ -537,7 +722,6 @@ export class BillingService {
   async createMockPurchase(userId: string, dto: CreateMockPurchaseDto) {
     this.checkMockEnabled();
 
-    // Idempotency key check
     if (dto.idempotencyKey) {
       const existingKeyPurchase = await this.prisma.purchase.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
@@ -575,7 +759,6 @@ export class BillingService {
         );
       }
 
-      // Reuse existing PENDING purchase for same user, trip, and product to avoid duplicates
       const existingPending = await this.prisma.purchase.findFirst({
         where: {
           userId,
@@ -624,7 +807,6 @@ export class BillingService {
     if (purchase.status !== PurchaseStatus.PENDING)
       throw new BadRequestException('A compra não está mais pendente');
 
-    // Chamar MockPaymentProvider
     const paymentResult = await this.mockProvider.processPayment({
       userId,
       amount: Number(purchase.amount),
@@ -643,9 +825,6 @@ export class BillingService {
     );
   }
 
-  /**
-   * Reusable atomic method for payment confirmation and entitlement unlock.
-   */
   async confirmPaidPurchase(
     purchaseId: string,
     providerPaymentId?: string,
@@ -659,7 +838,6 @@ export class BillingService {
 
     if (!purchase) throw new NotFoundException('Compra não encontrada');
 
-    // Idempotent return if already paid
     if (purchase.status === PurchaseStatus.PAID) {
       return purchase;
     }
@@ -690,7 +868,6 @@ export class BillingService {
           data: { premiumUnlockedAt: new Date() },
         });
 
-        // Update GuestJourney if linked
         const linkedGuestJourney = await tx.guestJourney.findFirst({
           where: { createdTripId: purchase.tripId },
         });
@@ -709,12 +886,12 @@ export class BillingService {
   async getUserPurchases(userId: string) {
     return this.prisma.purchase.findMany({
       where: { userId },
-      include: { product: true, trip: { select: { id: true, title: true } } },
+      include: { product: true, coupon: true, trip: { select: { id: true, title: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  // ADMIN
+  // ADMIN — PRODUCTS & COUPONS
   async createProduct(dto: CreateProductDto) {
     return this.prisma.product.create({ data: dto });
   }
@@ -729,6 +906,69 @@ export class BillingService {
 
   async deactivateProduct(id: string) {
     return this.prisma.product.update({
+      where: { id },
+      data: { active: false },
+    });
+  }
+
+  async createCoupon(dto: CreateCouponDto) {
+    const code = this.normalizeCouponCode(dto.code);
+    if (!code) throw new BadRequestException('Código do cupom inválido');
+
+    const existing = await this.prisma.coupon.findUnique({ where: { code } });
+    if (existing) throw new ConflictException('Código de cupom já cadastrado');
+
+    return this.prisma.coupon.create({
+      data: {
+        code,
+        discountType: dto.discountType,
+        discountValue: new Prisma.Decimal(dto.discountValue),
+        productType: dto.productType || ProductType.ITINERARY_FULL_ACCESS,
+        active: dto.active ?? true,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      },
+    });
+  }
+
+  async getAdminCoupons() {
+    return this.prisma.coupon.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  async getAdminCouponDetails(id: string) {
+    const c = await this.prisma.coupon.findUnique({
+      where: { id },
+      include: { purchases: { select: { id: true, status: true, createdAt: true } } },
+    });
+    if (!c) throw new NotFoundException('Cupom não encontrado');
+    return c;
+  }
+
+  async updateCoupon(id: string, dto: UpdateCouponDto) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) throw new NotFoundException('Cupom não encontrado');
+
+    const data: any = {};
+    if (dto.code) {
+      const code = this.normalizeCouponCode(dto.code);
+      if (code && code !== coupon.code) {
+        const existing = await this.prisma.coupon.findUnique({ where: { code } });
+        if (existing) throw new ConflictException('Código de cupom já cadastrado');
+        data.code = code;
+      }
+    }
+    if (dto.discountType) data.discountType = dto.discountType;
+    if (dto.discountValue != null) data.discountValue = new Prisma.Decimal(dto.discountValue);
+    if (dto.productType !== undefined) data.productType = dto.productType;
+    if (dto.active !== undefined) data.active = dto.active;
+    if (dto.startsAt !== undefined) data.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
+    if (dto.expiresAt !== undefined) data.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+
+    return this.prisma.coupon.update({ where: { id }, data });
+  }
+
+  async deactivateCoupon(id: string) {
+    return this.prisma.coupon.update({
       where: { id },
       data: { active: false },
     });
@@ -751,6 +991,7 @@ export class BillingService {
         include: {
           user: { select: { id: true, email: true, fullName: true } },
           product: { select: { id: true, name: true, type: true } },
+          coupon: { select: { id: true, code: true, discountType: true, discountValue: true } },
           trip: { select: { id: true, title: true } },
         },
       }),
@@ -769,6 +1010,7 @@ export class BillingService {
       include: {
         user: true,
         product: true,
+        coupon: true,
         trip: true,
       },
     });

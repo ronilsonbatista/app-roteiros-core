@@ -5,9 +5,11 @@ import {
   IsOptional,
   IsEnum,
   IsBoolean,
+  IsDateString,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProductType } from '@prisma/client';
+import { ProductType, DiscountType } from '@prisma/client';
 
 export enum PaymentMethodType {
   PIX = 'PIX',
@@ -31,6 +33,7 @@ export class CreateProductDto {
 
   @ApiProperty()
   @IsNumber()
+  @Min(0)
   price: number;
 
   @ApiPropertyOptional()
@@ -57,6 +60,7 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional()
   @IsNumber()
+  @Min(0)
   @IsOptional()
   price?: number;
 
@@ -64,6 +68,80 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   currency?: string;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+}
+
+export class CreateCouponDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+
+  @ApiProperty({ enum: DiscountType })
+  @IsEnum(DiscountType)
+  discountType: DiscountType;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0.01)
+  discountValue: number;
+
+  @ApiPropertyOptional({ enum: ProductType, default: ProductType.ITINERARY_FULL_ACCESS })
+  @IsEnum(ProductType)
+  @IsOptional()
+  productType?: ProductType;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  startsAt?: string;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  expiresAt?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+}
+
+export class UpdateCouponDto {
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  code?: string;
+
+  @ApiPropertyOptional({ enum: DiscountType })
+  @IsEnum(DiscountType)
+  @IsOptional()
+  discountType?: DiscountType;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Min(0.01)
+  @IsOptional()
+  discountValue?: number;
+
+  @ApiPropertyOptional({ enum: ProductType })
+  @IsEnum(ProductType)
+  @IsOptional()
+  productType?: ProductType;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  startsAt?: string;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  expiresAt?: string;
 
   @ApiPropertyOptional()
   @IsBoolean()
@@ -88,6 +166,13 @@ export class CreateMockPurchaseDto {
   idempotencyKey?: string;
 }
 
+export class CheckoutQuoteDto {
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  couponCode?: string;
+}
+
 export class CheckoutPurchaseDto {
   @ApiProperty()
   @IsString()
@@ -97,6 +182,11 @@ export class CheckoutPurchaseDto {
   @ApiProperty({ enum: PaymentMethodType })
   @IsEnum(PaymentMethodType)
   paymentMethod: PaymentMethodType;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  couponCode?: string;
 
   @ApiPropertyOptional()
   @IsString()
@@ -137,6 +227,23 @@ export class CheckoutProductDto {
   description?: string;
 }
 
+export class CheckoutCouponDto {
+  @ApiProperty()
+  code: string;
+
+  @ApiProperty()
+  applied: boolean;
+
+  @ApiProperty()
+  discountType: string;
+
+  @ApiProperty()
+  discountValue: number;
+
+  @ApiPropertyOptional()
+  description?: string;
+}
+
 export class CheckoutSummaryDto {
   @ApiProperty()
   tripId: string;
@@ -150,6 +257,9 @@ export class CheckoutSummaryDto {
   @ApiProperty()
   pricing: CheckoutPricingDto;
 
+  @ApiPropertyOptional({ type: CheckoutCouponDto })
+  coupon?: CheckoutCouponDto;
+
   @ApiPropertyOptional()
   existingPurchaseId?: string;
 
@@ -158,6 +268,32 @@ export class CheckoutSummaryDto {
 
   @ApiProperty({ type: [String] })
   supportedPaymentMethods: string[];
+}
+
+export class CheckoutQuoteResponseDto {
+  @ApiProperty()
+  tripId: string;
+
+  @ApiProperty()
+  alreadyUnlocked: boolean;
+
+  @ApiProperty()
+  product: CheckoutProductDto;
+
+  @ApiProperty()
+  pricing: CheckoutPricingDto;
+
+  @ApiPropertyOptional({ type: CheckoutCouponDto })
+  coupon?: CheckoutCouponDto;
+
+  @ApiProperty({ type: [String] })
+  supportedPaymentMethods: string[];
+
+  @ApiPropertyOptional()
+  existingPurchaseId?: string;
+
+  @ApiPropertyOptional()
+  existingPurchaseStatus?: string;
 }
 
 export class PixDetailsDto {
@@ -192,4 +328,7 @@ export class CheckoutResponseDto {
 
   @ApiPropertyOptional({ type: PixDetailsDto })
   pixDetails?: PixDetailsDto;
+
+  @ApiPropertyOptional({ type: CheckoutPricingDto })
+  pricing?: CheckoutPricingDto;
 }

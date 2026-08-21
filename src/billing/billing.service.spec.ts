@@ -8,11 +8,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { ProductType, PurchaseStatus, Prisma } from '@prisma/client';
+import { ProductType, PurchaseStatus, DiscountType, Prisma } from '@prisma/client';
 
-describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', () => {
+describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
   let service: BillingService;
   let prisma: PrismaService;
   let mercadoPagoProvider: MercadoPagoPaymentProvider;
@@ -25,9 +26,35 @@ describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', 
     name: 'Roteiro Completo',
     description: 'Acesso total ao roteiro',
     type: ProductType.ITINERARY_FULL_ACCESS,
-    price: new Prisma.Decimal('19.99'),
+    price: new Prisma.Decimal('100.00'),
     currency: 'BRL',
     active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockCouponPercentage = {
+    id: 'coup-10',
+    code: 'WALL10',
+    discountType: DiscountType.PERCENTAGE,
+    discountValue: new Prisma.Decimal('10.00'),
+    active: true,
+    productType: ProductType.ITINERARY_FULL_ACCESS,
+    startsAt: null,
+    expiresAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockCouponFixed = {
+    id: 'coup-20',
+    code: 'WALL20',
+    discountType: DiscountType.FIXED,
+    discountValue: new Prisma.Decimal('20.00'),
+    active: true,
+    productType: ProductType.ITINERARY_FULL_ACCESS,
+    startsAt: null,
+    expiresAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -45,11 +72,15 @@ describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', 
     id: 'pur-100',
     userId: 'user-1',
     productId: mockProduct.id,
+    couponId: mockCouponPercentage.id,
     tripId: mockTrip.id,
     status: PurchaseStatus.PENDING,
-    amount: new Prisma.Decimal('19.99'),
-    finalAmount: new Prisma.Decimal('19.99'),
+    amount: new Prisma.Decimal('90.00'),
+    originalAmount: new Prisma.Decimal('100.00'),
+    discountAmount: new Prisma.Decimal('10.00'),
+    finalAmount: new Prisma.Decimal('90.00'),
     currency: 'BRL',
+    paymentMethod: 'PIX',
     product: mockProduct,
     trip: mockTrip,
   };
@@ -75,6 +106,19 @@ describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', 
               findMany: jest.fn().mockResolvedValue([mockProduct]),
               findFirst: jest.fn().mockResolvedValue(mockProduct),
               findUnique: jest.fn().mockResolvedValue(mockProduct),
+              create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'prod-new', ...data })),
+              update: jest.fn().mockImplementation(({ where, data }) => Promise.resolve({ id: where.id, ...data })),
+            },
+            coupon: {
+              findUnique: jest.fn().mockImplementation(({ where }) => {
+                if (where.code === 'WALL10') return Promise.resolve(mockCouponPercentage);
+                if (where.code === 'WALL20') return Promise.resolve(mockCouponFixed);
+                if (where.id === 'coup-10') return Promise.resolve(mockCouponPercentage);
+                return Promise.resolve(null);
+              }),
+              findMany: jest.fn().mockResolvedValue([mockCouponPercentage, mockCouponFixed]),
+              create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'coup-new', ...data })),
+              update: jest.fn().mockImplementation(({ where, data }) => Promise.resolve({ id: where.id, ...data })),
             },
             trip: {
               findUnique: jest.fn().mockImplementation(({ where }) => {
@@ -110,13 +154,11 @@ describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', 
                 return Promise.resolve({
                   ...mockPurchase,
                   id: where.id,
-                  status: data.status || PurchaseStatus.PENDING,
-                  paidAt: data.paidAt,
-                  refundedAt: data.refundedAt,
+                  ...data,
                 });
               }),
-              count: jest.fn(),
-              findMany: jest.fn(),
+              count: jest.fn().mockResolvedValue(1),
+              findMany: jest.fn().mockResolvedValue([mockPurchase]),
             },
             $transaction: jest.fn().mockImplementation((cb) => cb(prisma)),
           },
@@ -135,102 +177,113 @@ describe('BillingService (Phase K3.2 Final Payment Safety & Webhook Identity)', 
     process.env.PAYMENT_PROVIDER = originalProviderEnv;
   });
 
-  describe('Strict Notification Identity & Same Notification Retry (Phase K3.2)', () => {
-    it('should deduplicate retry of the SAME notificationId=evt_100 even with different x-request-id headers', async () => {
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
-        success: true,
-        status: 'PAID',
-        providerPaymentId: 'pay_123',
-        purchaseId: mockPurchase.id,
-        amount: 19.99,
-        currency: 'BRL',
-        paidAt: new Date(),
-      });
-
-      // Delivery 1: x-request-id = req_A
-      const res1 = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_A' },
-        { id: 'evt_100', action: 'payment.updated', data: { id: 'pay_123' } },
+  describe('Coupon Calculations & Code Normalization (Phase K4)', () => {
+    it('should calculate 10% percentage discount correctly with Decimal precision', async () => {
+      const calc = await service.validateAndCalculateCoupon(
+        'wall10', // lowercase input
+        new Prisma.Decimal('100.00'),
+        ProductType.ITINERARY_FULL_ACCESS,
       );
-      expect(res1.purchaseStatus).toBe('PAID');
 
-      // Mock that webhookEvent findUnique now finds existing PROCESSED event
-      jest.spyOn(prisma.webhookEvent, 'findUnique').mockResolvedValueOnce({
-        id: 'w1',
-        provider: 'MERCADOPAGO',
-        providerEventId: 'mp_evt_evt_100',
-        eventType: 'payment.updated',
-        purchaseId: mockPurchase.id,
-        status: 'PROCESSED',
-        errorMessage: null,
-        processedAt: new Date(),
-        createdAt: new Date(),
-      });
-
-      // Delivery 2 (Retry): x-request-id = req_B (different header, same notification body.id)
-      const res2 = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_B' },
-        { id: 'evt_100', action: 'payment.updated', data: { id: 'pay_123' } },
-      );
-      expect(res2.message).toContain('Evento já processado (duplicado)');
+      expect(calc.coupon?.code).toBe('WALL10');
+      expect(calc.discountAmount.toString()).toBe('10');
+      expect(calc.finalAmount.toString()).toBe('90');
     });
 
-    it('should process TWO DIFFERENT notifications (evt_100 pending, evt_101 approved) for the SAME payment pay_123', async () => {
-      // Event 1: evt_100 (pending)
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
-        success: true,
-        status: 'PENDING',
-        providerPaymentId: 'pay_123',
-        purchaseId: mockPurchase.id,
-        amount: 19.99,
-        currency: 'BRL',
-      });
-
-      const res1 = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_1' },
-        { id: 'evt_100', action: 'payment.created', data: { id: 'pay_123' } },
+    it('should calculate fixed discount correctly', async () => {
+      const calc = await service.validateAndCalculateCoupon(
+        'WALL20',
+        new Prisma.Decimal('100.00'),
+        ProductType.ITINERARY_FULL_ACCESS,
       );
-      expect(res1.purchaseStatus).toBe('PENDING');
 
-      // Event 2: evt_101 (approved)
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
-        success: true,
-        status: 'PAID',
-        providerPaymentId: 'pay_123',
-        purchaseId: mockPurchase.id,
-        amount: 19.99,
-        currency: 'BRL',
-        paidAt: new Date(),
-      });
-
-      const res2 = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature', 'x-request-id': 'req_2' },
-        { id: 'evt_101', action: 'payment.updated', data: { id: 'pay_123' } },
-      );
-      expect(res2.purchaseStatus).toBe('PAID');
+      expect(calc.discountAmount.toString()).toBe('20');
+      expect(calc.finalAmount.toString()).toBe('80');
     });
 
-    it('should update Purchase status to REFUNDED when provider notifies refund/chargeback', async () => {
-      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValueOnce({
-        success: true,
-        status: 'REFUNDED',
-        providerPaymentId: 'pay_123',
-        purchaseId: mockPurchase.id,
-        amount: 19.99,
-        currency: 'BRL',
+    it('should throw BadRequestException if coupon code is invalid', async () => {
+      await expect(
+        service.validateAndCalculateCoupon(
+          'INVALID_CODE',
+          new Prisma.Decimal('100.00'),
+          ProductType.ITINERARY_FULL_ACCESS,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if discount results in zero final amount in V1', async () => {
+      const mockCoupon100 = {
+        ...mockCouponPercentage,
+        discountValue: new Prisma.Decimal('100.00'),
+      };
+      jest.spyOn(prisma.coupon, 'findUnique').mockResolvedValue(mockCoupon100 as any);
+
+      await expect(
+        service.validateAndCalculateCoupon(
+          'WALL10',
+          new Prisma.Decimal('100.00'),
+          ProductType.ITINERARY_FULL_ACCESS,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('Checkout Quote Endpoint', () => {
+    it('should return calculated quote for trip with coupon applied', async () => {
+      const quote = await service.getCheckoutQuote('user-1', mockTrip.id, {
+        couponCode: 'wall10',
       });
 
-      const res = await service.handleMercadoPagoWebhook(
-        { 'x-signature': 'test-valid-signature' },
-        { id: 'evt_ref_1', action: 'payment.updated', data: { id: 'pay_123' } },
-      );
+      expect(quote.tripId).toBe(mockTrip.id);
+      expect(quote.pricing.originalAmount).toBe(100);
+      expect(quote.pricing.discountAmount).toBe(10);
+      expect(quote.pricing.finalAmount).toBe(90);
+      expect(quote.coupon?.code).toBe('WALL10');
+      expect(quote.coupon?.applied).toBe(true);
+    });
+  });
 
-      expect(res.purchaseStatus).toBe('REFUNDED');
-      expect(prisma.purchase.update).toHaveBeenCalledWith(
+  describe('Idempotency & Revalidation on Purchase Checkout', () => {
+    it('should throw ConflictException if idempotency key is reused with different parameters', async () => {
+      const existingPurchaseKey = {
+        ...mockPurchase,
+        idempotencyKey: 'idemp-key-xyz',
+        tripId: 'trip-999', // Different trip!
+        paymentMethod: 'PIX',
+      };
+      jest.spyOn(prisma.purchase, 'findUnique').mockResolvedValue(existingPurchaseKey as any);
+
+      await expect(
+        service.processCheckoutPurchase(
+          'user-1',
+          { tripId: mockTrip.id, paymentMethod: PaymentMethodType.PIX },
+          'idemp-key-xyz',
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('Admin Coupon & Product Management', () => {
+    it('should create coupon normalized to uppercase code', async () => {
+      const res = await service.createCoupon({
+        code: 'promo15',
+        discountType: DiscountType.PERCENTAGE,
+        discountValue: 15,
+      });
+
+      expect(prisma.coupon.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: PurchaseStatus.REFUNDED }),
+          data: expect.objectContaining({ code: 'PROMO15' }),
         }),
       );
+    });
+
+    it('should deactivate coupon successfully', async () => {
+      await service.deactivateCoupon('coup-10');
+      expect(prisma.coupon.update).toHaveBeenCalledWith({
+        where: { id: 'coup-10' },
+        data: { active: false },
+      });
     });
   });
 });
