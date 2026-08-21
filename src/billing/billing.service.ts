@@ -16,7 +16,7 @@ import {
   CheckoutSummaryDto,
   CheckoutResponseDto,
 } from './dto/billing.dto';
-import { PurchaseStatus, ProductType } from '@prisma/client';
+import { PurchaseStatus, ProductType, GuestJourneyStatus } from '@prisma/client';
 
 @Injectable()
 export class BillingService {
@@ -232,6 +232,189 @@ export class BillingService {
     };
   }
 
+  // WEBHOOK HANDLING (PHASE K3)
+  async handleMercadoPagoWebhook(headers: Record<string, string>, body: any) {
+    const xSignature = headers['x-signature'] || headers['X-Signature'];
+    const xRequestId = headers['x-request-id'] || headers['X-Request-Id'];
+
+    const dataId =
+      body?.data?.id ||
+      body?.id ||
+      (typeof body?.resource === 'string' ? body.resource.split('/').pop() : undefined);
+
+    const isValidSignature = this.mercadoPagoProvider.verifyWebhookSignature(
+      xSignature,
+      xRequestId,
+      dataId ? String(dataId) : undefined,
+    );
+
+    if (!isValidSignature) {
+      throw new ForbiddenException('Assinatura do webhook inválida ou ausente');
+    }
+
+    const eventId = String(body?.id || xRequestId || dataId || `evt_${Date.now()}`);
+
+    // Deduplication check (Idempotency)
+    const existingEvent = await this.prisma.webhookEvent.findUnique({
+      where: { providerEventId: eventId },
+    });
+
+    if (existingEvent) {
+      return { status: 'OK', message: 'Evento já processado (duplicado)' };
+    }
+
+    if (!dataId) {
+      // Event received without data.id (e.g. ping test)
+      await this.prisma.webhookEvent.create({
+        data: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+          eventType: body?.type || body?.action || 'ping',
+          status: 'PROCESSED',
+        },
+      });
+      return { status: 'OK', message: 'Ping recebido' };
+    }
+
+    // Reconcile payment status via server-to-server API call
+    const paymentResult = await this.mercadoPagoProvider.getPaymentStatus(String(dataId));
+
+    if (!paymentResult || !paymentResult.purchaseId) {
+      // Look up purchase by providerPaymentId if purchaseId is missing in external_reference
+      const purchaseByPaymentId = await this.prisma.purchase.findFirst({
+        where: { providerPaymentId: String(dataId) },
+      });
+      if (purchaseByPaymentId) {
+        paymentResult.purchaseId = purchaseByPaymentId.id;
+      } else {
+        throw new NotFoundException(`Compra não encontrada para a notificação dataId=${dataId}`);
+      }
+    }
+
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: paymentResult.purchaseId },
+      include: { product: true, trip: true },
+    });
+
+    if (!purchase) {
+      throw new NotFoundException(`Compra ${paymentResult.purchaseId} não encontrada`);
+    }
+
+    // Amount & Currency Validation
+    if (
+      paymentResult.amount != null &&
+      Math.abs(Number(paymentResult.amount) - Number(purchase.finalAmount)) > 0.01
+    ) {
+      await this.prisma.webhookEvent.create({
+        data: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+          eventType: body?.type || 'payment.updated',
+          purchaseId: purchase.id,
+          status: 'FAILED',
+        },
+      });
+      throw new BadRequestException('Valor do pagamento divergente do valor da compra');
+    }
+
+    if (paymentResult.currency && paymentResult.currency !== purchase.currency) {
+      await this.prisma.webhookEvent.create({
+        data: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+          eventType: body?.type || 'payment.updated',
+          purchaseId: purchase.id,
+          status: 'FAILED',
+        },
+      });
+      throw new BadRequestException('Moeda do pagamento divergente da moeda da compra');
+    }
+
+    // Atomic Entitlement & State Machine Transaction
+    return this.prisma.$transaction(async (tx) => {
+      // Record Webhook Event
+      await tx.webhookEvent.create({
+        data: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+          eventType: body?.type || body?.action || 'payment.updated',
+          purchaseId: purchase.id,
+          status: 'PROCESSED',
+        },
+      });
+
+      if (paymentResult.status === 'PAID') {
+        const paidAt = paymentResult.paidAt || new Date();
+
+        // Update Purchase to PAID
+        const updatedPurchase = await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            status: PurchaseStatus.PAID,
+            paidAt,
+            providerPaymentId: String(dataId),
+            provider: 'MERCADOPAGO',
+          },
+        });
+
+        // Unlock Trip Premium Entitlement if ITINERARY_FULL_ACCESS
+        if (
+          purchase.product.type === ProductType.ITINERARY_FULL_ACCESS &&
+          purchase.tripId
+        ) {
+          await tx.trip.update({
+            where: { id: purchase.tripId },
+            data: { premiumUnlockedAt: paidAt },
+          });
+
+          // Update linked GuestJourney to PAID if created from guest journey
+          const linkedGuestJourney = await tx.guestJourney.findFirst({
+            where: { createdTripId: purchase.tripId },
+          });
+          if (linkedGuestJourney) {
+            await tx.guestJourney.update({
+              where: { id: linkedGuestJourney.id },
+              data: { status: GuestJourneyStatus.PAID },
+            });
+          }
+        }
+
+        return { status: 'OK', purchaseStatus: 'PAID', purchaseId: updatedPurchase.id };
+      } else if (paymentResult.status === 'REFUNDED') {
+        const updatedPurchase = await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            status: PurchaseStatus.REFUNDED,
+            refundedAt: new Date(),
+          },
+        });
+        return { status: 'OK', purchaseStatus: 'REFUNDED', purchaseId: updatedPurchase.id };
+      } else {
+        // Pending or Rejected state
+        return { status: 'OK', purchaseStatus: purchase.status, purchaseId: purchase.id };
+      }
+    });
+  }
+
+  async getPurchaseStatus(userId: string, purchaseId: string) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: { trip: { select: { id: true, premiumUnlockedAt: true } } },
+    });
+
+    if (!purchase) throw new NotFoundException('Compra não encontrada');
+    if (purchase.userId !== userId) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    return {
+      purchaseId: purchase.id,
+      status: purchase.status,
+      paidAt: purchase.paidAt,
+      premiumUnlocked: purchase.trip?.premiumUnlockedAt != null,
+    };
+  }
+
   // USER
   async getActiveProducts() {
     return this.prisma.product.findMany({ where: { active: true } });
@@ -392,6 +575,17 @@ export class BillingService {
           where: { id: purchase.tripId },
           data: { premiumUnlockedAt: new Date() },
         });
+
+        // Update GuestJourney if linked
+        const linkedGuestJourney = await tx.guestJourney.findFirst({
+          where: { createdTripId: purchase.tripId },
+        });
+        if (linkedGuestJourney) {
+          await tx.guestJourney.update({
+            where: { id: linkedGuestJourney.id },
+            data: { status: GuestJourneyStatus.PAID },
+          });
+        }
       }
 
       return updatedPurchase;

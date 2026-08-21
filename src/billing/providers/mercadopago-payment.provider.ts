@@ -5,6 +5,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import * as crypto from 'node:crypto';
 import {
   PaymentProvider,
   ProcessPaymentInput,
@@ -25,11 +26,53 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
           'MERCADO_PAGO_ACCESS_TOKEN is required for Mercado Pago provider in production/staging',
         );
       }
-      // For test/dev fallback when explicitly invoked without real token
       return 'TEST-MOCK-MERCADOPAGO-ACCESS-TOKEN';
     }
 
     return token;
+  }
+
+  public verifyWebhookSignature(
+    xSignatureHeader: string | undefined,
+    xRequestIdHeader: string | undefined,
+    dataId: string | undefined,
+  ): boolean {
+    const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+    const env = (process.env.NODE_ENV || 'development').toLowerCase();
+
+    if (!secret) {
+      if (env === 'production' || env === 'staging') {
+        throw new ForbiddenException(
+          'MERCADO_PAGO_WEBHOOK_SECRET is required in production/staging',
+        );
+      }
+      return xSignatureHeader === 'test-valid-signature';
+    }
+
+    if (!xSignatureHeader || !dataId) {
+      return false;
+    }
+
+    const parts = xSignatureHeader.split(',').reduce((acc, part) => {
+      const [key, val] = part.split('=').map((s) => s.trim());
+      if (key && val) acc[key] = val;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const ts = parts['ts'];
+    const v1 = parts['v1'];
+
+    if (!ts || !v1) {
+      return false;
+    }
+
+    const manifest = `id:${dataId};request-id:${xRequestIdHeader || ''};ts:${ts};`;
+    const calculatedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(manifest)
+      .digest('hex');
+
+    return calculatedSignature === v1;
   }
 
   async processPayment(input: ProcessPaymentInput): Promise<PaymentResult> {
@@ -79,7 +122,6 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
         `Enviando solicitação de pagamento ao Mercado Pago para purchase ${input.purchaseId} (${input.paymentMethod})`,
       );
 
-      // If test token, handle controlled mock response for unit tests without hitting internet
       if (accessToken === 'TEST-MOCK-MERCADOPAGO-ACCESS-TOKEN') {
         return this.handleMockTestResponse(input, isPix);
       }
@@ -136,6 +178,66 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
       this.logger.error(`Exceção ao chamar Mercado Pago API: ${err.message}`);
       throw new InternalServerErrorException(
         `Erro de integração com Mercado Pago: ${err.message}`,
+      );
+    }
+  }
+
+  async getPaymentStatus(providerPaymentId: string): Promise<PaymentResult> {
+    const accessToken = this.getAccessToken();
+
+    if (accessToken === 'TEST-MOCK-MERCADOPAGO-ACCESS-TOKEN') {
+      return {
+        success: true,
+        status: 'PAID',
+        providerPaymentId,
+        amount: 19.99,
+        currency: 'BRL',
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.mercadopago.com/v1/payments/${providerPaymentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new InternalServerErrorException(
+          `Falha ao consultar pagamento no Mercado Pago: ${data.message || response.statusText}`,
+        );
+      }
+
+      const rawStatus = (data.status || '').toLowerCase();
+      const statusMap: Record<string, string> = {
+        approved: 'PAID',
+        pending: 'PENDING',
+        in_process: 'PENDING',
+        rejected: 'REJECTED',
+        cancelled: 'CANCELLED',
+        refunded: 'REFUNDED',
+        charged_back: 'REFUNDED',
+      };
+      const status = statusMap[rawStatus] || 'PENDING';
+
+      return {
+        success: status === 'PAID',
+        status,
+        providerPaymentId: String(data.id),
+        amount: data.transaction_amount ? Number(data.transaction_amount) : undefined,
+        currency: data.currency_id || 'BRL',
+        purchaseId: data.external_reference,
+        paidAt: data.date_approved ? new Date(data.date_approved) : undefined,
+      };
+    } catch (err: any) {
+      this.logger.error(`Erro ao obter status do pagamento ${providerPaymentId}: ${err.message}`);
+      throw new InternalServerErrorException(
+        `Erro ao consultar status no Mercado Pago: ${err.message}`,
       );
     }
   }

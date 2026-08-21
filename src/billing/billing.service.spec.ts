@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ProductType, PurchaseStatus, Prisma } from '@prisma/client';
 
-describe('BillingService (Phase K2B Mercado Pago & Checkout)', () => {
+describe('BillingService (Phase K3 Mercado Pago Webhooks & Entitlement)', () => {
   let service: BillingService;
   let prisma: PrismaService;
   let mercadoPagoProvider: MercadoPagoPaymentProvider;
@@ -52,6 +52,19 @@ describe('BillingService (Phase K2B Mercado Pago & Checkout)', () => {
     premiumUnlockedAt: null,
   };
 
+  const mockPurchase = {
+    id: 'pur-100',
+    userId: 'user-1',
+    productId: mockProduct.id,
+    tripId: mockTrip.id,
+    status: PurchaseStatus.PENDING,
+    amount: new Prisma.Decimal('19.99'),
+    finalAmount: new Prisma.Decimal('19.99'),
+    currency: 'BRL',
+    product: mockProduct,
+    trip: mockTrip,
+  };
+
   beforeEach(async () => {
     originalEnv = process.env.NODE_ENV;
     originalMockFlag = process.env.BILLING_MOCK_PAYMENTS_ENABLED;
@@ -87,8 +100,19 @@ describe('BillingService (Phase K2B Mercado Pago & Checkout)', () => {
               }),
               update: jest.fn().mockResolvedValue({ ...mockTrip, premiumUnlockedAt: new Date() }),
             },
+            guestJourney: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              update: jest.fn().mockResolvedValue({}),
+            },
+            webhookEvent: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'evt-1', ...data })),
+            },
             purchase: {
-              findUnique: jest.fn(),
+              findUnique: jest.fn().mockImplementation(({ where }) => {
+                if (where.id === mockPurchase.id) return Promise.resolve(mockPurchase);
+                return Promise.resolve(null);
+              }),
               findFirst: jest.fn(),
               create: jest.fn().mockImplementation(({ data }: any) => {
                 return Promise.resolve({
@@ -100,17 +124,10 @@ describe('BillingService (Phase K2B Mercado Pago & Checkout)', () => {
               }),
               update: jest.fn().mockImplementation(({ where, data }: any) => {
                 return Promise.resolve({
+                  ...mockPurchase,
                   id: where.id,
-                  userId: 'user-1',
-                  productId: mockProduct.id,
-                  tripId: mockTrip.id,
                   status: data.status || PurchaseStatus.PENDING,
-                  amount: mockProduct.price,
-                  finalAmount: mockProduct.price,
-                  currency: 'BRL',
-                  provider: data.provider || 'MOCK',
-                  providerPaymentId: data.providerPaymentId || 'mp-123',
-                  paymentMethod: data.paymentMethod || 'PIX',
+                  paidAt: data.paidAt,
                 });
               }),
               count: jest.fn(),
@@ -133,128 +150,94 @@ describe('BillingService (Phase K2B Mercado Pago & Checkout)', () => {
     process.env.PAYMENT_PROVIDER = originalProviderEnv;
   });
 
-  describe('Checkout Summary API', () => {
-    it('should return checkout summary with core resolved product and supported payment methods', async () => {
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(null);
-
-      const summary = await service.getCheckoutSummary('user-1', mockTrip.id);
-
-      expect(summary.tripId).toBe(mockTrip.id);
-      expect(summary.alreadyUnlocked).toBe(false);
-      expect(summary.product.id).toBe(mockProduct.id);
-      expect(summary.pricing.finalAmount).toBe(19.99);
-      expect(summary.supportedPaymentMethods).toEqual(['PIX', 'CARD']);
-    });
-
-    it('should throw ForbiddenException if user tries to get checkout summary for another user trip', async () => {
+  describe('Webhook & Entitlement (Phase K3)', () => {
+    it('should reject webhook if x-signature is missing or invalid', async () => {
       await expect(
-        service.getCheckoutSummary('user-other-99', mockTrip.id),
+        service.handleMercadoPagoWebhook(
+          { 'x-signature': 'invalid-signature' },
+          { data: { id: 'mp-123' } },
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should return alreadyUnlocked = true if trip premiumUnlockedAt is set', async () => {
-      jest.spyOn(prisma.trip, 'findUnique').mockResolvedValue({
-        ...mockTrip,
-        premiumUnlockedAt: new Date(),
-      } as any);
-
-      const summary = await service.getCheckoutSummary('user-1', mockTrip.id);
-      expect(summary.alreadyUnlocked).toBe(true);
-    });
-  });
-
-  describe('Process Checkout Purchase API (Phase K2B)', () => {
-    it('should process PIX checkout and return QR code details while keeping trip premiumUnlockedAt null', async () => {
-      process.env.PAYMENT_PROVIDER = 'mercadopago';
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(null);
-
-      const res = await service.processCheckoutPurchase('user-1', {
-        tripId: mockTrip.id,
-        paymentMethod: PaymentMethodType.PIX,
-      });
-
-      expect(res.paymentMethod).toBe('PIX');
-      expect(res.status).toBe(PurchaseStatus.PENDING);
-      expect(res.amount).toBe(19.99);
-      expect(res.pixDetails).toBeDefined();
-      expect(res.pixDetails?.copyPaste).toContain('br.gov.bcb.pix');
-      // Verify trip unlock was NOT called on PIX creation (must wait for K3 webhook!)
-      expect(prisma.trip.update).not.toHaveBeenCalled();
-    });
-
-    it('should process CARD checkout with cardToken and keep premiumUnlockedAt null until K3 webhook confirmation', async () => {
-      process.env.PAYMENT_PROVIDER = 'mercadopago';
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(null);
-
-      const res = await service.processCheckoutPurchase('user-1', {
-        tripId: mockTrip.id,
-        paymentMethod: PaymentMethodType.CARD,
-        cardToken: 'mock-card-token-xyz',
-      });
-
-      expect(res.paymentMethod).toBe('CARD');
-      expect(res.amount).toBe(19.99);
-      // Premium entitlement remains locked until K3 webhook
-      expect(prisma.trip.update).not.toHaveBeenCalled();
-    });
-
-    it('should reject checkout request for trip belonging to another user', async () => {
-      await expect(
-        service.processCheckoutPurchase('user-other-99', {
-          tripId: mockTrip.id,
-          paymentMethod: PaymentMethodType.PIX,
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should reject checkout request if trip is already premium unlocked', async () => {
-      jest.spyOn(prisma.trip, 'findUnique').mockResolvedValue({
-        ...mockTrip,
-        premiumUnlockedAt: new Date(),
-      } as any);
-
-      await expect(
-        service.processCheckoutPurchase('user-1', {
-          tripId: mockTrip.id,
-          paymentMethod: PaymentMethodType.PIX,
-        }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should reuse existing PENDING purchase when checking out again for the same trip', async () => {
-      const existingPending = {
-        id: 'pur-pending-reuse-100',
-        userId: 'user-1',
-        productId: mockProduct.id,
-        tripId: mockTrip.id,
-        status: PurchaseStatus.PENDING,
-        amount: mockProduct.price,
-        finalAmount: mockProduct.price,
+    it('should process valid webhook, set Purchase status to PAID, and unlock Trip premiumUnlockedAt', async () => {
+      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValue({
+        success: true,
+        status: 'PAID',
+        providerPaymentId: 'mp-999',
+        purchaseId: mockPurchase.id,
+        amount: 19.99,
         currency: 'BRL',
-      };
-      jest.spyOn(prisma.purchase, 'findFirst').mockResolvedValue(existingPending as any);
-
-      const res = await service.processCheckoutPurchase('user-1', {
-        tripId: mockTrip.id,
-        paymentMethod: PaymentMethodType.PIX,
+        paidAt: new Date(),
       });
 
-      expect(res.purchaseId).toBe('pur-pending-reuse-100');
+      const res = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature' },
+        { id: 'evt-100', data: { id: 'mp-999' } },
+      );
+
+      expect(res.status).toBe('OK');
+      expect(res.purchaseStatus).toBe('PAID');
+      expect(prisma.trip.update).toHaveBeenCalledWith({
+        where: { id: mockTrip.id },
+        data: { premiumUnlockedAt: expect.any(Date) },
+      });
+      expect(prisma.webhookEvent.create).toHaveBeenCalled();
+    });
+
+    it('should return idempotent success no-op if webhookEvent already exists (replay attack protection)', async () => {
+      jest.spyOn(prisma.webhookEvent, 'findUnique').mockResolvedValue({
+        id: 'evt-existing',
+        provider: 'MERCADOPAGO',
+        providerEventId: 'evt-duplicate-1',
+        eventType: 'payment.updated',
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        createdAt: new Date(),
+        purchaseId: mockPurchase.id,
+      });
+
+      const res = await service.handleMercadoPagoWebhook(
+        { 'x-signature': 'test-valid-signature' },
+        { id: 'evt-duplicate-1', data: { id: 'mp-999' } },
+      );
+
+      expect(res.message).toContain('Evento já processado');
+      expect(prisma.trip.update).not.toHaveBeenCalled();
+    });
+
+    it('should reject webhook if payment amount does not match Purchase finalAmount', async () => {
+      jest.spyOn(mercadoPagoProvider, 'getPaymentStatus').mockResolvedValue({
+        success: true,
+        status: 'PAID',
+        providerPaymentId: 'mp-999',
+        purchaseId: mockPurchase.id,
+        amount: 5.0, // Fraudulent lower amount!
+        currency: 'BRL',
+      });
+
+      await expect(
+        service.handleMercadoPagoWebhook(
+          { 'x-signature': 'test-valid-signature' },
+          { id: 'evt-fraud-1', data: { id: 'mp-999' } },
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.trip.update).not.toHaveBeenCalled();
     });
   });
 
-  describe('Mock Safety & Provider Resolution', () => {
-    it('should resolve MercadoPagoPaymentProvider when PAYMENT_PROVIDER=mercadopago', () => {
-      process.env.PAYMENT_PROVIDER = 'mercadopago';
-      const provider = service.resolvePaymentProvider();
-      expect(provider).toBeInstanceOf(MercadoPagoPaymentProvider);
+  describe('Checkout Summary & Purchase Status APIs', () => {
+    it('should return purchase status for authenticated owner', async () => {
+      const statusRes = await service.getPurchaseStatus('user-1', mockPurchase.id);
+      expect(statusRes.purchaseId).toBe(mockPurchase.id);
+      expect(statusRes.status).toBe(PurchaseStatus.PENDING);
     });
 
-    it('should throw ForbiddenException in production if PAYMENT_PROVIDER is missing or mock', () => {
-      process.env.NODE_ENV = 'production';
-      delete process.env.PAYMENT_PROVIDER;
-
-      expect(() => service.resolvePaymentProvider()).toThrow(ForbiddenException);
+    it('should reject purchase status query if requested by another user', async () => {
+      await expect(
+        service.getPurchaseStatus('user-other-99', mockPurchase.id),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

@@ -24,6 +24,10 @@ export interface PaymentResult {
   transactionId?: string;
   providerPaymentId?: string;
   pixDetails?: PixDetails;
+  amount?: number;
+  currency?: string;
+  purchaseId?: string;
+  paidAt?: Date;
   error?: string;
 }
 

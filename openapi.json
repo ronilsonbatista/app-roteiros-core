@@ -3078,6 +3078,35 @@
         ]
       }
     },
+    "/purchases/{id}/status": {
+      "get": {
+        "operationId": "BillingController_getPurchaseStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter status de pagamento de uma compra",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
     "/trips/{tripId}/checkout-summary": {
       "get": {
         "operationId": "BillingController_getCheckoutSummary",
@@ -3141,6 +3170,38 @@
           }
         ],
         "summary": "Criar cobrança real e iniciar pagamento (PIX ou CARTÃO)",
+        "tags": [
+          "Billing - App"
+        ]
+      }
+    },
+    "/webhooks/mercadopago": {
+      "post": {
+        "operationId": "BillingController_handleMercadoPagoWebhook",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Endpoint público para notificações Webhook do Mercado Pago",
         "tags": [
           "Billing - App"
         ]

@@ -654,3 +654,19 @@ model GuestJourney {
   @@map("guest_journeys")
 }
 
+model WebhookEvent {
+  id              String   @id @default(uuid())
+  provider        String
+  providerEventId String   @unique
+  eventType       String
+  purchaseId      String?
+  status          String   @default("PROCESSED")
+  processedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([provider])
+  @@index([providerEventId])
+  @@map("webhook_events")
+}
+
+
