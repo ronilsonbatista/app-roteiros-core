@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MockPaymentProvider } from './providers/mock-payment.provider';
@@ -20,6 +22,8 @@ import { PurchaseStatus, ProductType, GuestJourneyStatus } from '@prisma/client'
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mockProvider: MockPaymentProvider,
@@ -162,6 +166,35 @@ export class BillingService {
       },
     });
 
+    const provider = this.resolvePaymentProvider();
+
+    // Active Charge Prevention: Check if existing purchase has an active pending payment
+    if (purchase && purchase.providerPaymentId && provider.getPaymentStatus) {
+      try {
+        const currentStatus = await provider.getPaymentStatus(purchase.providerPaymentId);
+        if (currentStatus.status === 'PENDING') {
+          if (dto.paymentMethod === purchase.paymentMethod) {
+            // Same payment method: return existing active charge
+            return {
+              purchaseId: purchase.id,
+              status: purchase.status,
+              amount: Number(purchase.finalAmount),
+              currency: purchase.currency,
+              paymentMethod: dto.paymentMethod,
+            };
+          } else {
+            // User tries to switch payment method while previous is still active
+            throw new BadRequestException(
+              'Existe uma cobrança ativa pendente. Conclua a cobrança existente ou aguarde a expiração.',
+            );
+          }
+        }
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+        this.logger.warn(`Não foi possível verificar status do pagamento anterior: ${err.message}`);
+      }
+    }
+
     if (!purchase) {
       purchase = await this.prisma.purchase.create({
         data: {
@@ -178,8 +211,6 @@ export class BillingService {
         },
       });
     }
-
-    const provider = this.resolvePaymentProvider();
 
     const paymentResult = await provider.processPayment({
       userId,
@@ -232,7 +263,7 @@ export class BillingService {
     };
   }
 
-  // WEBHOOK HANDLING (PHASE K3)
+  // WEBHOOK HANDLING (PHASE K3 & K3.1 HARDENED)
   async handleMercadoPagoWebhook(headers: Record<string, string>, body: any) {
     const xSignature = headers['x-signature'] || headers['X-Signature'];
     const xRequestId = headers['x-request-id'] || headers['X-Request-Id'];
@@ -252,35 +283,80 @@ export class BillingService {
       throw new ForbiddenException('Assinatura do webhook inválida ou ausente');
     }
 
-    const eventId = String(body?.id || xRequestId || dataId || `evt_${Date.now()}`);
+    // Explicitly distinguish providerEventId from providerPaymentId
+    const eventId = body?.id
+      ? `mp_evt_${body.id}`
+      : xRequestId
+      ? `mp_req_${xRequestId}_${dataId || ''}`
+      : `mp_act_${body?.action || 'update'}_${dataId || ''}_${Date.now()}`;
 
-    // Deduplication check (Idempotency)
+    // Deduplication check (Idempotency) via compound unique constraint
     const existingEvent = await this.prisma.webhookEvent.findUnique({
-      where: { providerEventId: eventId },
+      where: {
+        provider_providerEventId: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+        },
+      },
     });
 
-    if (existingEvent) {
+    if (existingEvent && existingEvent.status === 'PROCESSED') {
       return { status: 'OK', message: 'Evento já processado (duplicado)' };
     }
 
     if (!dataId) {
       // Event received without data.id (e.g. ping test)
-      await this.prisma.webhookEvent.create({
-        data: {
+      await this.prisma.webhookEvent.upsert({
+        where: {
+          provider_providerEventId: {
+            provider: 'MERCADOPAGO',
+            providerEventId: eventId,
+          },
+        },
+        create: {
           provider: 'MERCADOPAGO',
           providerEventId: eventId,
           eventType: body?.type || body?.action || 'ping',
+          status: 'PROCESSED',
+        },
+        update: {
           status: 'PROCESSED',
         },
       });
       return { status: 'OK', message: 'Ping recebido' };
     }
 
-    // Reconcile payment status via server-to-server API call
-    const paymentResult = await this.mercadoPagoProvider.getPaymentStatus(String(dataId));
+    // Reconcile payment status via server-to-server API call with Provider Down resilience
+    let paymentResult;
+    try {
+      paymentResult = await this.mercadoPagoProvider.getPaymentStatus(String(dataId));
+    } catch (err: any) {
+      this.logger.error(`Provedor temporariamente indisponível ao verificar payment ${dataId}: ${err.message}`);
+      await this.prisma.webhookEvent.upsert({
+        where: {
+          provider_providerEventId: {
+            provider: 'MERCADOPAGO',
+            providerEventId: eventId,
+          },
+        },
+        create: {
+          provider: 'MERCADOPAGO',
+          providerEventId: eventId,
+          eventType: body?.type || body?.action || 'payment.updated',
+          status: 'RETRYABLE',
+          errorMessage: err.message,
+        },
+        update: {
+          status: 'RETRYABLE',
+          errorMessage: err.message,
+        },
+      });
+      throw new InternalServerErrorException(
+        'Provedor de pagamento temporariamente indisponível. Notificação será reprocessada.',
+      );
+    }
 
     if (!paymentResult || !paymentResult.purchaseId) {
-      // Look up purchase by providerPaymentId if purchaseId is missing in external_reference
       const purchaseByPaymentId = await this.prisma.purchase.findFirst({
         where: { providerPaymentId: String(dataId) },
       });
@@ -305,40 +381,64 @@ export class BillingService {
       paymentResult.amount != null &&
       Math.abs(Number(paymentResult.amount) - Number(purchase.finalAmount)) > 0.01
     ) {
-      await this.prisma.webhookEvent.create({
-        data: {
+      await this.prisma.webhookEvent.upsert({
+        where: {
+          provider_providerEventId: {
+            provider: 'MERCADOPAGO',
+            providerEventId: eventId,
+          },
+        },
+        create: {
           provider: 'MERCADOPAGO',
           providerEventId: eventId,
           eventType: body?.type || 'payment.updated',
           purchaseId: purchase.id,
           status: 'FAILED',
+          errorMessage: 'Divergência de valor',
         },
+        update: { status: 'FAILED', errorMessage: 'Divergência de valor' },
       });
       throw new BadRequestException('Valor do pagamento divergente do valor da compra');
     }
 
     if (paymentResult.currency && paymentResult.currency !== purchase.currency) {
-      await this.prisma.webhookEvent.create({
-        data: {
+      await this.prisma.webhookEvent.upsert({
+        where: {
+          provider_providerEventId: {
+            provider: 'MERCADOPAGO',
+            providerEventId: eventId,
+          },
+        },
+        create: {
           provider: 'MERCADOPAGO',
           providerEventId: eventId,
           eventType: body?.type || 'payment.updated',
           purchaseId: purchase.id,
           status: 'FAILED',
+          errorMessage: 'Divergência de moeda',
         },
+        update: { status: 'FAILED', errorMessage: 'Divergência de moeda' },
       });
       throw new BadRequestException('Moeda do pagamento divergente da moeda da compra');
     }
 
     // Atomic Entitlement & State Machine Transaction
     return this.prisma.$transaction(async (tx) => {
-      // Record Webhook Event
-      await tx.webhookEvent.create({
-        data: {
+      await tx.webhookEvent.upsert({
+        where: {
+          provider_providerEventId: {
+            provider: 'MERCADOPAGO',
+            providerEventId: eventId,
+          },
+        },
+        create: {
           provider: 'MERCADOPAGO',
           providerEventId: eventId,
           eventType: body?.type || body?.action || 'payment.updated',
           purchaseId: purchase.id,
+          status: 'PROCESSED',
+        },
+        update: {
           status: 'PROCESSED',
         },
       });
@@ -346,7 +446,6 @@ export class BillingService {
       if (paymentResult.status === 'PAID') {
         const paidAt = paymentResult.paidAt || new Date();
 
-        // Update Purchase to PAID
         const updatedPurchase = await tx.purchase.update({
           where: { id: purchase.id },
           data: {
@@ -357,7 +456,6 @@ export class BillingService {
           },
         });
 
-        // Unlock Trip Premium Entitlement if ITINERARY_FULL_ACCESS
         if (
           purchase.product.type === ProductType.ITINERARY_FULL_ACCESS &&
           purchase.tripId
@@ -367,7 +465,6 @@ export class BillingService {
             data: { premiumUnlockedAt: paidAt },
           });
 
-          // Update linked GuestJourney to PAID if created from guest journey
           const linkedGuestJourney = await tx.guestJourney.findFirst({
             where: { createdTripId: purchase.tripId },
           });
@@ -381,6 +478,8 @@ export class BillingService {
 
         return { status: 'OK', purchaseStatus: 'PAID', purchaseId: updatedPurchase.id };
       } else if (paymentResult.status === 'REFUNDED') {
+        // Financial status update to REFUNDED.
+        // ENTITLEMENT_ORIGIN_GAP: automatic revocation of Trip.premiumUnlockedAt is deferred to preserve manual admin overrides.
         const updatedPurchase = await tx.purchase.update({
           where: { id: purchase.id },
           data: {
@@ -390,7 +489,10 @@ export class BillingService {
         });
         return { status: 'OK', purchaseStatus: 'REFUNDED', purchaseId: updatedPurchase.id };
       } else {
-        // Pending or Rejected state
+        // State Monotonicity: Do not regress a PAID purchase back to PENDING from a delayed out-of-order notification!
+        if (purchase.status === PurchaseStatus.PAID) {
+          return { status: 'OK', purchaseStatus: 'PAID', purchaseId: purchase.id };
+        }
         return { status: 'OK', purchaseStatus: purchase.status, purchaseId: purchase.id };
       }
     });
