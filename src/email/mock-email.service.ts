@@ -20,6 +20,10 @@ export class MockEmailService implements EmailService {
       </div>
     `;
 
-    this.logger.log(`[MockEmailService] Sending OTP Code [${code}] to [${to}] (valid for ${expiresInMinutes}m)`);
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`[MockEmailService] Sending OTP Code [${code}] to [${to}] (valid for ${expiresInMinutes}m)`);
+    } else {
+      this.logger.log(`[MockEmailService] Sending OTP Code to [${to}] (valid for ${expiresInMinutes}m)`);
+    }
   }
 }

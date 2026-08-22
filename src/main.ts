@@ -29,6 +29,29 @@ async function bootstrap() {
     process.exit(1);
   }
 
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Production Hardening Checks
+  if (isProduction) {
+    const insecureSecrets = ['secret', 'default-secret', 'change-me', '123456'];
+    if (insecureSecrets.includes(process.env.JWT_SECRET || '')) {
+      logger.error('FATAL: JWT_SECRET fraco ou default detectado em produção!');
+      process.exit(1);
+    }
+    if (insecureSecrets.includes(process.env.JWT_REFRESH_SECRET || '') || process.env.JWT_REFRESH_SECRET === 'refresh_secret') {
+      logger.error('FATAL: JWT_REFRESH_SECRET fraco ou default detectado em produção!');
+      process.exit(1);
+    }
+    if (process.env.BILLING_MOCK_PAYMENTS_ENABLED === 'true') {
+      logger.error('FATAL: BILLING_MOCK_PAYMENTS_ENABLED não pode estar true em produção!');
+      process.exit(1);
+    }
+    if (!process.env.CORS_ORIGINS || process.env.CORS_ORIGINS === '*') {
+      logger.error('FATAL: CORS_ORIGINS explícito (não-wildcard) é obrigatório em produção!');
+      process.exit(1);
+    }
+  }
+
   const app = await NestFactory.create(AppModule);
 
   // Security Headers
@@ -36,12 +59,8 @@ async function bootstrap() {
 
   // CORS
   let corsOrigins: string[] | string = '*';
-  if (process.env.NODE_ENV === 'production') {
-    if (!process.env.CORS_ORIGINS) {
-      logger.error('CORS_ORIGINS é obrigatório em produção!');
-      process.exit(1);
-    }
-    corsOrigins = process.env.CORS_ORIGINS.split(',');
+  if (isProduction) {
+    corsOrigins = process.env.CORS_ORIGINS!.split(',');
   } else {
     corsOrigins = process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',')
@@ -64,8 +83,12 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalInterceptors(new GlobalResponseInterceptor());
 
-  // Swagger
-  if (process.env.SWAGGER_ENABLED !== 'false') {
+  // Swagger - Disabled by default in production unless explicitly enabled
+  const enableSwagger = isProduction
+    ? process.env.SWAGGER_ENABLED === 'true'
+    : process.env.SWAGGER_ENABLED !== 'false';
+
+  if (enableSwagger) {
     const config = new DocumentBuilder()
       .setTitle('AppRoteiros API')
       .setDescription('The AppRoteiros API description')
@@ -78,6 +101,6 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  logger.log(`Application listening on port ${port}`);
+  logger.log(`Application listening on port ${port} (env: ${process.env.NODE_ENV || 'development'})`);
 }
 bootstrap();
