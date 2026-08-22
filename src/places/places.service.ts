@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GooglePlacesProvider } from './providers/google-places.provider';
+import { isTripLocked } from '../trips/trips.util';
 
 @Injectable()
 export class PlacesService {
@@ -31,7 +32,15 @@ export class PlacesService {
   ) {
     const item = await this.prisma.itineraryItem.findUnique({
       where: { id: itemId },
-      include: { tripDay: { include: { trip: true } } },
+      include: {
+        tripDay: {
+          include: {
+            trip: {
+              include: { createdFromGuestJourneys: true, purchases: true },
+            },
+          },
+        },
+      },
     });
 
     if (!item) throw new NotFoundException('ItineraryItem não encontrado');
@@ -39,6 +48,12 @@ export class PlacesService {
       throw new ForbiddenException(
         'Não autorizado. Você não é o dono desta viagem.',
       );
+
+    if (isTripLocked(item.tripDay.trip) && item.tripDay.dayNumber > 1) {
+      throw new ForbiddenException(
+        'O acesso e alteração de itens a partir do Dia 2 requer confirmação de pagamento.',
+      );
+    }
 
     const details = await this.getPlaceDetails(providerPlaceId);
 

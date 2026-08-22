@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
 import { CreateTripDayDto } from '../trip-days/dto/create-trip-day.dto';
+import { isTripLocked } from './trips.util';
 
 @Injectable()
 export class TripsService {
@@ -61,9 +62,7 @@ export class TripsService {
     }
 
     // Check if this trip is a paid product trip subject to entitlement gating
-    const isPayableProductTrip =
-      trip.createdFromGuestJourneys.length > 0 || trip.purchases.length > 0;
-    const isLocked = isPayableProductTrip && trip.premiumUnlockedAt == null;
+    const isLocked = isTripLocked(trip);
 
     // Remove internal relations before returning
     const { participants, createdFromGuestJourneys, purchases, ...tripData } =

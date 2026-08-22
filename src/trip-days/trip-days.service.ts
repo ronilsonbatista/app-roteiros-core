@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateTripDayDto } from './dto/update-trip-day.dto';
 import { CreateItineraryItemDto } from '../itinerary/dto/create-itinerary-item.dto';
+import { isTripLocked } from '../trips/trips.util';
 
 @Injectable()
 export class TripDaysService {
@@ -14,12 +15,22 @@ export class TripDaysService {
   async findOneWithAuth(userId: string, dayId: string) {
     const tripDay = await this.prisma.tripDay.findUnique({
       where: { id: dayId },
-      include: { trip: true },
+      include: {
+        trip: {
+          include: { createdFromGuestJourneys: true, purchases: true },
+        },
+      },
     });
 
     if (!tripDay) throw new NotFoundException('Dia não encontrado');
     if (tripDay.trip.userId !== userId)
       throw new ForbiddenException('Acesso negado');
+
+    if (isTripLocked(tripDay.trip) && tripDay.dayNumber > 1) {
+      throw new ForbiddenException(
+        'O acesso e alteração de itens a partir do Dia 2 requer confirmação de pagamento.',
+      );
+    }
 
     return tripDay;
   }
