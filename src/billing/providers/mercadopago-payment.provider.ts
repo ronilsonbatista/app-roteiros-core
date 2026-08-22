@@ -225,6 +225,16 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
       };
       const status = statusMap[rawStatus] || 'PENDING';
 
+      const pixData = data.point_of_interaction?.transaction_data;
+      const pixDetails = pixData
+        ? {
+            copyPaste: pixData.qr_code,
+            qrCodeBase64: pixData.qr_code_base64,
+            ticketUrl: pixData.ticket_url,
+            expiresAt: data.date_of_expiration ? String(data.date_of_expiration) : undefined,
+          }
+        : undefined;
+
       return {
         success: status === 'PAID',
         status,
@@ -233,6 +243,7 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
         currency: data.currency_id || 'BRL',
         purchaseId: data.external_reference,
         paidAt: data.date_approved ? new Date(data.date_approved) : undefined,
+        pixDetails,
       };
     } catch (err: any) {
       this.logger.error(`Erro ao obter status do pagamento ${providerPaymentId}: ${err.message}`);

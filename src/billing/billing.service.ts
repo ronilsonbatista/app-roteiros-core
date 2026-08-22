@@ -281,6 +281,7 @@ export class BillingService {
 
     // Revalidate coupon and calculate final price at creation time
     const calc = await this.validateAndCalculateCoupon(dto.couponCode, product.price, product.type);
+    const provider = this.resolvePaymentProvider();
 
     // Idempotency key check
     if (idempotencyKey) {
@@ -299,12 +300,27 @@ export class BillingService {
             'Conflito de idempotência: a chave foi utilizada com parâmetros diferentes',
           );
         }
+        let existingPixDetails;
+        if (existingKeyPurchase.paymentMethod === 'PIX' && existingKeyPurchase.providerPaymentId) {
+          try {
+            const currentStatus = await provider.getPaymentStatus?.(existingKeyPurchase.providerPaymentId);
+            if (currentStatus?.pixDetails) {
+              existingPixDetails = {
+                copyPaste: currentStatus.pixDetails.copyPaste,
+                qrCodeBase64: currentStatus.pixDetails.qrCodeBase64,
+                expiresAt: currentStatus.pixDetails.expiresAt,
+                ticketUrl: currentStatus.pixDetails.ticketUrl,
+              };
+            }
+          } catch (_) {}
+        }
         return {
           purchaseId: existingKeyPurchase.id,
           status: existingKeyPurchase.status,
           amount: Number(existingKeyPurchase.finalAmount),
           currency: existingKeyPurchase.currency,
           paymentMethod: existingKeyPurchase.paymentMethod || dto.paymentMethod,
+          pixDetails: existingPixDetails,
           pricing: {
             originalAmount: Number(existingKeyPurchase.originalAmount),
             discountAmount: Number(existingKeyPurchase.discountAmount),
@@ -325,8 +341,6 @@ export class BillingService {
       },
     });
 
-    const provider = this.resolvePaymentProvider();
-
     // Active Charge Prevention: Check if existing purchase has an active pending payment
     if (purchase && purchase.providerPaymentId && provider.getPaymentStatus) {
       try {
@@ -339,6 +353,14 @@ export class BillingService {
               amount: Number(purchase.finalAmount),
               currency: purchase.currency,
               paymentMethod: dto.paymentMethod,
+              pixDetails: currentStatus.pixDetails
+                ? {
+                    copyPaste: currentStatus.pixDetails.copyPaste,
+                    qrCodeBase64: currentStatus.pixDetails.qrCodeBase64,
+                    expiresAt: currentStatus.pixDetails.expiresAt,
+                    ticketUrl: currentStatus.pixDetails.ticketUrl,
+                  }
+                : undefined,
               pricing: {
                 originalAmount: Number(purchase.originalAmount),
                 discountAmount: Number(purchase.discountAmount),
@@ -706,11 +728,32 @@ export class BillingService {
       throw new ForbiddenException('Acesso negado');
     }
 
+    let pixDetails;
+    if (
+      purchase.status === PurchaseStatus.PENDING &&
+      purchase.paymentMethod === 'PIX' &&
+      purchase.providerPaymentId
+    ) {
+      try {
+        const provider = this.resolvePaymentProvider();
+        const currentStatus = await provider.getPaymentStatus?.(purchase.providerPaymentId);
+        if (currentStatus?.pixDetails) {
+          pixDetails = {
+            copyPaste: currentStatus.pixDetails.copyPaste,
+            qrCodeBase64: currentStatus.pixDetails.qrCodeBase64,
+            expiresAt: currentStatus.pixDetails.expiresAt,
+            ticketUrl: currentStatus.pixDetails.ticketUrl,
+          };
+        }
+      } catch (_) {}
+    }
+
     return {
       purchaseId: purchase.id,
       status: purchase.status,
       paidAt: purchase.paidAt,
       premiumUnlocked: purchase.trip?.premiumUnlockedAt != null,
+      pixDetails,
     };
   }
 

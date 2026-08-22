@@ -332,3 +332,20 @@ export class CheckoutResponseDto {
   @ApiPropertyOptional({ type: CheckoutPricingDto })
   pricing?: CheckoutPricingDto;
 }
+
+export class PurchaseStatusResponseDto {
+  @ApiProperty()
+  purchaseId: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiPropertyOptional()
+  paidAt?: Date;
+
+  @ApiProperty()
+  premiumUnlocked: boolean;
+
+  @ApiPropertyOptional({ type: PixDetailsDto })
+  pixDetails?: PixDetailsDto;
+}
