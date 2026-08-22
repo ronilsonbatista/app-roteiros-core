@@ -32,8 +32,13 @@ export class TripsService {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
-        days: { include: { items: true } },
+        days: {
+          orderBy: { dayNumber: 'asc' },
+          include: { items: { orderBy: { order: 'asc' } } },
+        },
         participants: true,
+        createdFromGuestJourneys: true,
+        purchases: true,
       },
     });
 
@@ -55,8 +60,32 @@ export class TripsService {
       throw new ForbiddenException('Acesso negado');
     }
 
-    // Removendo array de participants da resposta caso não queiramos expor sempre
-    const { participants, ...tripData } = trip;
+    // Check if this trip is a paid product trip subject to entitlement gating
+    const isPayableProductTrip =
+      trip.createdFromGuestJourneys.length > 0 || trip.purchases.length > 0;
+    const isLocked = isPayableProductTrip && trip.premiumUnlockedAt == null;
+
+    // Remove internal relations before returning
+    const { participants, createdFromGuestJourneys, purchases, ...tripData } =
+      trip;
+
+    if (isLocked) {
+      // Server-side gating: Only Day 1 items are returned for preview. Days 2+ items are stripped.
+      const gatedDays = tripData.days.map((day, idx) => {
+        if (day.dayNumber === 1 || idx === 0) {
+          return day;
+        }
+        return {
+          ...day,
+          items: [], // Strip items for locked days
+        };
+      });
+      return {
+        ...tripData,
+        days: gatedDays,
+      };
+    }
+
     return tripData;
   }
 
