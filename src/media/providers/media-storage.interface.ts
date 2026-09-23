@@ -5,7 +5,10 @@ export interface UploadResult {
   size: number;
 }
 
-export interface MediaStorageProvider {
-  uploadFile(file: Express.Multer.File, folder?: string): Promise<UploadResult>;
-  deleteFile(url: string): Promise<void>;
+export abstract class MediaStorageProvider {
+  abstract uploadFile(
+    file: Express.Multer.File,
+    folder?: string,
+  ): Promise<UploadResult>;
+  abstract deleteFile(url: string): Promise<void>;
 }

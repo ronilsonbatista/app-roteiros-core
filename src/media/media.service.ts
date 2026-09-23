@@ -5,13 +5,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LocalMediaStorageProvider } from './providers/local-media-storage.provider';
+import { MediaStorageProvider } from './providers/media-storage.interface';
 
 @Injectable()
 export class MediaService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mediaProvider: LocalMediaStorageProvider,
+    private readonly mediaProvider: MediaStorageProvider,
   ) {}
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
