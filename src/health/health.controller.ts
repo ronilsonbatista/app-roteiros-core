@@ -1,6 +1,7 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -11,12 +12,23 @@ export class HealthController {
 
   @Get()
   @ApiOperation({ summary: 'Status de saúde do sistema' })
-  async getHealth() {
+  async getHealth(@Res({ passthrough: true }) res: Response) {
     let dbStatus = 'OK';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch (error) {
+    } catch {
       dbStatus = 'DOWN';
+    }
+
+    const isHealthy = dbStatus === 'OK';
+    if (!isHealthy) {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        status: isHealthy ? 'OK' : 'DOWN',
+      };
     }
 
     const openaiKey = process.env.OPENAI_API_KEY;

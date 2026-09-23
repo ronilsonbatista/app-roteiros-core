@@ -38,16 +38,54 @@ async function bootstrap() {
       logger.error('FATAL: JWT_SECRET fraco ou default detectado em produção!');
       process.exit(1);
     }
-    if (insecureSecrets.includes(process.env.JWT_REFRESH_SECRET || '') || process.env.JWT_REFRESH_SECRET === 'refresh_secret') {
-      logger.error('FATAL: JWT_REFRESH_SECRET fraco ou default detectado em produção!');
+    if (
+      insecureSecrets.includes(process.env.JWT_REFRESH_SECRET || '') ||
+      process.env.JWT_REFRESH_SECRET === 'refresh_secret'
+    ) {
+      logger.error(
+        'FATAL: JWT_REFRESH_SECRET fraco ou default detectado em produção!',
+      );
       process.exit(1);
     }
     if (process.env.BILLING_MOCK_PAYMENTS_ENABLED === 'true') {
-      logger.error('FATAL: BILLING_MOCK_PAYMENTS_ENABLED não pode estar true em produção!');
+      logger.error(
+        'FATAL: BILLING_MOCK_PAYMENTS_ENABLED não pode estar true em produção!',
+      );
       process.exit(1);
     }
     if (!process.env.CORS_ORIGINS || process.env.CORS_ORIGINS === '*') {
-      logger.error('FATAL: CORS_ORIGINS explícito (não-wildcard) é obrigatório em produção!');
+      logger.error(
+        'FATAL: CORS_ORIGINS explícito (não-wildcard) é obrigatório em produção!',
+      );
+      process.exit(1);
+    }
+    if (process.env.MEDIA_STORAGE_PROVIDER === 'local') {
+      logger.error('FATAL: MEDIA_STORAGE_PROVIDER=local é proibido em produção!');
+      process.exit(1);
+    }
+    if (process.env.MEDIA_STORAGE_PROVIDER === 's3') {
+      if (
+        !process.env.S3_BUCKET ||
+        !process.env.S3_ACCESS_KEY_ID ||
+        !process.env.S3_SECRET_ACCESS_KEY
+      ) {
+        logger.error(
+          'FATAL: S3_BUCKET, S3_ACCESS_KEY_ID e S3_SECRET_ACCESS_KEY são obrigatórios quando MEDIA_STORAGE_PROVIDER=s3!',
+        );
+        process.exit(1);
+      }
+    }
+    if (process.env.EMAIL_PROVIDER === 'mock') {
+      logger.error('FATAL: EMAIL_PROVIDER=mock é proibido em produção!');
+      process.exit(1);
+    }
+    if (
+      process.env.EMAIL_PROVIDER === 'resend' &&
+      !process.env.RESEND_API_KEY
+    ) {
+      logger.error(
+        'FATAL: RESEND_API_KEY é obrigatório quando EMAIL_PROVIDER=resend!',
+      );
       process.exit(1);
     }
   }
@@ -101,6 +139,8 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  logger.log(`Application listening on port ${port} (env: ${process.env.NODE_ENV || 'development'})`);
+  logger.log(
+    `Application listening on port ${port} (env: ${process.env.NODE_ENV || 'development'})`,
+  );
 }
 bootstrap();
