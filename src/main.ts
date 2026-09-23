@@ -79,12 +79,17 @@ async function bootstrap() {
       logger.error('FATAL: EMAIL_PROVIDER=mock é proibido em produção!');
       process.exit(1);
     }
-    if (
-      process.env.EMAIL_PROVIDER === 'resend' &&
-      !process.env.RESEND_API_KEY
-    ) {
+    if (!process.env.RESEND_API_KEY) {
+      logger.error('FATAL: RESEND_API_KEY é obrigatório em produção!');
+      process.exit(1);
+    }
+    if (!process.env.EMAIL_FROM) {
+      logger.error('FATAL: EMAIL_FROM é obrigatório em produção!');
+      process.exit(1);
+    }
+    if (process.env.EMAIL_FROM.includes('onboarding@resend.dev')) {
       logger.error(
-        'FATAL: RESEND_API_KEY é obrigatório quando EMAIL_PROVIDER=resend!',
+        'FATAL: EMAIL_FROM não pode usar onboarding@resend.dev em produção!',
       );
       process.exit(1);
     }

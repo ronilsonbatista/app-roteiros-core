@@ -14,6 +14,10 @@ export class MediaService {
     private readonly mediaProvider: MediaStorageProvider,
   ) {}
 
+  async getFile(key: string) {
+    return this.mediaProvider.getFile(key);
+  }
+
   async uploadAvatar(userId: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
 

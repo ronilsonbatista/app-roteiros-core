@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { MediaStorageProvider, UploadResult } from './media-storage.interface';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  MediaStorageProvider,
+  UploadResult,
+  DownloadResult,
+} from './media-storage.interface';
 import * as fs from 'fs';
 import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class LocalMediaStorageProvider implements MediaStorageProvider {
@@ -25,7 +29,7 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     folder?: string,
   ): Promise<UploadResult> {
     const ext = path.extname(file.originalname);
-    const filename = `${uuidv4()}${ext}`;
+    const filename = `${crypto.randomUUID()}${ext}`;
 
     let targetDir = this.uploadDir;
     if (folder) {
@@ -54,8 +58,34 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     };
   }
 
+  async getFile(key: string): Promise<DownloadResult> {
+    const cleanKey = key.replace(/^\//, '');
+    const filePath = path.join(this.uploadDir, cleanKey);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(`Arquivo não encontrado: ${cleanKey}`);
+    }
+
+    const stat = fs.statSync(filePath);
+    const stream = fs.createReadStream(filePath);
+    const ext = path.extname(cleanKey).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+    };
+
+    return {
+      stream,
+      contentType: mimeMap[ext] || 'application/octet-stream',
+      contentLength: stat.size,
+    };
+  }
+
   async deleteFile(url: string): Promise<void> {
-    if (!url.startsWith(this.baseUrl)) return; // Ignora se não for do local storage
+    if (!url.startsWith(this.baseUrl)) return;
 
     try {
       const relativePath = url.replace(`${this.baseUrl}/`, '');

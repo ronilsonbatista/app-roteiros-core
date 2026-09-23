@@ -5,11 +5,21 @@ import { EmailService, SendOtpEmailOptions } from './email.service';
 export class MockEmailService implements EmailService {
   private readonly logger = new Logger(MockEmailService.name);
 
+  constructor() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'FATAL: MockEmailService cannot be instantiated in production!',
+      );
+    }
+  }
+
   async sendOtpEmail(options: SendOtpEmailOptions): Promise<void> {
     const { to, code, expiresInMinutes } = options;
 
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('[MockEmailService] MockEmailService is strictly forbidden in production!');
+      throw new Error(
+        'FATAL: MockEmailService is strictly forbidden in production!',
+      );
     }
 
     this.logger.log(

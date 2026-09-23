@@ -9,8 +9,30 @@ export class ResendEmailService implements EmailService {
   private readonly from: string;
 
   constructor() {
-    this.apiKey = process.env.RESEND_API_KEY || '';
-    this.from = process.env.EMAIL_FROM || '2GO Travel <noreply@2gotravel.app>';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.EMAIL_FROM;
+
+    if (isProduction) {
+      if (!apiKey) {
+        throw new Error('FATAL: RESEND_API_KEY é obrigatório em produção!');
+      }
+      if (!from) {
+        throw new Error(
+          'FATAL: EMAIL_FROM é obrigatório em produção e deve pertencer a um domínio verificado no Resend!',
+        );
+      }
+      if (from.includes('onboarding@resend.dev')) {
+        throw new Error(
+          'FATAL: EMAIL_FROM não pode usar onboarding@resend.dev em produção!',
+        );
+      }
+      this.apiKey = apiKey;
+      this.from = from;
+    } else {
+      this.apiKey = apiKey || '';
+      this.from = from || '2GO Travel <onboarding@resend.dev>';
+    }
   }
 
   async sendOtpEmail(options: SendOtpEmailOptions): Promise<void> {
@@ -21,7 +43,9 @@ export class ResendEmailService implements EmailService {
     }
 
     const isPasswordReset = purpose === 'PASSWORD_RESET';
-    const title = isPasswordReset ? 'Redefinição de Senha' : 'Seu código de acesso';
+    const title = isPasswordReset
+      ? 'Redefinição de Senha'
+      : 'Seu código de acesso';
     const message = isPasswordReset
       ? 'Você solicitou a redefinição de sua senha. Use o código abaixo:'
       : 'Seu código de verificação para acesso ao 2GO é:';
@@ -58,11 +82,15 @@ export class ResendEmailService implements EmailService {
         },
       );
 
-      // NEVER log OTP code in production
-      this.logger.log(`[ResendEmailService] Email sent to [${to}] (id: ${response.data?.id})`);
+      // NEVER log OTP code in production or stdout
+      this.logger.log(
+        `[ResendEmailService] Email sent to [${to}] (id: ${response.data?.id})`,
+      );
     } catch (error: any) {
       const errMsg = error.response?.data?.message || error.message;
-      this.logger.error(`[ResendEmailService] Failed to send email to [${to}]: ${errMsg}`);
+      this.logger.error(
+        `[ResendEmailService] Failed to send email to [${to}]: ${errMsg}`,
+      );
       throw new Error(`Falha no envio de e-mail transacional: ${errMsg}`);
     }
   }

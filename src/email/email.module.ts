@@ -5,23 +5,50 @@ import { ResendEmailService } from './resend-email.service';
 
 @Module({
   providers: [
-    MockEmailService,
-    ResendEmailService,
+    {
+      provide: MockEmailService,
+      useFactory: () => {
+        if (process.env.NODE_ENV === 'production') {
+          return null as any;
+        }
+        return new MockEmailService();
+      },
+    },
+    {
+      provide: ResendEmailService,
+      useFactory: () => {
+        if (
+          process.env.NODE_ENV === 'production' &&
+          (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM)
+        ) {
+          return null as any;
+        }
+        return new ResendEmailService();
+      },
+    },
     {
       provide: EmailService,
       useFactory: (mock: MockEmailService, resend: ResendEmailService) => {
-        const provider = process.env.EMAIL_PROVIDER;
         const isProduction = process.env.NODE_ENV === 'production';
+        const provider = process.env.EMAIL_PROVIDER;
 
-        if (provider === 'resend' || (isProduction && provider !== 'mock')) {
+        if (isProduction) {
+          if (provider === 'mock') {
+            throw new Error('FATAL: EMAIL_PROVIDER=mock é proibido em produção!');
+          }
+          if (!resend) {
+            throw new Error(
+              'FATAL: RESEND_API_KEY e EMAIL_FROM são obrigatórios em produção!',
+            );
+          }
           return resend;
         }
 
-        if (isProduction && provider === 'mock') {
-          throw new Error('FATAL: MockEmailService is forbidden in production!');
+        if (provider === 'resend') {
+          return resend || new ResendEmailService();
         }
 
-        return mock;
+        return mock || new MockEmailService();
       },
       inject: [MockEmailService, ResendEmailService],
     },

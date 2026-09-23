@@ -1,6 +1,10 @@
-# 2GO — Production Readiness & Infrastructure Tracking (Phase D2)
+# 2GO — Production Readiness & Infrastructure Audit (Fase D2)
 
-Documento mestre de rastreamento do estado técnico, decisões de infraestrutura e prontidão pré-lançamento de Produção para o ecossistema 2GO.
+**Data da Auditoria:** 23/09/2026  
+**Status do Projeto:** Fase D2 — Preparação de Infraestrutura de Produção (Pré-Credenciais Externas Concluída)  
+**Ambientes:**
+- **Staging (Certificado D1.2):** 100% Funcional e Preservado
+- **Production (D2):** Infraestrutura Provisionada, Hardening Aplicado, Isolamento Garantido
 
 ---
 
@@ -9,129 +13,155 @@ Documento mestre de rastreamento do estado técnico, decisões de infraestrutura
 | Repositório | Path Local | Branch | HEAD Verificado | Status |
 |---|---|---|---|---|
 | **Admin** | `~/.gemini/antigravity/scratch/app-roteiros-admin` | `main` | `981226c` | Clean, certificado |
-| **Core / API** | `~/.gemini/antigravity/scratch/approteiros-api` | `main` | `5a41323` | Clean, migrado, D2 providers implementados e testados (15 test suites, 71 tests PASS) |
-| **Mobile** | `~/Documents/2go-mobile` | `main` | `3c9923f` | READ-ONLY durante D2 |
+| **Core / API** | `~/.gemini/antigravity/scratch/approteiros-api` | `main` | `main` | Clean, compilando, 16 test suites / 80 testes PASS |
+| **Mobile** | `~/Documents/2go-mobile` | `main` | `3c9923f` | READ-ONLY durante D2 (não modificado) |
 
 ---
 
-## 2. Ambiente STAGING (Certificado D1.2)
+## 2. Auditoria Técnica Pré-Credenciais (D2 Pre-Credentials Review)
+
+### 2.1 Railway S3 Media — Prova Real de File Serving
+- **Privacidade do Bucket:** Confirmada. Os buckets Railway Storage (Tigris) são privados por padrão (acesso direto via URL estática retorna HTTP 403 Forbidden).
+- **Estratégia de Disponibilização Adotada:** **BACKEND_PROXY** (`GET /media/file/:folder/:filename` e `GET /media/file/:filename`, com fallback transparente em `GET /uploads/*`).
+  - A API autentica diretamente no bucket via AWS SDK v3 (`GetObjectCommand`) e faz stream do arquivo com headers corretos (`Content-Type`, `Content-Length`, `Cache-Control: public, max-age=31536000, immutable`).
+  - URLs persistidas no banco e retornadas nos endpoints de upload: `https://core-api-production-e849.up.railway.app/media/file/<folder>/<uuid>.<ext>`.
+  - Consumidores (Mobile Expo `<Image />` e Admin Web `<img />`) recebem URLs públicas e duráveis sem necessidade de renovação contínua de presigned URLs.
+- **Teste de Fumaça Real em Produção (Smoke Test):**
+  - Objeto de teste real enviado para o bucket de produção `uploads-sn0hd2utrwu9a1l0a` via SDK.
+  - Download realizado pelo mecanismo exato da aplicação: HTTP 200 OK.
+  - Verificação de Content-Type: `text/plain; charset=utf-8` (correspondência exata).
+  - Verificação de Integridade de Conteúdo: correspondência exata byte a byte.
+  - Acesso direto sem credenciais testado: HTTP 403 Forbidden confirmado.
+  - Objeto de teste deletado do bucket e confirmação de remoção limpa (`NoSuchKey` / 404).
+- **Veredito de Mídia:**
+  - `MEDIA_UPLOAD_REAL = PASS`
+  - `MEDIA_READ_REAL = PASS`
+  - `MEDIA_PUBLIC_BUCKET_REQUIRED = NO`
+  - `MEDIA_SERVING_STRATEGY = BACKEND_PROXY`
+  - `MEDIA_PRODUCTION_BLOCKER = NO`
+
+### 2.2 Resend Email Fail-Closed em Produção
+- **Políticas em `NODE_ENV=production`:**
+  - `RESEND_API_KEY` obrigatório: Ausência aborta o bootstrap da API (`process.exit(1)`) e rejeita instanciação.
+  - `EMAIL_FROM` obrigatório: Ausência aborta o bootstrap da API e rejeita instanciação.
+  - Remetente de desenvolvimento (`onboarding@resend.dev`) é **estritamente rejeitado** em produção.
+  - `MockEmailService` não pode ser instanciado em produção (lança exceção fatal imediata).
+  - `EmailModule` rejeita resolução de mock em produção.
+  - Código OTP **nunca é registrado em logs** (`Logger` ou `stdout`): testes unitários com spy confirmam que o código gerado não vaza.
+- **Veredito de E-mail:**
+  - `EMAIL_PRODUCTION_FAIL_CLOSED = PASS`
+  - `EMAIL_FROM_REQUIRED_PRODUCTION = YES`
+  - `MOCK_EMAIL_PRODUCTION_IMPOSSIBLE = YES`
+  - `OTP_LOG_PRODUCTION_IMPOSSIBLE = YES`
+
+### 2.3 Ciclo de Vida do Secret de Bootstrap do Admin
+- `SEED_ADMIN_PASSWORD` é tratado como um **segredo temporário de bootstrap operacional**, não uma configuração de runtime permanente.
+- **Fluxo do Ciclo de Vida:**
+  1. Configurar credenciais temporárias de bootstrap nas variáveis da Railway (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`).
+  2. Executar bootstrap explícito do banco (`npm run prisma:seed` ou `railway run -- npx ts-node prisma/seed.ts`).
+  3. Verificar criação do usuário admin e persistência do `passwordHash` (bcrypt salt rounds = 10) no PostgreSQL.
+  4. **Remover imediatamente `SEED_ADMIN_PASSWORD`** das variáveis de ambiente da Railway.
+  5. Remover `SEED_ADMIN_EMAIL` se não for mais necessário operacionalmente.
+  6. Reiniciar o serviço. O login do Admin continua operando normalmente, pois a autenticação valida contra o hash no PostgreSQL.
+- **Garantias de Segurança:**
+  - Senha nunca é registrada em logs ou salva em texto puro.
+  - Seed é idempotente: se o e-mail do admin já existir, o seed não altera o usuário nem redefine a senha.
+  - Inexistência de qualquer endpoint público de criação de admin.
+
+### 2.4 Preço Comercial do Produto (USER GATE)
+- O valor de staging (`R$ 29,90`) **não é assumido como autoritativo para Produção**.
+- No seed de produção, `ITINERARY_FULL_ACCESS` não é criado a menos que a variável `SEED_PRODUCT_PRICE` seja explicitamente informada pelo proprietário.
+- Permanece como **USER GATE** comercial.
+
+### 2.5 PITR / Runbook de Recuperação (PostgreSQL Produção)
+- **Status do Archiver:** ATIVO e SAUDÁVEL.
+  - `pgbackrest-watcher` em execução no container Postgres da Railway.
+  - WAL archiver enviando arquivos continuamente para o bucket `postgres-pitr-hvunycxjzqi` com 0 falhas (`failed=0`, `lag=0`, `gap_state=clear`).
+  - Base backup inicial concluído com sucesso em `2026-09-23 21:58:53 UTC` (`last_full=1790200733`).
+- **Janela de Retenção:** Padrão Railway pgbackrest (7 dias).
+- **Modelo de Custo:** Armazenamento em Object Storage Tigris a ~$0.02/GB/mês (< $0.05/mês no volume inicial de 133MB).
+- **Procedimento de Restauração:**
+  1. **Dashboard Railway:** Projeto `2GO PRODUCTION` -> Serviço `Postgres` -> Backups -> Restaurar para ponto no tempo.
+  2. **Dump Lógico:** Backup lógico via TCP proxy:
+     ```bash
+     pg_dump "postgresql://postgres:<PASSWORD>@sakura.proxy.rlwy.net:33701/railway?sslmode=require" -Fc > prod_backup_$(date +%Y%m%d).dump
+     ```
+- **Veredito PITR:**
+  - `PITR_ENABLED = SIM`
+  - `PITR_HEALTHY = SIM`
+  - `BASE_BACKUP_AVAILABLE = SIM`
+  - `RESTORE_RUNBOOK_DOCUMENTED = SIM`
+
+---
+
+## 3. Ambiente STAGING (Certificado D1.2)
 
 - **Railway Project:** `2GO STAGING` (ID: `9e7f7c87-b737-4da9-8c98-b44a80b80914`)
 - **Public Core URL:** `https://core-api-production-50ce.up.railway.app`
 - **Swagger Staging:** `https://core-api-production-50ce.up.railway.app/api`
 - **Health Staging:** `https://core-api-production-50ce.up.railway.app/health`
-- **Mercado Pago Webhook (TEST):** `https://core-api-production-50ce.up.railway.app/webhooks/mercadopago`
 - **Admin Staging:** `https://app-roteiros-admin.vercel.app` (Vercel, Team `2go`)
-- **Database:** PostgreSQL 16 no Railway (19 migrações Prisma aplicadas)
-- **Status Certificação D1.2:** APROVADO (Zero blockers abertos em Staging)
+- **Status Certificação D1.2:** APROVADO e 100% PRESERVADO.
 
 ---
 
-## 3. Ambiente PRODUCTION (Infraestrutura D2 Provisionada)
+## 4. Ambiente PRODUCTION (Infraestrutura Provisionada)
 
-- **Railway Project:** `2GO PRODUCTION`
-- **Railway Project ID:** `888a5674-29fe-4630-827f-b535d5e4effa`
+- **Railway Project:** `2GO PRODUCTION` (`888a5674-29fe-4630-827f-b535d5e4effa`)
 - **Railway Environment:** `production` (`9145bf6b-a341-4571-9e85-278b41c1a316`)
 - **Production PostgreSQL:**
   - Service ID: `f1049abf-e5d7-495c-94d6-07783fc64fd1`
-  - Isolamento: 100% isolado (zero dados de staging, 0 users, 0 trips, 0 purchases)
-  - Migrações: 19 migrações aplicadas via `prisma migrate deploy`
-  - Backups Contínuos: PITR (Point-In-Time Recovery) ATIVADO (`bucketWired: true`)
-- **Production Media Storage (S3-compatible Object Storage):**
-  - Bucket ID: `8bc6694e-c8da-46d8-a4ea-f2acfae26ced`
-  - Bucket Name: `uploads-sn0hd2utrwu9a1l0a`
+  - Isolamento: 100% isolado (0 rows em todas as tabelas)
+  - Migrações: 19 migrações Prisma aplicadas
+  - Backups: PITR ativo e saudável (`last_full` disponível, WAL push contínuo)
+  - TCP Proxy: `sakura.proxy.rlwy.net:33701`
+- **Production Media Storage (S3 / Tigris):**
+  - Bucket: `uploads-sn0hd2utrwu9a1l0a` (`8bc6694e-c8da-46d8-a4ea-f2acfae26ced`)
   - Endpoint: `https://t3.storageapi.dev`
-  - Region: `auto`
-  - Status: Conectado e configurado no `core-api` (não-efêmero)
+  - Credenciais: configuradas de forma isolada na Railway
+  - File Serving: Backend Media Proxy comprovado
 - **Production Core Service:**
   - Service ID: `aefac16c-469c-4182-a128-1b3f4ddc6b9d`
-  - Public Core URL: `https://core-api-production-e849.up.railway.app`
-  - Webhook URL de Produção: `https://core-api-production-e849.up.railway.app/webhooks/mercadopago`
-- **Production Admin Project (Vercel):**
+  - Domain: `https://core-api-production-e849.up.railway.app`
+  - Webhook URL: `https://core-api-production-e849.up.railway.app/webhooks/mercadopago`
+  - Media Proxy: `https://core-api-production-e849.up.railway.app/media/file`
+- **Production Admin (Vercel):**
   - Project ID: `prj_lrgdpIdhcM6O67Qy8N0QPBh3BxzA`
-  - Project Name: `app-roteiros-admin-prod` (Team `2go`)
-  - Public Admin URL: `https://app-roteiros-admin-prod.vercel.app`
-  - `NEXT_PUBLIC_API_URL`: `https://core-api-production-e849.up.railway.app`
-  - Deployment Protection / SSO: Desativado para acesso operacional direto
+  - Domain: `https://app-roteiros-admin-prod.vercel.app`
+  - API Target: `https://core-api-production-e849.up.railway.app`
 
 ---
 
-## 4. Runbook de Backup & Restore (PostgreSQL Produção)
+## 5. Matriz de Variáveis de Ambiente de Produção
 
-### 4.1 Estratégia de Backup
-- **Mecanismo:** Point-in-Time Recovery (PITR) contínuo nativo da Railway integrado com bucket de armazenamento de objetos dedicado.
-- **Frequência:** Contínua (WAL archiving) + snapshots periódicos.
-- **Retenção:** Padrão gerenciado pela plataforma (7 dias).
-
-### 4.2 Procedimento de Restore (PITR)
-Em caso de corrupção ou necessidade de restauração para um ponto específico no tempo:
-```bash
-# 1. Obter status do PITR
-railway postgres pitr status -s f1049abf-e5d7-495c-94d6-07783fc64fd1
-
-# 2. Restaurar para timestamp específico
-railway postgres pitr restore -s f1049abf-e5d7-495c-94d6-07783fc64fd1 --time "<TIMESTAMP_ISO_8601>"
-```
-
-### 4.3 Procedimento de Dump Lógico Manual
-```bash
-# Exportar dump lógico do banco de produção (via TCP proxy)
-pg_dump "postgresql://${USER}:${PASSWORD}@${TCP_PROXY_DOMAIN}:${TCP_PROXY_PORT}/${DB}?sslmode=require" -Fc > backup_prod_$(date +%Y%m%d_%H%M%S).dump
-
-# Restaurar dump lógico
-pg_restore -d "postgresql://${USER}:${PASSWORD}@${TCP_PROXY_DOMAIN}:${TCP_PROXY_PORT}/${DB}?sslmode=require" --clean backup_file.dump
-```
-
----
-
-## 5. Matriz de Variáveis de Ambiente (Produção vs Staging)
-
-| Variável | Staging | Production | Categoria | Status em Produção |
-|---|---|---|---|---|
-| `NODE_ENV` | `staging` | `production` | SAME_NON_SECRET | Configurado |
-| `PORT` | Dinâmico | Dinâmico | SAME_NON_SECRET | Pronto |
-| `DATABASE_URL` | Staging Postgres | Production Postgres (`${{Postgres.DATABASE_URL}}`) | NEW_PRODUCTION_SECRET | Configurado & Migrado (19 migrações) |
-| `JWT_SECRET` | Staging secret | Novo secret criptográfico (64 bytes hex) | NEW_PRODUCTION_SECRET | Configurado isolado |
-| `JWT_REFRESH_SECRET` | Staging secret | Novo secret criptográfico (64 bytes hex) | NEW_PRODUCTION_SECRET | Configurado isolado |
-| `JWT_EXPIRES_IN` | `15m` | `15m` | SAME_NON_SECRET | Configurado |
-| `JWT_REFRESH_EXPIRES_IN` | `7d` | `7d` | SAME_NON_SECRET | Configurado |
-| `CORS_ORIGINS` | Staging Admin, local | `https://app-roteiros-admin-prod.vercel.app` | DIFFERENT_NON_SECRET | Configurado restrito |
-| `SWAGGER_ENABLED` | `true` | `false` | DIFFERENT_NON_SECRET | Configurado (desabilitado) |
-| `BILLING_MOCK_PAYMENTS_ENABLED` | `false` | `false` | SAME_NON_SECRET | Configurado |
-| `PAYMENT_PROVIDER` | `mercadopago` | `mercadopago` | SAME_NON_SECRET | Configurado |
-| `MEDIA_STORAGE_PROVIDER` | `local` | `s3` | DIFFERENT_NON_SECRET | Configurado |
-| `S3_ENDPOINT` | N/A | `https://t3.storageapi.dev` | DIFFERENT_NON_SECRET | Configurado |
-| `S3_REGION` | N/A | `auto` | DIFFERENT_NON_SECRET | Configurado |
-| `S3_BUCKET` | N/A | `uploads-sn0hd2utrwu9a1l0a` | DIFFERENT_NON_SECRET | Configurado |
-| `S3_ACCESS_KEY_ID` | N/A | S3 Access Key | NEW_PRODUCTION_SECRET | Configurado |
-| `S3_SECRET_ACCESS_KEY` | N/A | S3 Secret Key | NEW_PRODUCTION_SECRET | Configurado |
-| `MEDIA_BASE_URL` | Staging /uploads | `https://t3.storageapi.dev/uploads-sn0hd2utrwu9a1l0a` | DIFFERENT_NON_SECRET | Configurado |
-| `EMAIL_PROVIDER` | `mock` | `resend` | DIFFERENT_NON_SECRET | Configurado |
-| `RESEND_API_KEY` | N/A | Prod API Key | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `EMAIL_FROM` | N/A | `2GO Travel <noreply@2gotravel.app>` | DIFFERENT_NON_SECRET | Padrão no código |
-| `OPENAI_API_KEY` | Staging Key | Prod Key | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `OPENAI_MODEL` | `gpt-4o-mini` | `gpt-4o-mini` | SAME_NON_SECRET | Configurado |
-| `GOOGLE_MAPS_API_KEY` | Staging Key | Prod Key | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `MERCADO_PAGO_ACCESS_TOKEN` | Staging TEST Token | Prod Token | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `MERCADO_PAGO_WEBHOOK_SECRET` | Staging Secret | Prod Webhook Secret | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `SEED_ADMIN_EMAIL` | Staging Email | Prod Admin Email | NEW_PRODUCTION_SECRET | **USER GATE** |
-| `SEED_ADMIN_PASSWORD` | Staging Password | Prod Admin Password | NEW_PRODUCTION_SECRET | **USER GATE** |
-| Preço `ITINERARY_FULL_ACCESS` | R$ 29,90 | A confirmar (se R$ 29,90 ou outro) | COMMERCIAL_PRICING | **USER GATE** |
-
----
-
-## 6. Veredito Parcial D2
-
-- `PRODUCTION_PROJECT_SEPARATE` = SIM (`888a5674-29fe-4630-827f-b535d5e4effa`)
-- `PRODUCTION_DB_SEPARATE` = SIM (`f1049abf-e5d7-495c-94d6-07783fc64fd1`)
-- `MIGRATIONS_COMPLETE` = SIM (19 de 19 aplicadas)
-- `STAGING_DATA_IN_PRODUCTION` = NÃO (Zero registros em todas as tabelas)
-- `STAGING_SECRETS_REUSED` = NÃO (Novos JWTs 64-byte hex e novas credenciais de storage)
-- `MOCK_EMAIL_ACTIVE_PRODUCTION` = NÃO (`ResendEmailService` implementado, Mock fail-closed)
-- `OTP_LOGGED_PRODUCTION` = NÃO (MockEmailService bloqueado em prod; Resend não loga código)
-- `EPHEMERAL_MEDIA_PRODUCTION` = NÃO (Bucket S3 dedicado provisionado e configurado)
-- `SWAGGER_PUBLIC_PRODUCTION` = NÃO (`SWAGGER_ENABLED=false`)
-- `CORS_WILDCARD_PRODUCTION` = NÃO (Restrito a `https://app-roteiros-admin-prod.vercel.app`)
-- `PRODUCTION_ADMIN_WORKING` = SIM (`https://app-roteiros-admin-prod.vercel.app` ativo)
-- `BACKUP_STRATEGY_EXISTS` = SIM (PITR contínuo ativo + runbook documentado)
-- `RELEASE_BLOCKERS_OPEN` = 5 (Credenciais externas de Produção: OpenAI, Google Places, Mercado Pago, Resend, Preço/Admin Seed)
+| Variável | Categoria | Configurado em Produção | Pendente / User Gate |
+|---|---|---|---|
+| `NODE_ENV` | Non-Secret | `production` | Não |
+| `PORT` | Non-Secret | Dinâmico Railway | Não |
+| `DATABASE_URL` | Secret | `${{Postgres.DATABASE_URL}}` | Não |
+| `JWT_SECRET` | Secret | 64-byte hex isolado | Não |
+| `JWT_REFRESH_SECRET` | Secret | 64-byte hex isolado | Não |
+| `JWT_EXPIRES_IN` | Non-Secret | `15m` | Não |
+| `JWT_REFRESH_EXPIRES_IN` | Non-Secret | `7d` | Não |
+| `CORS_ORIGINS` | Non-Secret | `https://app-roteiros-admin-prod.vercel.app` | Não |
+| `SWAGGER_ENABLED` | Non-Secret | `false` | Não |
+| `BILLING_MOCK_PAYMENTS_ENABLED` | Non-Secret | `false` | Não |
+| `PAYMENT_PROVIDER` | Non-Secret | `mercadopago` | Não |
+| `MEDIA_STORAGE_PROVIDER` | Non-Secret | `s3` | Não |
+| `MEDIA_BASE_URL` | Non-Secret | `https://core-api-production-e849.up.railway.app/media/file` | Não |
+| `S3_ENDPOINT` | Non-Secret | `https://t3.storageapi.dev` | Não |
+| `S3_REGION` | Non-Secret | `auto` | Não |
+| `S3_BUCKET` | Non-Secret | `uploads-sn0hd2utrwu9a1l0a` | Não |
+| `S3_ACCESS_KEY_ID` | Secret | Configurado no serviço | Não |
+| `S3_SECRET_ACCESS_KEY` | Secret | Configurado no serviço | Não |
+| `EMAIL_PROVIDER` | Non-Secret | `resend` | Não |
+| `OPENAI_MODEL` | Non-Secret | `gpt-4o-mini` | Não |
+| `RESEND_API_KEY` | Secret | Não | **SIM (USER GATE)** |
+| `EMAIL_FROM` | Non-Secret / Config | Não | **SIM (USER GATE)** |
+| `OPENAI_API_KEY` | Secret | Não | **SIM (USER GATE)** |
+| `GOOGLE_MAPS_API_KEY` | Secret | Não | **SIM (USER GATE)** |
+| `MERCADO_PAGO_ACCESS_TOKEN` | Secret | Não | **SIM (USER GATE)** |
+| `MERCADO_PAGO_WEBHOOK_SECRET` | Secret | Não | **SIM (USER GATE)** |
+| `SEED_ADMIN_EMAIL` | Bootstrap | Não | **SIM (USER GATE temporário)** |
+| `SEED_ADMIN_PASSWORD` | Bootstrap | Não | **SIM (USER GATE temporário)** |
+| `SEED_PRODUCT_PRICE` | Comercial | Não | **SIM (USER GATE confirmação)** |

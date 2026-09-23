@@ -1,8 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { MediaStorageProvider, UploadResult } from './media-storage.interface';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
+import {
+  MediaStorageProvider,
+  UploadResult,
+  DownloadResult,
+} from './media-storage.interface';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 @Injectable()
 export class S3MediaStorageProvider implements MediaStorageProvider {
@@ -57,9 +67,9 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
 
     const url = this.baseUrl
       ? `${this.baseUrl}/${key}`
-      : `https://${this.bucket}.s3.amazonaws.com/${key}`;
+      : `/media/file/${key}`;
 
-    this.logger.log(`File uploaded to S3: ${url}`);
+    this.logger.log(`File uploaded to S3: ${url} (key: ${key})`);
 
     return {
       url,
@@ -69,14 +79,43 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
     };
   }
 
-  async deleteFile(url: string): Promise<void> {
+  async getFile(key: string): Promise<DownloadResult> {
+    const cleanKey = key.replace(/^\//, '');
     try {
-      let key = url;
-      if (this.baseUrl && url.startsWith(this.baseUrl)) {
-        key = url.replace(`${this.baseUrl}/`, '');
-      } else {
-        const urlObj = new URL(url);
-        key = urlObj.pathname.replace(/^\//, '');
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: cleanKey,
+      });
+
+      const response = await this.s3Client.send(command);
+      if (!response.Body) {
+        throw new NotFoundException(`Arquivo não encontrado no storage: ${cleanKey}`);
+      }
+
+      return {
+        stream: response.Body as unknown as Readable,
+        contentType: response.ContentType || 'application/octet-stream',
+        contentLength: response.ContentLength,
+      };
+    } catch (err: any) {
+      if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+        throw new NotFoundException(`Arquivo não encontrado: ${cleanKey}`);
+      }
+      this.logger.error(`Error reading file from S3: ${cleanKey}`, err);
+      throw err;
+    }
+  }
+
+  async deleteFile(urlOrKey: string): Promise<void> {
+    try {
+      let key = urlOrKey;
+      if (this.baseUrl && urlOrKey.startsWith(this.baseUrl)) {
+        key = urlOrKey.replace(`${this.baseUrl}/`, '');
+      } else if (urlOrKey.startsWith('/media/file/')) {
+        key = urlOrKey.replace('/media/file/', '');
+      } else if (urlOrKey.startsWith('http')) {
+        const urlObj = new URL(urlOrKey);
+        key = urlObj.pathname.replace(/^\/media\/file\//, '').replace(/^\//, '');
       }
 
       const command = new DeleteObjectCommand({
@@ -87,7 +126,7 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
       await this.s3Client.send(command);
       this.logger.log(`File deleted from S3: ${key}`);
     } catch (error: any) {
-      this.logger.error(`Error deleting file from S3: ${url}`, error);
+      this.logger.error(`Error deleting file from S3: ${urlOrKey}`, error);
     }
   }
 }

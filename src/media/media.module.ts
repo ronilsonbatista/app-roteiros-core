@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
+import { MediaPublicController } from './media-public.controller';
 import { LocalMediaStorageProvider } from './providers/local-media-storage.provider';
 import { S3MediaStorageProvider } from './providers/s3-media-storage.provider';
 import { MediaStorageProvider } from './providers/media-storage.interface';
 
 @Module({
-  controllers: [MediaController],
+  controllers: [MediaController, MediaPublicController],
   providers: [
     MediaService,
     LocalMediaStorageProvider,
