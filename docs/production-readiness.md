@@ -156,12 +156,60 @@
 | `S3_SECRET_ACCESS_KEY` | Secret | Configurado no serviço | Não |
 | `EMAIL_PROVIDER` | Non-Secret | `resend` | Não |
 | `OPENAI_MODEL` | Non-Secret | `gpt-4o-mini` | Não |
-| `RESEND_API_KEY` | Secret | Não | **SIM (USER GATE)** |
-| `EMAIL_FROM` | Non-Secret / Config | Não | **SIM (USER GATE)** |
+| `RESEND_API_KEY` | Secret | Sim (Restrito envio) | Não |
+| `EMAIL_FROM` | Non-Secret / Config | `2GO <administrativo@2goroteiros.com>` | Não |
 | `OPENAI_API_KEY` | Secret | Não | **SIM (USER GATE)** |
 | `GOOGLE_MAPS_API_KEY` | Secret | Não | **SIM (USER GATE)** |
 | `MERCADO_PAGO_ACCESS_TOKEN` | Secret | Não | **SIM (USER GATE)** |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | Secret | Não | **SIM (USER GATE)** |
-| `SEED_ADMIN_EMAIL` | Bootstrap | Não | **SIM (USER GATE temporário)** |
-| `SEED_ADMIN_PASSWORD` | Bootstrap | Não | **SIM (USER GATE temporário)** |
+| `SEED_ADMIN_EMAIL` | Bootstrap | Executado e Removido | Não |
+| `SEED_ADMIN_PASSWORD` | Bootstrap | Executado e Removido | Não |
 | `SEED_PRODUCT_PRICE` | Comercial | Não | **SIM (USER GATE confirmação)** |
+
+---
+
+## 6. Auditoria de Fechamento Fase D2 (Production Providers & Certification)
+
+Data da Auditoria: 24/09/2026
+
+### 6.1 Status dos Provedores e Gates de Produção
+- **OpenAI:**
+  - `OPENAI_API_KEY`: **ABSENT**
+  - Modelo configurado: `OPENAI_MODEL=gpt-4o-mini`
+  - Veredito: `OPENAI_PROD_CONFIGURED = NO`, `OPENAI_PRODUCTION = FAIL` (pendente chave de produção).
+- **Google Places:**
+  - `GOOGLE_MAPS_API_KEY`: **ABSENT**
+  - Veredito: `GOOGLE_PLACES_PROD_CONFIGURED = NO`, `GOOGLE_PLACES_PRODUCTION = FAIL` (pendente chave de produção).
+  - Restrição de chaves: `PROVIDER_DASHBOARD_REVIEW_REQUIRED` (GCP Console).
+- **Mercado Pago:**
+  - `MERCADO_PAGO_ACCESS_TOKEN`: **ABSENT**
+  - `MERCADO_PAGO_WEBHOOK_SECRET`: **ABSENT**
+  - `PAYMENT_PROVIDER`: `mercadopago` (Configurado)
+  - `BILLING_MOCK_PAYMENTS_ENABLED`: `false` (Mocks bloqueados)
+  - Endpoint Webhook Produção: `https://core-api-production-e849.up.railway.app/webhooks/mercadopago` (Ativo e validado)
+  - Rejeição de Assinatura Inválida / Ausente: **PASS** (HTTP 403 Forbidden fail-closed verificado)
+  - Veredito: `MERCADO_PAGO_PRODUCTION_CONFIGURED = NO`, `MERCADO_PAGO_REAL_CHARGE_EXECUTED = NO`, `MERCADO_PAGO_WEBHOOK_SECURITY = PASS`.
+- **Preço de Produto (USER GATE):**
+  - `SEED_PRODUCT_PRICE`: **ABSENT**
+  - Produto: `ITINERARY_FULL_ACCESS` (`Acesso Completo ao Roteiro`)
+  - Veredito: `PRODUCT_PRODUCTION_SEEDED = NO` (aguardando valor oficial do operador).
+- **Resend Email:**
+  - `RESEND_API_KEY`: Configurado na Railway (Restrito a envio de emails).
+  - `EMAIL_FROM`: `2GO <administrativo@2goroteiros.com>`.
+  - Teste de Envio Transacional Real: HTTP 403 retornado pelo Resend informando que o domínio `2goroteiros.com` ainda não concluiu a verificação DNS.
+  - Veredito: `RESEND_DOMAIN_VERIFIED = NO`, `RESEND_REAL_DELIVERY = FAIL` (aguarda propagação/validação DNS no dashboard do Resend).
+
+### 6.2 Integridade e Regressão de Produção
+- **PostgreSQL PITR:** Saudável e ativo (`last_full` disponível, 0 falhas, 0 lag).
+- **Media Serving:** Proxy `GET /media/file/:filename` ativo e respondendo conforme esperado.
+- **Health Check:** `GET /health` -> `{"status":"OK"}` (Produção minimalista).
+- **Swagger:** `GET /api` -> 404 Not Found (Desativado em produção).
+- **CORS:** Restrito à origem de produção `https://app-roteiros-admin-prod.vercel.app`, rejeitando origens externas e sem wildcard.
+- **Banco de Produção:**
+  - Usuários Admin: 1 (`administrativo@2goroteiros.com`)
+  - Usuários Finais: 0
+  - Viagens: 0
+  - Compras: 0
+  - Webhook Events: 0
+  - Contaminação de Staging: 0
+- **Staging Regression:** Totalmente preservado (`https://core-api-production-50ce.up.railway.app/health` OK).
