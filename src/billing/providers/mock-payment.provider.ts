@@ -12,10 +12,15 @@ export class MockPaymentProvider implements PaymentProvider {
 
   public isMockPaymentEnabled(): boolean {
     const env = (process.env.NODE_ENV || 'development').toLowerCase();
-    if (env === 'production' || env === 'staging') {
+    // Never allow mock payments in production.
+    if (env === 'production') {
       return false;
     }
     const flag = (process.env.BILLING_MOCK_PAYMENTS_ENABLED || '').toLowerCase();
+    // Staging: explicit opt-in only (safe TEST/mock confirmation path).
+    if (env === 'staging') {
+      return flag === 'true';
+    }
     if (env === 'test') {
       return flag !== 'false';
     }

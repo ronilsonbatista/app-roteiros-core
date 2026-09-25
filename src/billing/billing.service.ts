@@ -43,10 +43,15 @@ export class BillingService {
 
   public isMockPaymentEnabled(): boolean {
     const env = (process.env.NODE_ENV || 'development').toLowerCase();
-    if (env === 'production' || env === 'staging') {
+    // Never allow mock payments in production.
+    if (env === 'production') {
       return false;
     }
     const flag = (process.env.BILLING_MOCK_PAYMENTS_ENABLED || '').toLowerCase();
+    // Staging: explicit opt-in only (safe TEST/mock confirmation path).
+    if (env === 'staging') {
+      return flag === 'true';
+    }
     if (env === 'test') {
       return flag !== 'false';
     }
@@ -345,6 +350,27 @@ export class BillingService {
     if (purchase && purchase.providerPaymentId && provider.getPaymentStatus) {
       try {
         const currentStatus = await provider.getPaymentStatus(purchase.providerPaymentId);
+        if (currentStatus.status === 'PAID') {
+          const paid = await this.confirmPaidPurchase(
+            purchase.id,
+            currentStatus.providerPaymentId || purchase.providerPaymentId,
+            (process.env.PAYMENT_PROVIDER || 'MERCADOPAGO').toUpperCase(),
+            purchase.paymentMethod || dto.paymentMethod,
+          );
+          return {
+            purchaseId: paid.id,
+            status: paid.status,
+            amount: Number(paid.finalAmount),
+            currency: paid.currency,
+            paymentMethod: paid.paymentMethod || dto.paymentMethod,
+            pricing: {
+              originalAmount: Number(paid.originalAmount),
+              discountAmount: Number(paid.discountAmount),
+              finalAmount: Number(paid.finalAmount),
+              currency: paid.currency,
+            },
+          };
+        }
         if (currentStatus.status === 'PENDING') {
           if (dto.paymentMethod === purchase.paymentMethod) {
             return {
@@ -731,13 +757,35 @@ export class BillingService {
     let pixDetails;
     if (
       purchase.status === PurchaseStatus.PENDING &&
-      purchase.paymentMethod === 'PIX' &&
       purchase.providerPaymentId
     ) {
       try {
         const provider = this.resolvePaymentProvider();
         const currentStatus = await provider.getPaymentStatus?.(purchase.providerPaymentId);
-        if (currentStatus?.pixDetails) {
+
+        // Reconcile when the provider reports PAID (TEST-MOCK / sandbox approval / webhook lag).
+        if (currentStatus?.status === 'PAID') {
+          await this.confirmPaidPurchase(
+            purchaseId,
+            currentStatus.providerPaymentId || purchase.providerPaymentId,
+            (process.env.PAYMENT_PROVIDER || 'MERCADOPAGO').toUpperCase(),
+            purchase.paymentMethod || 'PIX',
+          );
+          const refreshed = await this.prisma.purchase.findUnique({
+            where: { id: purchaseId },
+            include: { trip: { select: { id: true, premiumUnlockedAt: true } } },
+          });
+          if (!refreshed) throw new NotFoundException('Compra não encontrada');
+          return {
+            purchaseId: refreshed.id,
+            status: refreshed.status,
+            paidAt: refreshed.paidAt,
+            premiumUnlocked: refreshed.trip?.premiumUnlockedAt != null,
+            pixDetails: undefined,
+          };
+        }
+
+        if (purchase.paymentMethod === 'PIX' && currentStatus?.pixDetails) {
           pixDetails = {
             copyPaste: currentStatus.pixDetails.copyPaste,
             qrCodeBase64: currentStatus.pixDetails.qrCodeBase64,
