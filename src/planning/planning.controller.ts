@@ -267,6 +267,8 @@ export class PlanningController {
     @Param('id') id: string,
     @Req() req: any,
   ): Promise<ClaimGuestJourneyResponseDto> {
-    return this.planningService.claimJourney(id, req.user.id, req.guestJourney);
+    // JwtStrategy returns { userId, email, role } — never `id`.
+    const userId = req.user?.userId ?? req.user?.sub ?? req.user?.id;
+    return this.planningService.claimJourney(id, userId, req.guestJourney);
   }
 }
