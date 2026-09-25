@@ -293,6 +293,115 @@ export class AnalyticsService {
     return result;
   }
 
+
+  async getFunnel(startDate?: string, endDate?: string) {
+    const whereDate: any = {};
+    if (startDate) whereDate.gte = new Date(startDate);
+    if (endDate) whereDate.lte = new Date(endDate);
+
+    const hasDateFilter = startDate || endDate;
+    const dateFilter = hasDateFilter ? { createdAt: whereDate } : {};
+
+    const [
+      guestTotal,
+      questionnaireStarted,
+      questionnaireCompleted,
+      previewGenerated,
+      usersRegistered,
+      checkoutsStarted,
+      purchasesPaid,
+    ] = await Promise.all([
+      this.prisma.guestJourney.count({ where: dateFilter }),
+      this.prisma.guestJourney.count({
+        where: {
+          ...dateFilter,
+          OR: [
+            { currentStep: { gt: 1 } },
+            { status: { not: 'COLLECTING' } },
+          ],
+        },
+      }),
+      this.prisma.guestJourney.count({
+        where: {
+          ...dateFilter,
+          status: {
+            in: [
+              'READY_TO_GENERATE',
+              'GENERATING',
+              'PREVIEW_READY',
+              'AUTH_REQUIRED',
+              'CLAIMED',
+              'CHECKOUT_PENDING',
+              'PAID',
+            ],
+          },
+        },
+      }),
+      this.prisma.guestJourney.count({
+        where: {
+          ...dateFilter,
+          OR: [
+            { generationCompletedAt: { not: null } },
+            {
+              status: {
+                in: ['PREVIEW_READY', 'AUTH_REQUIRED', 'CLAIMED', 'CHECKOUT_PENDING', 'PAID'],
+              },
+            },
+          ],
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...dateFilter,
+          role: 'USER',
+        },
+      }),
+      this.prisma.purchase.count({
+        where: dateFilter,
+      }),
+      this.prisma.purchase.count({
+        where: {
+          ...dateFilter,
+          status: PurchaseStatus.PAID,
+        },
+      }),
+    ]);
+
+    const stages = [
+      { id: 'VISITOR_GUEST', name: 'Visitantes / Início', count: guestTotal },
+      { id: 'QUESTIONNAIRE_STARTED', name: 'Questionário Iniciado', count: questionnaireStarted },
+      { id: 'QUESTIONNAIRE_COMPLETED', name: 'Questionário Concluído', count: questionnaireCompleted },
+      { id: 'PREVIEW_GENERATED', name: 'Preview de Roteiro Gerado', count: previewGenerated },
+      { id: 'AUTH_REGISTERED', name: 'Contas Cadastradas', count: usersRegistered },
+      { id: 'CHECKOUT_STARTED', name: 'Checkout Iniciado', count: checkoutsStarted },
+      { id: 'PURCHASE_PAID', name: 'Compras Pagas', count: purchasesPaid },
+    ];
+
+    const stagesWithMetrics = stages.map((stage, idx) => {
+      const prevCount = idx === 0 ? stage.count : stages[idx - 1].count;
+      const topCount = stages[0].count;
+
+      const conversionFromPrev = prevCount > 0 ? (stage.count / prevCount) * 100 : 0;
+      const conversionFromTop = topCount > 0 ? (stage.count / topCount) * 100 : 0;
+      const dropoff = prevCount > 0 ? prevCount - stage.count : 0;
+
+      return {
+        ...stage,
+        conversionFromPrevious: parseFloat(conversionFromPrev.toFixed(1)),
+        conversionFromTop: parseFloat(conversionFromTop.toFixed(1)),
+        dropoff,
+      };
+    });
+
+    return {
+      period: {
+        startDate: startDate || null,
+        endDate: endDate || null,
+      },
+      stages: stagesWithMetrics,
+    };
+  }
+
   async getSystemHealth() {
     let dbStatus = 'OK';
     try {

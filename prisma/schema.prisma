@@ -39,6 +39,19 @@ model User {
   purchases           Purchase[]
   claimedGuestJourneys GuestJourney[] @relation("ClaimedGuestJourneys")
 
+  phone               String?
+  origin              String?        @default("mobile")
+  marketingConsent    Boolean        @default(true)
+  marketingConsentAt  DateTime?
+  unsubscribedAt      DateTime?
+  lastActiveAt        DateTime?
+
+  auditLogs           AuditLog[]
+  campaignRecipients  CampaignRecipient[]
+  authoredCampaigns   Campaign[]
+  authoredBlogPosts   BlogPost[]
+  authoredKnowledgeArticles KnowledgeArticle[]
+
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -673,6 +686,11 @@ model GuestJourney {
   generationFailedAt   DateTime?
   generationErrorCode  String?
 
+  email                String?
+  origin               String?            @default("web")
+  marketingConsent     Boolean            @default(false)
+  lastActiveAt         DateTime?
+
   expiresAt            DateTime
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -701,3 +719,203 @@ model WebhookEvent {
 
 
 
+
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  SENT
+  PARTIALLY_SENT
+  FAILED
+  CANCELLED
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+  UNSUBSCRIBED
+}
+
+enum ContentStatus {
+  DRAFT
+  REVIEW
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Segment {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  criteria    Json
+  cachedCount Int      @default(0)
+
+  campaigns   Campaign[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("segments")
+}
+
+model EmailTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  subject     String
+  preheader   String?
+  content     String
+  variables   String[] @default([])
+  active      Boolean  @default(true)
+
+  campaigns   Campaign[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+model Campaign {
+  id            String          @id @default(uuid())
+  name          String
+  subject       String
+  preheader     String?
+  content       String
+
+  templateId    String?
+  template      EmailTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  segmentId     String?
+  segment       Segment?        @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+
+  status        CampaignStatus  @default(DRAFT)
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+
+  totalAudience Int             @default(0)
+  sentCount     Int             @default(0)
+  failedCount   Int             @default(0)
+  openCount     Int             @default(0)
+  clickCount    Int             @default(0)
+
+  createdById   String?
+  createdBy     User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  recipients    CampaignRecipient[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id           String          @id @default(uuid())
+  campaignId   String
+  campaign     Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  userId       String?
+  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  email        String
+  status       RecipientStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime?
+
+  createdAt    DateTime        @default(now())
+
+  @@unique([campaignId, email])
+  @@index([campaignId, status])
+  @@index([email])
+  @@map("campaign_recipients")
+}
+
+model BlogPost {
+  id                  String        @id @default(uuid())
+  title               String
+  slug                String        @unique
+  summary             String?
+  content             String
+  coverImage          String?
+  category            String        @default("Dicas de Viagem")
+  tags                String[]      @default([])
+  relatedDestinations String[]      @default([])
+  authorName          String        @default("Equipe 2GO")
+  seoTitle            String?
+  seoDescription      String?
+  canonicalUrl        String?
+  status              ContentStatus @default(DRAFT)
+  scheduledAt         DateTime?
+  publishedAt         DateTime?
+
+  createdById         String?
+  createdBy           User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([status])
+  @@index([slug])
+  @@index([category])
+  @@map("blog_posts")
+}
+
+model KnowledgeArticle {
+  id          String        @id @default(uuid())
+  title       String
+  slug        String        @unique
+  category    String
+  destination String?
+  summary     String?
+  content     String
+  status      ContentStatus @default(DRAFT)
+  version     Int           @default(1)
+
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([category])
+  @@index([destination])
+  @@index([status])
+  @@map("knowledge_articles")
+}
+
+model AIGuideline {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  content     String
+  active      Boolean  @default(true)
+
+  updatedAt   DateTime @updatedAt
+
+  @@map("ai_guidelines")
+}

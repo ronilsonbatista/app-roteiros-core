@@ -25,6 +25,17 @@ export class AnalyticsController {
     return this.analyticsService.getOverview();
   }
 
+  @Get('funnel')
+  @ApiOperation({ summary: 'Métricas de conversão do funil de vendas' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  getFunnel(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.analyticsService.getFunnel(startDate, endDate);
+  }
+
   @Get('revenue')
   @ApiOperation({ summary: 'Analytics Financeiro / Faturamento' })
   @ApiQuery({ name: 'startDate', required: false, type: String })
