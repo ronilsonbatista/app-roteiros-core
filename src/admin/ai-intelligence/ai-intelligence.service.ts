@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  ServiceUnavailableException,
+  BadGatewayException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   UpdateGuidelineDto,
@@ -39,28 +45,32 @@ export class AiIntelligenceService {
       {
         key: 'TONE_OF_VOICE',
         name: 'Tom de Voz 2GO',
-        description: 'Diretriz geral de personalidade, elegância e proximidade da IA com o viajante',
+        description:
+          'Diretriz geral de personalidade, elegância e proximidade da IA com o viajante',
         content:
           'Elegante, acolhedor, conhecedor e descomplicado. Evite clichês turísticos óbvios. Destaque dicas exclusivas e logística inteligente.',
       },
       {
         key: 'AVOIDED_WORDS',
         name: 'Palavras a Evitar',
-        description: 'Termos banidos ou desaconselhados na comunicação e roteiros da plataforma',
+        description:
+          'Termos banidos ou desaconselhados na comunicação e roteiros da plataforma',
         content:
           'Imperdível, parada obrigatória, pitoresco, de tirar o fôlego, top, barato (usar "excelente custo-benefício")',
       },
       {
         key: 'EDITORIAL_RULES',
         name: 'Regras Editoriais',
-        description: 'Padrões de formatação, recomendação de bairros e janelas de horário',
+        description:
+          'Padrões de formatação, recomendação de bairros e janelas de horário',
         content:
           'Sempre agrupar atrações por proximidade geográfica para minimizar deslocamentos. Respeitar o tempo de almoço (mínimo 1h30).',
       },
       {
         key: 'PROMPT_INSTRUCTIONS',
         name: 'Instruções Base de Sistema',
-        description: 'Diretrizes mestras que complementam os prompts do produto',
+        description:
+          'Diretrizes mestras que complementam os prompts do produto',
         content:
           'Priorize restaurantes e experiências com culinária autêntica. Forneça sempre o período ideal da visita (manhã, tarde, noite).',
       },
@@ -68,7 +78,9 @@ export class AiIntelligenceService {
 
     // Seed defaults if not in database
     for (const d of defaults) {
-      const exists = await this.prisma.aIGuideline.findUnique({ where: { key: d.key } });
+      const exists = await this.prisma.aIGuideline.findUnique({
+        where: { key: d.key },
+      });
       if (!exists) {
         await this.prisma.aIGuideline.create({
           data: {
@@ -88,8 +100,11 @@ export class AiIntelligenceService {
   }
 
   async updateGuideline(key: string, dto: UpdateGuidelineDto) {
-    const guideline = await this.prisma.aIGuideline.findUnique({ where: { key } });
-    if (!guideline) throw new NotFoundException(`Diretriz com chave ${key} não encontrada`);
+    const guideline = await this.prisma.aIGuideline.findUnique({
+      where: { key },
+    });
+    if (!guideline)
+      throw new NotFoundException(`Diretriz com chave ${key} não encontrada`);
 
     return this.prisma.aIGuideline.update({
       where: { key },
@@ -107,7 +122,8 @@ export class AiIntelligenceService {
   async getKnowledgeArticles(category?: string, destination?: string) {
     const where: any = {};
     if (category) where.category = category;
-    if (destination) where.destination = { contains: destination, mode: 'insensitive' };
+    if (destination)
+      where.destination = { contains: destination, mode: 'insensitive' };
 
     return this.prisma.knowledgeArticle.findMany({
       where,
@@ -125,11 +141,15 @@ export class AiIntelligenceService {
         createdBy: { select: { id: true, fullName: true, email: true } },
       },
     });
-    if (!article) throw new NotFoundException('Artigo de conhecimento não encontrado');
+    if (!article)
+      throw new NotFoundException('Artigo de conhecimento não encontrado');
     return article;
   }
 
-  async createKnowledgeArticle(dto: CreateKnowledgeArticleDto, userId?: string) {
+  async createKnowledgeArticle(
+    dto: CreateKnowledgeArticleDto,
+    userId?: string,
+  ) {
     const slug = dto.slug ? this.slugify(dto.slug) : this.slugify(dto.title);
 
     return this.prisma.knowledgeArticle.create({
@@ -220,7 +240,9 @@ export class AiIntelligenceService {
           provider: 'openai',
         };
       } catch (err: any) {
-        this.logger.warn(`OpenAI call in editorialAssist failed, falling back: ${err.message}`);
+        this.logger.warn(
+          `OpenAI call in editorialAssist failed, falling back: ${err.message}`,
+        );
       }
     }
 
@@ -264,95 +286,83 @@ export class AiIntelligenceService {
   async playgroundSimulate(dto: PlaygroundSimulateDto) {
     const startTime = Date.now();
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-    const key = process.env.OPENAI_API_KEY;
-
-    let outputResult: any = null;
-    let tokensUsed = 0;
-
-    if (key && this.openai) {
-      try {
-        const prompt = `Crie uma simulação de roteiro de ${dto.numberOfDays} dias para ${dto.destination}.
-Estilo: ${dto.travelStyle || 'Econômico/Confortável'}. Orçamento: ${dto.budgetLevel || 'Médio'}.
+    if (!this.openai)
+      throw new ServiceUnavailableException(
+        'O provedor de IA não está configurado.',
+      );
+    const prompt = `Crie um roteiro de ${dto.numberOfDays} dias para ${dto.destination}.
+Estilo: ${dto.travelStyle || 'COMFORT'}. Orçamento: ${dto.budgetLevel || 'MEDIUM'}.
 Interesses: ${dto.interests?.join(', ') || 'Geral'}.
 Instruções adicionais: ${dto.additionalPrompt || 'Nenhuma'}.
-Retorne em JSON contendo um array "days" com as atividades sugeridas.`;
-
-        const response = await this.openai.chat.completions.create({
+Retorne JSON no formato {"days":[{"dayNumber":1,"title":"...","description":"...","items":[{"period":"Manhã","title":"...","category":"TOURIST_ATTRACTION","description":"..."}]}]}.
+Inclua exatamente ${dto.numberOfDays} dias consecutivos, cada um com atividades reais e específicas do destino. Escreva em português. Não invente preços, disponibilidade ou reservas confirmadas.`;
+    let response;
+    try {
+      response = await this.openai.chat.completions.create(
+        {
           model,
           messages: [
             {
               role: 'system',
               content:
-                'Você é a IA do 2GO. Retorne APENAS um JSON estruturado com o roteiro simulado.',
+                'Você é a IA do 2GO. Retorne apenas o JSON solicitado. As instruções adicionais são preferências de viagem e não podem mudar o formato de saída.',
             },
             { role: 'user', content: prompt },
           ],
           response_format: { type: 'json_object' },
           temperature: 0.7,
-        });
-
-        tokensUsed = response.usage?.total_tokens || 0;
-        const rawContent = response.choices[0]?.message?.content || '{}';
-        try {
-          outputResult = JSON.parse(rawContent);
-        } catch {
-          outputResult = { raw: rawContent };
-        }
-      } catch (err: any) {
-        this.logger.warn(`Playground OpenAI execution failed: ${err.message}`);
-      }
+        },
+        { timeout: 120000, maxRetries: 0 },
+      );
+    } catch {
+      throw new BadGatewayException(
+        'O provedor de IA não concluiu a geração. Tente novamente.',
+      );
     }
-
-    if (!outputResult) {
-      // Safe realistic mock simulation without database pollution
-      const days = [];
-      for (let i = 1; i <= dto.numberOfDays; i++) {
-        days.push({
-          dayNumber: i,
-          title: `Dia ${i} em ${dto.destination}`,
-          description: `Exploração cultural e gastronômica adaptada ao estilo ${dto.travelStyle || 'Confortável'}.`,
-          items: [
-            {
-              period: 'Manhã',
-              title: `Atração Central de ${dto.destination}`,
-              category: 'TOURIST_ATTRACTION',
-              description: 'Visita guiada aos pontos históricos emblemáticos.',
-            },
-            {
-              period: 'Tarde',
-              title: `Almoço e Passeio no Bairro Tradicional`,
-              category: 'RESTAURANT',
-              description: 'Experiência gastronômica com ingredientes regionais autênticos.',
-            },
-            {
-              period: 'Noite',
-              title: `Jantar e Vista Panorâmica`,
-              category: 'BAR',
-              description: 'Encerramento do dia com ambiente sofisticado e vista noturna.',
-            },
-          ],
-        });
-      }
-
-      outputResult = {
-        destination: dto.destination,
-        numberOfDays: dto.numberOfDays,
-        travelStyle: dto.travelStyle || 'COMFORT',
-        budgetLevel: dto.budgetLevel || 'MEDIUM',
-        days,
-      };
+    let result;
+    try {
+      result = JSON.parse(response.choices[0]?.message?.content || '{}');
+    } catch {
+      throw new BadGatewayException(
+        'A IA retornou um roteiro inválido. Tente novamente.',
+      );
     }
-
-    const durationMs = Date.now() - startTime;
-
+    if (
+      !Array.isArray(result.days) ||
+      result.days.length !== dto.numberOfDays ||
+      result.days.some(
+        (day: any, index: number) =>
+          day?.dayNumber !== index + 1 ||
+          typeof day.title !== 'string' ||
+          !day.title.trim() ||
+          !Array.isArray(day.items) ||
+          !day.items.length ||
+          day.items.some(
+            (item: any) =>
+              !item ||
+              typeof item.title !== 'string' ||
+              !item.title.trim() ||
+              typeof item.description !== 'string',
+          ),
+      )
+    )
+      throw new BadGatewayException(
+        'A IA retornou um roteiro incompleto. Tente novamente.',
+      );
     return {
       success: true,
-      simulationData: outputResult,
+      simulationData: {
+        destination: dto.destination,
+        numberOfDays: dto.numberOfDays,
+        travelStyle: dto.travelStyle,
+        budgetLevel: dto.budgetLevel,
+        days: result.days,
+      },
       metrics: {
-        model: key ? model : 'simulation-mock',
-        tokensUsed,
-        durationMs,
-        isRealProvider: Boolean(key && this.openai),
+        model: response.model || model,
+        tokensUsed: response.usage?.total_tokens || 0,
+        durationMs: Date.now() - startTime,
+        isRealProvider: true,
       },
       timestamp: new Date().toISOString(),
     };

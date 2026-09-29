@@ -69,6 +69,36 @@ describe('AiIntelligenceService', () => {
 
   describe('playgroundSimulate', () => {
     it('should return isolated simulation without writing to Trip or Purchase tables', async () => {
+      (service as any).openai = {
+        chat: {
+          completions: {
+            create: jest
+              .fn()
+              .mockResolvedValue({
+                model: 'gpt-4o-mini',
+                usage: { total_tokens: 200 },
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        days: [1, 2, 3].map((dayNumber) => ({
+                          dayNumber,
+                          title: 'Tóquio',
+                          items: [
+                            {
+                              title: 'Templo Senso-ji',
+                              description: 'Visita cultural',
+                            },
+                          ],
+                        })),
+                      }),
+                    },
+                  },
+                ],
+              }),
+          },
+        },
+      };
       const res = await service.playgroundSimulate({
         destination: 'Tóquio',
         numberOfDays: 3,
@@ -82,6 +112,39 @@ describe('AiIntelligenceService', () => {
       expect(mockPrisma.trip.create).not.toHaveBeenCalled();
       expect(mockPrisma.purchase.create).not.toHaveBeenCalled();
     });
+  });
+
+  it('does not return fake success when the provider is unavailable or fails', async () => {
+    (service as any).openai = null;
+    await expect(
+      service.playgroundSimulate({ destination: 'Roma', numberOfDays: 1 }),
+    ).rejects.toThrow('não está configurado');
+    (service as any).openai = {
+      chat: {
+        completions: {
+          create: jest.fn().mockRejectedValue(new Error('provider failure')),
+        },
+      },
+    };
+    await expect(
+      service.playgroundSimulate({ destination: 'Roma', numberOfDays: 1 }),
+    ).rejects.toThrow('não concluiu');
+  });
+  it('rejects incomplete output instead of displaying empty itinerary cards', async () => {
+    (service as any).openai = {
+      chat: {
+        completions: {
+          create: jest
+            .fn()
+            .mockResolvedValue({
+              choices: [{ message: { content: '{"days":[]}' } }],
+            }),
+        },
+      },
+    };
+    await expect(
+      service.playgroundSimulate({ destination: 'Roma', numberOfDays: 3 }),
+    ).rejects.toThrow('incompleto');
   });
 
   describe('knowledgeArticles', () => {
