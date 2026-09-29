@@ -15,6 +15,7 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
     prismaMock = {
       trip: {
         findUnique: jest.fn(),
+        update: jest.fn(),
       },
       userTravelProfile: {
         findUnique: jest.fn(),
@@ -35,6 +36,8 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         update: jest.fn().mockResolvedValue({}),
       },
     };
+
+    prismaMock.$transaction = jest.fn((fn) => fn(prismaMock));
 
     openAIProviderMock = {
       generateItinerary: jest.fn(),
@@ -87,7 +90,13 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
     it('should retrieve curated context, generate itinerary via OpenAIProvider, tag provenance, and update status to PREVIEW_READY', async () => {
       const mockJourney = {
         id: 'journey-guest-123',
-        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-28' }],
+        destinations: [
+          {
+            name: 'Roma',
+            arrivalDate: '2026-07-25',
+            departureDate: '2026-07-28',
+          },
+        ],
         travelers: { adults: 2, children: 1, elders: 0 },
         interests: ['arte', 'gastronomia'],
         activityHours: { startTime: '09:00', endTime: '18:30' },
@@ -132,11 +141,15 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
 
       await service.generateGuestItinerary(mockJourney);
 
-      expect(curationRetrievalServiceMock.retrieveCuratedContext).toHaveBeenCalled();
+      expect(
+        curationRetrievalServiceMock.retrieveCuratedContext,
+      ).toHaveBeenCalled();
       expect(openAIProviderMock.generateGuestItinerary).toHaveBeenCalledWith(
         expect.objectContaining({
           journeyId: 'journey-guest-123',
-          curatedContext: expect.objectContaining({ overallCoverage: 'STRONG' }),
+          curatedContext: expect.objectContaining({
+            overallCoverage: 'STRONG',
+          }),
         }),
       );
 
@@ -219,7 +232,8 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         userId: 'user-123',
         destination: 'Lisboa',
         startDate: new Date('2026-09-01'),
-        endDate: new Date('2026-09-03'),
+        endDate: new Date('2026-09-01'),
+        updatedAt: new Date('2026-09-01'),
         days: [],
       };
 
@@ -250,17 +264,34 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         tokensUsed: 300,
       });
 
-      const result = await service.generateItinerary('user-123', 'trip-auth-1', {});
+      const result = await service.generateItinerary(
+        'user-123',
+        'trip-auth-1',
+        {},
+      );
 
       expect(result.message).toContain('sucesso');
       expect(result.aiRequestId).toBe('ai-request-1');
-      expect(prismaMock.tripDay.create).toHaveBeenCalled();
-      expect(prismaMock.itineraryItem.create).toHaveBeenCalledWith(
+      expect(prismaMock.trip.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            title: 'Torre de Belém',
-            category: ItineraryCategory.TOURIST_ATTRACTION,
-          }),
+          data: {
+            days: {
+              create: [
+                expect.objectContaining({
+                  items: {
+                    create: [
+                      expect.objectContaining({ title: 'Torre de Belém' }),
+                    ],
+                  },
+                }),
+              ],
+            },
+          },
+        }),
+      );
+      expect(openAIProviderMock.generateItinerary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseTrip: expect.objectContaining({ id: 'base-trip-roma' }),
         }),
       );
     });

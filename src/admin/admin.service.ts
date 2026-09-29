@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Role, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserAdminDto } from './dto/create-user-admin.dto';
@@ -15,10 +16,17 @@ import { UpdateUserTravelProfileDto } from '../user-travel-profile/dto/update-us
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
-  async getUsers(page: number = 1, limit: number = 10, search?: string) {
+  async getUsers(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    role: Role = Role.USER,
+  ) {
+    page = Number.isFinite(page) ? Math.max(1, page) : 1;
+    limit = Number.isFinite(limit) ? Math.min(100, Math.max(1, limit)) : 10;
     const skip = (page - 1) * limit;
 
-    const whereClause: any = {};
+    const whereClause: Prisma.UserWhereInput = { role };
     if (search) {
       whereClause.OR = [
         { email: { contains: search, mode: 'insensitive' } },

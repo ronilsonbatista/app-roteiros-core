@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBaseTripDto } from './dto/create-base-trip.dto';
 import { UpdateBaseTripDto } from './dto/update-base-trip.dto';
@@ -14,6 +18,10 @@ export class BaseTripsService {
   constructor(private prisma: PrismaService) {}
 
   async createBaseTrip(adminId: string, dto: CreateBaseTripDto) {
+    if (dto.status === 'PUBLISHED')
+      throw new BadRequestException(
+        'Crie como rascunho e revise os dias antes de publicar.',
+      );
     return this.prisma.baseTrip.create({
       data: { ...dto, createdByAdminId: adminId },
     });
@@ -46,7 +54,24 @@ export class BaseTripsService {
   }
 
   async updateBaseTrip(id: string, dto: UpdateBaseTripDto) {
-    await this.findOneBaseTrip(id);
+    const trip = await this.findOneBaseTrip(id);
+    if (
+      dto.status === 'PUBLISHED' ||
+      (trip.status === 'PUBLISHED' && dto.numberOfDays !== undefined)
+    ) {
+      const days = dto.numberOfDays ?? trip.numberOfDays;
+      if (
+        trip.days.length !== days ||
+        trip.days.some(
+          (day, index) =>
+            day.dayNumber !== index + 1 ||
+            (!day.attractions.length && !day.restaurants.length),
+        )
+      )
+        throw new BadRequestException(
+          'Revise e preencha todos os dias antes de publicar.',
+        );
+    }
     return this.prisma.baseTrip.update({ where: { id }, data: dto });
   }
 

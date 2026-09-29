@@ -48,6 +48,21 @@ export class AdminController {
     return this.adminService.getUsers(pageNumber, limitNumber, search);
   }
 
+  @Get('administrators')
+  @ApiOperation({ summary: 'Listar administradores nas configurações' })
+  getAdministrators(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getUsers(
+      Number(page || 1),
+      Number(limit || 10),
+      search,
+      Role.ADMIN,
+    );
+  }
+
   @Get('users/:id')
   @ApiOperation({ summary: 'Detalhar informações de um usuário' })
   getUser(@Param('id') id: string) {

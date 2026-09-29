@@ -26,7 +26,9 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async generateItinerary(input: GenerateItineraryInput): Promise<AIProviderResult> {
+  async generateItinerary(
+    input: GenerateItineraryInput,
+  ): Promise<AIProviderResult> {
     if (!this.openai) {
       throw new Error(
         'OpenAI API Key is not configured. Please set the OPENAI_API_KEY environment variable.',
@@ -66,7 +68,9 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async generateGuestItinerary(input: GenerateGuestItineraryInput): Promise<AIProviderResult> {
+  async generateGuestItinerary(
+    input: GenerateGuestItineraryInput,
+  ): Promise<AIProviderResult> {
     if (!this.openai) {
       throw new Error(
         'OpenAI API Key is not configured. Please set the OPENAI_API_KEY environment variable.',
@@ -75,7 +79,9 @@ export class OpenAIProvider implements AIProvider {
     const prompt = this.buildGuestPrompt(input);
 
     try {
-      this.logger.log(`Calling OpenAI for GuestJourney with model ${this.model}`);
+      this.logger.log(
+        `Calling OpenAI for GuestJourney with model ${this.model}`,
+      );
 
       const response = await this.openai.chat.completions.create({
         model: this.model,
@@ -180,6 +186,7 @@ Regras estritas:
       prompt += `- Orçamento: ${travelProfile.budgetLevel || 'Médio'}\n`;
       prompt += `- Clima preferido: ${travelProfile.preferredClimate?.join(', ') || 'Qualquer'}\n`;
       prompt += `- Ritmo: ${travelProfile.prefersRelaxing ? 'Mais relaxante' : 'Mais ativo'}\n`;
+      prompt += `- Preferências e respostas completas: ${JSON.stringify(travelProfile)}\n`;
       prompt += `- Restrições/Evitar: ${travelProfile.avoidedDestinations?.join(', ') || 'Nenhuma'}\n\n`;
     }
 
@@ -209,15 +216,20 @@ Regras estritas:
     prompt += `### Destinos Sequenciais:\n`;
     destinations.forEach((d, idx) => {
       prompt += `${idx + 1}. ${d.name}\n`;
-      if (d.arrivalDate) prompt += `   - Chegada: ${d.arrivalDate}${d.arrivalTime ? ` às ${d.arrivalTime}` : ''}\n`;
-      if (d.departureDate) prompt += `   - Partida: ${d.departureDate}${d.departureTime ? ` às ${d.departureTime}` : ''}\n`;
+      if (d.arrivalDate)
+        prompt += `   - Chegada: ${d.arrivalDate}${d.arrivalTime ? ` às ${d.arrivalTime}` : ''}\n`;
+      if (d.departureDate)
+        prompt += `   - Partida: ${d.departureDate}${d.departureTime ? ` às ${d.departureTime}` : ''}\n`;
     });
 
     prompt += `\n### Viajantes:\n`;
     const travelerParts: string[] = [];
-    if (travelers.adults > 0) travelerParts.push(`${travelers.adults} adulto(s)`);
-    if (travelers.children > 0) travelerParts.push(`${travelers.children} criança(s)`);
-    if (travelers.elders > 0) travelerParts.push(`${travelers.elders} idoso(s)`);
+    if (travelers.adults > 0)
+      travelerParts.push(`${travelers.adults} adulto(s)`);
+    if (travelers.children > 0)
+      travelerParts.push(`${travelers.children} criança(s)`);
+    if (travelers.elders > 0)
+      travelerParts.push(`${travelers.elders} idoso(s)`);
     prompt += `- Composição: ${travelerParts.join(', ') || '1 adulto'}\n`;
 
     if (interests && interests.length > 0) {

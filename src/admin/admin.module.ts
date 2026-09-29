@@ -1,3 +1,6 @@
+import { AiModule } from '../ai/ai.module';
+import { ItineraryEditorController } from './itinerary-editor.controller';
+import { ItineraryEditorService } from './itinerary-editor.service';
 import { Module } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
@@ -6,7 +9,10 @@ import { AdminTripsController } from './admin-trips.controller';
 import { AdminTripsService } from './admin-trips.service';
 import { AuditService } from './audit/audit.service';
 import { CustomersService } from './customers/customers.service';
-import { CustomersController, LeadsController } from './customers/customers.controller';
+import {
+  CustomersController,
+  LeadsController,
+} from './customers/customers.controller';
 import { MarketingService } from './marketing/marketing.service';
 import {
   MarketingSegmentsController,
@@ -23,8 +29,9 @@ import { SystemController } from './system/system.controller';
 import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [BaseTripsModule, EmailModule],
+  imports: [BaseTripsModule, EmailModule, AiModule],
   providers: [
+    ItineraryEditorService,
     AdminService,
     AdminTripsService,
     AuditService,
@@ -35,6 +42,7 @@ import { EmailModule } from '../email/email.module';
     SystemService,
   ],
   controllers: [
+    ItineraryEditorController,
     AdminController,
     AdminTripsController,
     CustomersController,

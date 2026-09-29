@@ -52,7 +52,8 @@ export class AiService {
           },
         },
       });
-      if (!baseTrip) throw new NotFoundException('BaseTrip não encontrada');
+      if (!baseTrip || baseTrip.status !== 'PUBLISHED')
+        throw new NotFoundException('Roteiro base publicado não encontrado');
     }
 
     const numberOfDays =
@@ -64,71 +65,121 @@ export class AiService {
           ) + 1
         : baseTrip?.numberOfDays || 3;
 
+    if (
+      !Number.isInteger(numberOfDays) ||
+      numberOfDays < 1 ||
+      numberOfDays > 30
+    )
+      throw new BadRequestException('A geração aceita viagens de 1 a 30 dias.');
+    if (!baseTrip) {
+      const curated =
+        await this.curationRetrievalService.retrieveCuratedContext({
+          destinations: [{ name: trip.destination }],
+          numberOfDays,
+          interests: travelProfile?.travelInterests || [],
+        });
+      baseTrip = curated.destinations[0]?.bestBaseTrip?.baseTrip || null;
+    }
+
     let aiRequestRecord;
 
     try {
       const aiResult = await this.openAIProvider.generateItinerary({
         destination: trip.destination,
         numberOfDays,
-        travelProfile,
+        travelProfile: { ...travelProfile, tripPreferences: trip.preferences },
         baseTrip,
       });
 
-      aiRequestRecord = await this.prisma.aIRequest.create({
-        data: {
-          userId,
-          tripId,
-          baseTripId,
-          provider: aiResult.provider,
-          model: aiResult.model,
-          prompt: 'System Prompt + User Context',
-          response: aiResult.parsedData,
-          status: 'SUCCESS',
-          tokensUsed: aiResult.tokensUsed,
-        },
-      });
-
-      // Parse and save data
-      const parsedDays = aiResult.parsedData.days || [];
-
-      for (const day of parsedDays) {
-        const tripDay = await this.prisma.tripDay.create({
+      const parsedDays = aiResult.parsedData?.days;
+      if (
+        !Array.isArray(parsedDays) ||
+        parsedDays.length !== numberOfDays ||
+        parsedDays.some(
+          (day) =>
+            !Array.isArray(day.items) ||
+            !day.items.length ||
+            day.items.length > 30 ||
+            day.items.some(
+              (item: { title?: unknown }) =>
+                typeof item.title !== 'string' || !item.title.trim(),
+            ),
+        )
+      ) {
+        throw new BadRequestException(
+          'A IA retornou um roteiro incompleto. Nenhum dia foi salvo.',
+        );
+      }
+      aiRequestRecord = await this.prisma.$transaction(async (tx) => {
+        const current = await tx.trip.findUnique({
+          where: { id: tripId },
+          include: { days: true },
+        });
+        if (
+          !current ||
+          current.days.length ||
+          current.updatedAt.getTime() !== trip.updatedAt.getTime()
+        )
+          throw new BadRequestException(
+            'O roteiro foi alterado durante a geração. Atualize antes de tentar novamente.',
+          );
+        await tx.trip.update({
+          where: { id: tripId },
           data: {
-            tripId,
-            dayNumber: day.dayNumber,
-            title: day.title,
-            description: day.description,
+            days: {
+              create: parsedDays.map((day, index) => ({
+                dayNumber: index + 1,
+                title: String(day.title || `Dia ${index + 1}`),
+                description: String(day.description || ''),
+                items: {
+                  create: day.items.map(
+                    (
+                      item: {
+                        title: string;
+                        category: ItineraryCategory;
+                        description?: string;
+                        location?: string;
+                        period?: string;
+                        estimatedCost?: number;
+                      },
+                      order: number,
+                    ) => ({
+                      title: item.title,
+                      description: String(item.description || ''),
+                      category: Object.values(ItineraryCategory).includes(
+                        item.category,
+                      )
+                        ? item.category
+                        : ItineraryCategory.TOURIST_ATTRACTION,
+                      location: String(item.location || ''),
+                      period: String(item.period || ''),
+                      cost: Number.isFinite(Number(item.estimatedCost))
+                        ? Math.max(0, Number(item.estimatedCost))
+                        : 0,
+                      order: order + 1,
+                      isEditable: true,
+                      isUserModified: false,
+                    }),
+                  ),
+                },
+              })),
+            },
           },
         });
-
-        if (day.items && Array.isArray(day.items)) {
-          let order = 1;
-          for (const item of day.items) {
-            // Safe enum fallback
-            const categoryMatch = Object.values(ItineraryCategory).find(
-              (c) => c === item.category,
-            );
-            const safeCategory = categoryMatch
-              ? categoryMatch
-              : ItineraryCategory.TOURIST_ATTRACTION;
-
-            await this.prisma.itineraryItem.create({
-              data: {
-                tripDayId: tripDay.id,
-                title: item.title || 'Atividade',
-                description: item.description,
-                category: safeCategory,
-                location: item.location,
-                period: item.period,
-                cost: item.estimatedCost || 0,
-                order: order++,
-                isEditable: true,
-                isUserModified: false,
-              },
-            });
-          }
-        }
-      }
+        return tx.aIRequest.create({
+          data: {
+            userId,
+            tripId,
+            baseTripId: baseTrip?.id,
+            provider: aiResult.provider,
+            model: aiResult.model,
+            prompt: 'Perfil e preferências + roteiro base publicado',
+            response: aiResult.parsedData,
+            status: 'SUCCESS',
+            tokensUsed: aiResult.tokensUsed,
+          },
+        });
+      });
 
       return {
         message: 'Roteiro gerado com sucesso via IA',
@@ -164,25 +215,34 @@ export class AiService {
       const destinations = (journey.destinations as any[]) || [];
 
       // Phase G2: Retrieve Curated Knowledge Context from PostgreSQL
-      const curatedContext = await this.curationRetrievalService.retrieveCuratedContext({
-        destinations: destinations.map((d, idx) => ({
-          name: d.name,
-          providerPlaceId: d.placeId || d.providerPlaceId,
-          arrivalDate: d.arrivalDate,
-          arrivalTime: d.arrivalTime,
-          departureDate: d.departureDate,
-          departureTime: d.departureTime,
-        })),
-        interests: (journey.interests as string[]) || [],
-        budgetLevel: journey.budgetLevel,
-        travelers: (journey.travelers as any) || { adults: 1, children: 0, elders: 0 },
-        travelStyle: journey.travelStyle,
-      });
+      const curatedContext =
+        await this.curationRetrievalService.retrieveCuratedContext({
+          destinations: destinations.map((d, idx) => ({
+            name: d.name,
+            providerPlaceId: d.placeId || d.providerPlaceId,
+            arrivalDate: d.arrivalDate,
+            arrivalTime: d.arrivalTime,
+            departureDate: d.departureDate,
+            departureTime: d.departureTime,
+          })),
+          interests: (journey.interests as string[]) || [],
+          budgetLevel: journey.budgetLevel,
+          travelers: (journey.travelers as any) || {
+            adults: 1,
+            children: 0,
+            elders: 0,
+          },
+          travelStyle: journey.travelStyle,
+        });
 
       const input = {
         journeyId: journey.id,
         destinations,
-        travelers: (journey.travelers as any) || { adults: 1, children: 0, elders: 0 },
+        travelers: (journey.travelers as any) || {
+          adults: 1,
+          children: 0,
+          elders: 0,
+        },
         interests: (journey.interests as string[]) || [],
         activityHours: journey.activityHours as any,
         budgetLevel: journey.budgetLevel,
@@ -206,42 +266,45 @@ export class AiService {
       });
 
       // Normalize itinerary and add Provenance metadata
-      const normalizedDays = (aiResult.parsedData.days || []).map((day: any, idx: number) => ({
-        dayNumber: day.dayNumber || idx + 1,
-        date: day.date,
-        destination: day.destination || (journey.destinations?.[0]?.name ?? 'Destino'),
-        title: day.title || `Dia ${idx + 1}`,
-        description: day.description || '',
-        items: (day.items || []).map((item: any, itemIdx: number) => {
-          const categoryMatch = Object.values(ItineraryCategory).find(
-            (c) => c === item.category,
-          );
+      const normalizedDays = (aiResult.parsedData.days || []).map(
+        (day: any, idx: number) => ({
+          dayNumber: day.dayNumber || idx + 1,
+          date: day.date,
+          destination:
+            day.destination || (journey.destinations?.[0]?.name ?? 'Destino'),
+          title: day.title || `Dia ${idx + 1}`,
+          description: day.description || '',
+          items: (day.items || []).map((item: any, itemIdx: number) => {
+            const categoryMatch = Object.values(ItineraryCategory).find(
+              (c) => c === item.category,
+            );
 
-          // Provenance resolution
-          let sourceType = item.sourceType || 'AI';
-          let sourceId = item.sourceId || null;
-          let providerPlaceId = item.providerPlaceId || null;
+            // Provenance resolution
+            let sourceType = item.sourceType || 'AI';
+            let sourceId = item.sourceId || null;
+            let providerPlaceId = item.providerPlaceId || null;
 
-          if (sourceType === 'AI' || !sourceType) {
-            if (providerPlaceId) {
-              sourceType = 'PLACES';
+            if (sourceType === 'AI' || !sourceType) {
+              if (providerPlaceId) {
+                sourceType = 'PLACES';
+              }
             }
-          }
 
-          return {
-            title: item.title || 'Atividade',
-            description: item.description || '',
-            category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
-            location: item.location || '',
-            period: item.period || 'Manhã',
-            cost: Number(item.estimatedCost || item.cost || 0),
-            order: itemIdx + 1,
-            sourceType,
-            sourceId,
-            providerPlaceId,
-          };
+            return {
+              title: item.title || 'Atividade',
+              description: item.description || '',
+              category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
+              location: item.location || '',
+              period: item.period || 'Manhã',
+              cost: Number(item.estimatedCost || item.cost || 0),
+              order: itemIdx + 1,
+              sourceType,
+              sourceId,
+              providerPlaceId,
+            };
+          }),
         }),
-      }));
+      );
 
       const normalizedItinerary = {
         days: normalizedDays,
@@ -261,28 +324,43 @@ export class AiService {
         `Geração de roteiro anônimo (Coverage: ${curatedContext.overallCoverage}) concluída com sucesso para jornada ${journey.id}`,
       );
     } catch (error) {
-      this.logger.error(`Falha na geração de roteiro anônimo para jornada ${journey.id}`, error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido na IA';
+      this.logger.error(
+        `Falha na geração de roteiro anônimo para jornada ${journey.id}`,
+        error,
+      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido na IA';
 
-      await this.prisma.aIRequest.create({
-        data: {
-          guestJourneyId: journey.id,
-          provider: 'OPENAI',
-          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-          prompt: 'Guest System Prompt + Curated Context',
-          status: 'FAILED',
-          errorMessage,
-        },
-      }).catch((err) => this.logger.error('Erro ao registrar falha de AIRequest', err));
+      await this.prisma.aIRequest
+        .create({
+          data: {
+            guestJourneyId: journey.id,
+            provider: 'OPENAI',
+            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            prompt: 'Guest System Prompt + Curated Context',
+            status: 'FAILED',
+            errorMessage,
+          },
+        })
+        .catch((err) =>
+          this.logger.error('Erro ao registrar falha de AIRequest', err),
+        );
 
-      await this.prisma.guestJourney.update({
-        where: { id: journey.id },
-        data: {
-          generationFailedAt: new Date(),
-          generationErrorCode: 'OPENAI_ERROR',
-          status: GuestJourneyStatus.FAILED,
-        },
-      }).catch((err) => this.logger.error('Erro ao atualizar status FAILED em GuestJourney', err));
+      await this.prisma.guestJourney
+        .update({
+          where: { id: journey.id },
+          data: {
+            generationFailedAt: new Date(),
+            generationErrorCode: 'OPENAI_ERROR',
+            status: GuestJourneyStatus.FAILED,
+          },
+        })
+        .catch((err) =>
+          this.logger.error(
+            'Erro ao atualizar status FAILED em GuestJourney',
+            err,
+          ),
+        );
     }
   }
 
