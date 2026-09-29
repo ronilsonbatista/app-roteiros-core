@@ -88,10 +88,29 @@ async function main() {
     where: { email },
   });
 
+  const forceReset = process.env.SEED_ADMIN_FORCE_RESET === 'true';
+
   if (existingAdmin) {
-    console.log(
-      `✅ Admin com email ${email} já existe. Ignorando seed (não altera admin existente).`,
-    );
+    if (!forceReset) {
+      console.log(
+        `✅ Admin com email ${email} já existe. Para resetar senha, use SEED_ADMIN_FORCE_RESET=true.`,
+      );
+      return;
+    }
+    // Secure password reset for existing admin
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { email },
+      data: {
+        passwordHash: hashedPassword,
+        role: Role.ADMIN,
+        emailConfirmed: true,
+        blockedAt: null,
+        archivedAt: null,
+      },
+    });
+    // CRITICAL: NEVER log password or passwordHash
+    console.log(`✅ Admin ${existingAdmin.email} (ID: ${existingAdmin.id}) — senha e role atualizados com segurança.`);
     return;
   }
 
