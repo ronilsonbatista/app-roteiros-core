@@ -12,13 +12,13 @@ describe('CustomersService', () => {
       user: {
         findMany: jest.fn(),
         count: jest.fn(),
-        findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
       },
       guestJourney: {
         findMany: jest.fn(),
         count: jest.fn(),
-        findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
     };
 
@@ -60,7 +60,7 @@ describe('CustomersService', () => {
 
       const res = await service.getCustomers({ page: 1, limit: 10 });
       expect(res.data).toHaveLength(1);
-      expect(res.data[0].stage).toBe('CUSTOMER');
+      expect(res.data[0].stage).toBe('CUSTOMER_PAID');
       expect(res.data[0].totalSpent).toBe(29.9);
       expect(res.meta.total).toBe(1);
     });
@@ -68,13 +68,13 @@ describe('CustomersService', () => {
 
   describe('getCustomer360', () => {
     it('should throw NotFoundException if user does not exist', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
       await expect(service.getCustomer360('non-existent')).rejects.toThrow(NotFoundException);
     });
 
     it('should build a comprehensive chronological timeline of customer events', async () => {
       const now = new Date();
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u1',
         fullName: 'Bob Travel',
         email: 'bob@example.com',
@@ -119,7 +119,7 @@ describe('CustomersService', () => {
       });
 
       const res = await service.getCustomer360('u1');
-      expect(res.profile.fullName).toBe('Bob Travel');
+      expect(res.customer.fullName).toBe('Bob Travel');
       expect(res.metrics.totalSpent).toBe(29.9);
       expect(res.timeline.length).toBeGreaterThanOrEqual(4);
       // Timeline should be sorted descending
@@ -131,7 +131,7 @@ describe('CustomersService', () => {
 
   describe('updateConsent', () => {
     it('should update user marketing consent flag', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'u1', marketingConsent: true });
+      prisma.user.findFirst.mockResolvedValue({ id: 'u1', marketingConsent: true });
       prisma.user.update.mockResolvedValue({
         id: 'u1',
         marketingConsent: false,

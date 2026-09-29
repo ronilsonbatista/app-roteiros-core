@@ -919,3 +919,24 @@ model AIGuideline {
 
   @@map("ai_guidelines")
 }
+
+// Commercial contacts do not create authentication accounts.
+enum CrmContactStatus {
+  CONTACT
+  QUALIFIED
+  INACTIVE
+}
+
+model CrmContact {
+  id String @id @default(uuid())
+  fullName String
+  email String @unique
+  phone String?
+  status CrmContactStatus @default(CONTACT)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@map("crm_contacts")
+}

@@ -1,6 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CustomersQueryDto, LeadsQueryDto } from './dto/customers.dto';
+import {
+  CustomersQueryDto,
+  LeadsQueryDto,
+  ContactsQueryDto,
+  SaveContactDto,
+} from './dto/customers.dto';
 
 export interface CustomerLifecycleMetrics {
   totalSpent: number;
@@ -13,59 +23,105 @@ export interface CustomerLifecycleMetrics {
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getContacts(query: ContactsQueryDto) {
+    const { page = 1, limit = 15, search, status } = query;
+    const where: Prisma.CrmContactWhereInput = {
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            OR: ['fullName', 'email', 'phone'].map((field) => ({
+              [field]: { contains: search, mode: 'insensitive' },
+            })),
+          }
+        : {}),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.crmContact.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      }),
+      this.prisma.crmContact.count({ where }),
+    ]);
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async saveContact(dto: SaveContactDto, id?: string) {
+    // No account, password, purchase or marketing subscription is created here.
+    const data = {
+      ...dto,
+      email: dto.email.trim().toLowerCase(),
+      fullName: dto.fullName.trim(),
+    };
+    try {
+      return id
+        ? await this.prisma.crmContact.update({ where: { id }, data })
+        : await this.prisma.crmContact.create({ data });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002')
+          throw new ConflictException(
+            'Já existe um contato comercial com este e-mail.',
+          );
+        if (error.code === 'P2025')
+          throw new NotFoundException('Contato comercial não encontrado.');
+      }
+      throw error;
+    }
+  }
+
   async getCustomers(query: CustomersQueryDto) {
     const page = query.page || 1;
-    const limit = query.limit || 10;
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-
-    if (query.search) {
-      where.OR = [
-        { fullName: { contains: query.search, mode: 'insensitive' } },
-        { email: { contains: query.search, mode: 'insensitive' } },
-        { phone: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
-
-    if (query.hasConsent !== undefined) {
-      where.marketingConsent = query.hasConsent;
-    }
-
-    if (query.destination) {
-      where.trips = {
-        some: {
-          destination: { contains: query.destination, mode: 'insensitive' },
+    const limit = query.limit || 15;
+    const and: Prisma.UserWhereInput[] = [{ role: 'USER' }];
+    if (query.search)
+      and.push({
+        OR: ['fullName', 'email', 'phone'].map((field) => ({
+          [field]: { contains: query.search, mode: 'insensitive' },
+        })),
+      });
+    if (query.hasConsent !== undefined)
+      and.push({ marketingConsent: query.hasConsent });
+    if (query.destination)
+      and.push({
+        trips: {
+          some: {
+            destination: { contains: query.destination, mode: 'insensitive' },
+          },
         },
-      };
-    }
-
-    if (query.startDate || query.endDate) {
-      where.createdAt = {};
-      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
-      if (query.endDate) where.createdAt.lte = new Date(query.endDate);
-    }
-
-    if (query.hasTrips !== undefined) {
-      where.trips = query.hasTrips ? { some: {} } : { none: {} };
-    }
-
-    if (query.hasPurchases !== undefined) {
-      where.purchases = query.hasPurchases
-        ? { some: { status: 'PAID' } }
-        : { none: { status: 'PAID' } };
-    }
-
+      });
+    if (query.startDate || query.endDate)
+      and.push({
+        createdAt: {
+          ...(query.startDate ? { gte: new Date(query.startDate) } : {}),
+          ...(query.endDate ? { lte: new Date(query.endDate) } : {}),
+        },
+      });
+    if (query.hasTrips !== undefined)
+      and.push({ trips: query.hasTrips ? { some: {} } : { none: {} } });
+    if (query.hasPurchases !== undefined)
+      and.push({
+        purchases: query.hasPurchases
+          ? { some: { status: 'PAID' } }
+          : { none: { status: 'PAID' } },
+      });
+    if (query.stage === 'CUSTOMER_PAID')
+      and.push({ purchases: { some: { status: 'PAID' } } });
+    if (query.stage === 'CUSTOMER_UNPAID')
+      and.push({ purchases: { none: { status: 'PAID' } } });
+    const where: Prisma.UserWhereInput = { AND: and };
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
-        skip,
+        skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         include: {
-          _count: {
-            select: { trips: true, purchases: true },
-          },
+          _count: { select: { trips: true } },
           purchases: {
             where: { status: 'PAID' },
             select: { finalAmount: true },
@@ -74,65 +130,33 @@ export class CustomersService {
       }),
       this.prisma.user.count({ where }),
     ]);
-
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-
-    const data = users.map((u) => {
-      const totalSpent = u.purchases.reduce(
-        (acc, p) => acc + Number(p.finalAmount || 0),
-        0,
-      );
-
-      let stage: 'CUSTOMER' | 'PROSPECT' | 'ACTIVE_USER' | 'CHURNED' = 'ACTIVE_USER';
-      if (totalSpent > 0 || u._count.purchases > 0) {
-        stage = 'CUSTOMER';
-      } else if (u._count.trips > 0) {
-        stage = 'PROSPECT';
-      } else if (u.createdAt < sixtyDaysAgo) {
-        stage = 'CHURNED';
-      } else if (u.createdAt >= thirtyDaysAgo) {
-        stage = 'ACTIVE_USER';
-      }
-
-      return {
+    return {
+      data: users.map((u) => ({
         id: u.id,
         fullName: u.fullName,
         email: u.email,
         phone: u.phone,
         role: u.role,
+        source: 'APP',
         origin: u.origin || 'mobile',
         marketingConsent: u.marketingConsent,
-        emailConfirmed: u.emailConfirmed,
-        blockedAt: u.blockedAt,
         createdAt: u.createdAt,
-        lastActiveAt: u.lastActiveAt || u.updatedAt,
-        totalTrips: u._count.trips,
-        totalPurchases: u._count.purchases,
-        totalSpent,
-        stage,
-      };
-    });
-
-    const filteredData = query.stage && query.stage !== 'ALL'
-      ? data.filter((item) => item.stage === query.stage)
-      : data;
-
-    return {
-      data: filteredData,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
+        lastActiveAt: u.lastActiveAt,
+        tripsCount: u._count.trips,
+        purchasesCount: u.purchases.length,
+        totalSpent: u.purchases.reduce(
+          (sum, p) => sum + Number(p.finalAmount),
+          0,
+        ),
+        stage: u.purchases.length ? 'CUSTOMER_PAID' : 'CUSTOMER_UNPAID',
+      })),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
   async getCustomer360(id: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
+    const user = await this.prisma.user.findFirst({
+      where: { id, role: 'USER' },
       include: {
         travelProfile: true,
         trips: {
@@ -271,7 +295,7 @@ export class CustomersService {
       .reduce((acc, p) => acc + Number(p.finalAmount || 0), 0);
 
     return {
-      profile: {
+      customer: {
         id: user.id,
         fullName: user.fullName,
         email: user.email,
@@ -289,8 +313,13 @@ export class CustomersService {
       },
       metrics: {
         totalSpent,
-        totalTrips: user.trips.length,
-        totalPurchases: user.purchases.length,
+        stage: user.purchases.some((p) => p.status === 'PAID')
+          ? 'CUSTOMER_PAID'
+          : 'CUSTOMER_UNPAID',
+        tripsCount: user.trips.length,
+        purchasesCount: user.purchases.filter((p) => p.status === 'PAID')
+          .length,
+        guestJourneysCount: user.claimedGuestJourneys.length,
         totalAIRequests: user.aiRequests.length,
       },
       travelProfile: user.travelProfile,
@@ -332,12 +361,18 @@ export class CustomersService {
         budgetLevel: j.budgetLevel,
         createdAt: j.createdAt,
       })),
+      campaignsReceived: user.campaignRecipients.map((c) => ({
+        ...c,
+        campaignTitle: c.campaign.name,
+      })),
       timeline,
     };
   }
 
   async updateConsent(id: string, consent: boolean) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findFirst({
+      where: { id, role: 'USER' },
+    });
     if (!user) throw new NotFoundException('Usuário não encontrado');
 
     const updated = await this.prisma.user.update({
