@@ -95,7 +95,7 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
           {
             name: 'Roma',
             arrivalDate: '2026-07-25',
-            departureDate: '2026-07-28',
+            departureDate: '2026-07-25',
           },
         ],
         travelers: { adults: 2, children: 1, elders: 0 },
@@ -187,6 +187,76 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
                 }),
               ]),
             }),
+          }),
+        }),
+      );
+    });
+
+    it('should fail and NOT become PREVIEW_READY if day count diverges from requested days', async () => {
+      const mockJourney = {
+        id: 'journey-divergent-days',
+        destinations: [
+          {
+            name: 'Paris',
+            numberOfDays: 3,
+          },
+        ],
+      };
+
+      // AI only returned 2 days instead of 3
+      openAIProviderMock.generateGuestItinerary.mockResolvedValue({
+        provider: 'OPENAI',
+        model: 'gpt-4o-mini',
+        parsedData: {
+          days: [
+            { dayNumber: 1, items: [{ title: 'Torre Eiffel' }] },
+            { dayNumber: 2, items: [{ title: 'Louvre' }] },
+          ],
+        },
+      });
+
+      await service.generateGuestItinerary(mockJourney);
+
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'journey-divergent-days', status: GuestJourneyStatus.GENERATING },
+          data: expect.objectContaining({
+            status: GuestJourneyStatus.FAILED,
+          }),
+        }),
+      );
+    });
+
+    it('should fail and NOT become PREVIEW_READY if any day has zero items', async () => {
+      const mockJourney = {
+        id: 'journey-empty-day',
+        destinations: [
+          {
+            name: 'Madrid',
+            numberOfDays: 2,
+          },
+        ],
+      };
+
+      // Day 2 has empty items array
+      openAIProviderMock.generateGuestItinerary.mockResolvedValue({
+        provider: 'OPENAI',
+        model: 'gpt-4o-mini',
+        parsedData: {
+          days: [
+            { dayNumber: 1, items: [{ title: 'Prado' }] },
+            { dayNumber: 2, items: [] },
+          ],
+        },
+      });
+
+      await service.generateGuestItinerary(mockJourney);
+
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'journey-empty-day', status: GuestJourneyStatus.GENERATING },
+          data: expect.objectContaining({
+            status: GuestJourneyStatus.FAILED,
           }),
         }),
       );

@@ -333,13 +333,26 @@ export class AiService {
         }),
       );
 
-      if (
-        !normalizedDays ||
-        normalizedDays.length === 0 ||
-        normalizedDays.every((d: any) => !d.items || d.items.length === 0)
-      ) {
+      const expectedDays = this.calculateExpectedDays(destinations);
+
+      if (!normalizedDays || normalizedDays.length === 0) {
         throw new Error(
-          'Roteiro gerado incompleto: nenhum dia ou atividade válida retornada pela IA.',
+          'Roteiro gerado incompleto: nenhum dia retornado pela IA.',
+        );
+      }
+
+      if (expectedDays > 0 && normalizedDays.length !== expectedDays) {
+        throw new Error(
+          `Roteiro gerado com número de dias divergente do pedido: esperado ${expectedDays}, recebido ${normalizedDays.length}.`,
+        );
+      }
+
+      const hasEmptyDay = normalizedDays.some(
+        (d: any) => !d.items || !Array.isArray(d.items) || d.items.length === 0,
+      );
+      if (hasEmptyDay) {
+        throw new Error(
+          'Roteiro gerado incompleto: um ou mais dias não possuem atividades.',
         );
       }
 
@@ -445,5 +458,24 @@ export class AiService {
     });
     if (!req) throw new NotFoundException('AI Request não encontrado');
     return req;
+  }
+
+  private calculateExpectedDays(destinations: any[]): number {
+    let days = 0;
+    for (const d of destinations || []) {
+      if (d.numberOfDays && Number(d.numberOfDays) > 0) {
+        days += Number(d.numberOfDays);
+      } else if (d.days && Number(d.days) > 0) {
+        days += Number(d.days);
+      } else if (d.arrivalDate && d.departureDate) {
+        const start = new Date(d.arrivalDate).getTime();
+        const end = new Date(d.departureDate).getTime();
+        if (!isNaN(start) && !isNaN(end) && end >= start) {
+          const diff = Math.ceil((end - start) / (1000 * 3600 * 24)) + 1;
+          days += Math.max(1, diff);
+        }
+      }
+    }
+    return days;
   }
 }

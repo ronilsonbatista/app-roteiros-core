@@ -99,8 +99,9 @@ export class PlanningService {
     if (dto.travelers) {
       this.validateTravelers(dto.travelers);
     }
-    if (dto.activityWindow) {
-      this.validateActivityWindow(dto.activityWindow);
+    const effectiveActivityHours = dto.activityHours || dto.activityWindow;
+    if (effectiveActivityHours) {
+      this.validateActivityWindow(effectiveActivityHours);
     }
 
     const updateData: any = {};
@@ -108,7 +109,12 @@ export class PlanningService {
     if (dto.destinations !== undefined) updateData.destinations = dto.destinations as any;
     if (dto.travelers !== undefined) updateData.travelers = dto.travelers as any;
     if (dto.interests !== undefined) updateData.interests = dto.interests;
-    if (dto.activityWindow !== undefined) updateData.activityHours = dto.activityWindow as any;
+    if (effectiveActivityHours !== undefined) {
+      updateData.activityHours = {
+        startTime: effectiveActivityHours.startTime || effectiveActivityHours.start,
+        endTime: effectiveActivityHours.endTime || effectiveActivityHours.end,
+      };
+    }
     if (dto.travelStyle !== undefined) updateData.travelStyle = dto.travelStyle;
     if (dto.budgetLevel !== undefined) updateData.budgetLevel = dto.budgetLevel;
 
@@ -148,8 +154,10 @@ export class PlanningService {
     }
 
     const activityHours = journey.activityHours as any;
-    if (!activityHours || !activityHours.startTime || !activityHours.endTime) {
-      missing.push('activityWindow');
+    const hasStartTime = activityHours?.startTime || activityHours?.start;
+    const hasEndTime = activityHours?.endTime || activityHours?.end;
+    if (!activityHours || !hasStartTime || !hasEndTime) {
+      missing.push('activityHours');
     }
 
     if (!journey.budgetLevel && !journey.travelStyle) {
@@ -274,12 +282,14 @@ export class PlanningService {
   }
 
   private validateActivityWindow(window: any) {
-    if (window.startTime && window.endTime) {
-      if (window.startTime >= window.endTime) {
+    const startTime = window?.startTime || window?.start;
+    const endTime = window?.endTime || window?.end;
+    if (startTime && endTime) {
+      if (startTime >= endTime) {
         throw new BadRequestException({
           statusCode: 400,
-          code: 'PLANNING_INVALID_ACTIVITY_WINDOW',
-          message: `Horário de início (${window.startTime}) deve ser anterior ao horário de fim (${window.endTime})`,
+          code: 'PLANNING_INVALID_ACTIVITY_HOURS',
+          message: `Horário de início (${startTime}) deve ser anterior ao horário de fim (${endTime})`,
         });
       }
     }
@@ -794,6 +804,13 @@ export class PlanningService {
   }
 
   private mapToResponse(journey: any): PlanningSessionResponseDto {
+    const activityHours = journey.activityHours
+      ? {
+          startTime: journey.activityHours.startTime || journey.activityHours.start,
+          endTime: journey.activityHours.endTime || journey.activityHours.end,
+        }
+      : undefined;
+
     return {
       id: journey.id,
       status: journey.status,
@@ -802,7 +819,8 @@ export class PlanningService {
       destinations: journey.destinations || undefined,
       travelers: journey.travelers || undefined,
       interests: journey.interests || undefined,
-      activityHours: journey.activityHours || undefined,
+      activityHours,
+      activityWindow: activityHours,
       travelStyle: journey.travelStyle || undefined,
       budgetLevel: journey.budgetLevel || undefined,
       expiresAt: journey.expiresAt,

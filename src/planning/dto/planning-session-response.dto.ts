@@ -31,6 +31,9 @@ export class PlanningSessionResponseDto {
   @ApiProperty({ type: PlanningActivityWindowDto, required: false })
   activityHours?: PlanningActivityWindowDto;
 
+  @ApiProperty({ type: PlanningActivityWindowDto, required: false, deprecated: true })
+  activityWindow?: PlanningActivityWindowDto;
+
   @ApiProperty({ enum: TravelStyle, required: false })
   travelStyle?: TravelStyle;
 

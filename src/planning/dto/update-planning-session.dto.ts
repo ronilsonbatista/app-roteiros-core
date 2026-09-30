@@ -93,18 +93,36 @@ export class PlanningTravelersDto {
 
 export class PlanningActivityWindowDto {
   @ApiPropertyOptional({ example: '09:00' })
+  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'startTime deve estar no formato HH:mm',
   })
-  startTime: string;
+  startTime?: string;
+
+  @ApiPropertyOptional({ example: '09:00' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'start deve estar no formato HH:mm',
+  })
+  start?: string;
 
   @ApiPropertyOptional({ example: '18:30' })
+  @IsOptional()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'endTime deve estar no formato HH:mm',
   })
-  endTime: string;
+  endTime?: string;
+
+  @ApiPropertyOptional({ example: '18:30' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'end deve estar no formato HH:mm',
+  })
+  end?: string;
 }
 
 export class UpdatePlanningSessionDto {
@@ -143,6 +161,12 @@ export class UpdatePlanningSessionDto {
   interests?: PlanningInterest[];
 
   @ApiPropertyOptional({ type: PlanningActivityWindowDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PlanningActivityWindowDto)
+  activityHours?: PlanningActivityWindowDto;
+
+  @ApiPropertyOptional({ type: PlanningActivityWindowDto, deprecated: true })
   @IsOptional()
   @ValidateNested()
   @Type(() => PlanningActivityWindowDto)

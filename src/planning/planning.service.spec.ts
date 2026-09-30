@@ -174,6 +174,61 @@ describe('PlanningService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should update and persist activityHours when passed via activityHours', async () => {
+      const mockJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.COLLECTING,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      prismaMock.guestJourney.update.mockResolvedValue({
+        ...mockJourney,
+        activityHours: { startTime: '09:00', endTime: '19:00' },
+      });
+
+      const result = await service.updateProgress(
+        'journey-1',
+        { activityHours: { startTime: '09:00', endTime: '19:00' } },
+        mockJourney,
+      );
+
+      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith({
+        where: { id: 'journey-1' },
+        data: expect.objectContaining({
+          activityHours: { startTime: '09:00', endTime: '19:00' },
+        }),
+      });
+      expect(result.activityHours).toEqual({ startTime: '09:00', endTime: '19:00' });
+    });
+
+    it('should update and persist activityHours when passed via legacy alias activityWindow', async () => {
+      const mockJourney = {
+        id: 'journey-1',
+        status: GuestJourneyStatus.COLLECTING,
+        expiresAt: new Date(Date.now() + 100000),
+      };
+
+      prismaMock.guestJourney.update.mockResolvedValue({
+        ...mockJourney,
+        activityHours: { startTime: '08:30', endTime: '20:00' },
+      });
+
+      const result = await service.updateProgress(
+        'journey-1',
+        { activityWindow: { startTime: '08:30', endTime: '20:00' } },
+        mockJourney,
+      );
+
+      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith({
+        where: { id: 'journey-1' },
+        data: expect.objectContaining({
+          activityHours: { startTime: '08:30', endTime: '20:00' },
+        }),
+      });
+      expect(result.activityHours).toEqual({ startTime: '08:30', endTime: '20:00' });
+      expect(result.activityWindow).toEqual({ startTime: '08:30', endTime: '20:00' });
+    });
+
     it('should throw PLANNING_JOURNEY_LOCKED if status is READY_TO_GENERATE', async () => {
       const mockJourney = {
         id: 'journey-1',
@@ -192,18 +247,25 @@ describe('PlanningService', () => {
   });
 
   describe('finalizeQuestionnaire', () => {
-    it('should throw PLANNING_INCOMPLETE if required sections missing', async () => {
+    it('should throw PLANNING_INCOMPLETE if required sections missing and cite activityHours', async () => {
       const incompleteJourney = {
         id: 'journey-1',
         status: GuestJourneyStatus.COLLECTING,
         expiresAt: new Date(Date.now() + 100000),
         destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-28' }],
-        travelers: null, // missing
+        travelers: { adults: 2, children: 0, elders: 0 },
+        interests: ['culture'],
+        activityHours: null, // missing activityHours
+        budgetLevel: BudgetLevel.MEDIUM,
       };
 
-      await expect(
-        service.finalizeQuestionnaire('journey-1', incompleteJourney),
-      ).rejects.toThrow(BadRequestException);
+      try {
+        await service.finalizeQuestionnaire('journey-1', incompleteJourney);
+        fail('Should have thrown BadRequestException');
+      } catch (err: any) {
+        expect(err.message).toContain('activityHours');
+        expect(err.message).not.toContain('activityWindow');
+      }
     });
 
     it('should finalize complete questionnaire and transition status to READY_TO_GENERATE', async () => {
