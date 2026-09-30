@@ -30,7 +30,10 @@ export class ItineraryService {
   ) {}
 
   async findOneWithAuth(user: any, itemId: string) {
-    const userId = typeof user === 'string' ? user : user?.userId;
+    const userId =
+      typeof user === 'string'
+        ? user
+        : user?.userId || user?.id || user?.sub;
     const role = typeof user === 'string' ? undefined : user?.role;
 
     const item = await this.prisma.itineraryItem.findUnique({

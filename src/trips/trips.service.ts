@@ -128,8 +128,9 @@ export class TripsService {
     });
     if (!trip) throw new NotFoundException('Viagem não encontrada');
 
-    const isOwner = trip.userId === user.userId;
-    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    const currentUserId = typeof user === 'string' ? user : user?.userId || user?.id || user?.sub;
+    const isOwner = trip.userId === currentUserId;
+    const isAdmin = user?.role === 'ADMIN' || user?.role === Role.ADMIN;
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Acesso negado');
     }
@@ -148,8 +149,9 @@ export class TripsService {
     });
     if (!trip) throw new NotFoundException('Viagem não encontrada');
 
-    const isOwner = trip.userId === user.userId;
-    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    const currentUserId = typeof user === 'string' ? user : user?.userId || user?.id || user?.sub;
+    const isOwner = trip.userId === currentUserId;
+    const isAdmin = user?.role === 'ADMIN' || user?.role === Role.ADMIN;
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Acesso negado');
     }
@@ -243,8 +245,9 @@ export class TripsService {
     });
     if (!trip) throw new NotFoundException('Viagem não encontrada');
 
-    const isOwner = trip.userId === user.userId;
-    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    const currentUserId = typeof user === 'string' ? user : user?.userId || user?.id || user?.sub;
+    const isOwner = trip.userId === currentUserId;
+    const isAdmin = user?.role === 'ADMIN' || user?.role === Role.ADMIN;
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Acesso negado');
     }

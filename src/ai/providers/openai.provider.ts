@@ -350,7 +350,7 @@ export class OpenAIProvider implements AIProvider {
     totalDays: number,
   ): Promise<AIProviderResult> {
     const chunks = this.planGuestChunks(input, totalDays);
-    const primaryDest = input.destinations?.[0]?.name || 'Ásia';
+    const primaryDest = input.destinations?.[0]?.name || 'Destino';
 
     this.logger.log(
       `Iniciando geração GuestJourney longa (${totalDays} dias) em ${chunks.length} etapas paralelas.`,
@@ -933,6 +933,30 @@ Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction}, e n
       prompt += `- Janela de atividades: ${activityHours.startTime || '09:00'} às ${activityHours.endTime || '18:30'}\n`;
     }
     prompt += `\n`;
+
+    if (input.curatedContext && input.curatedContext.destinations) {
+      const destCtx = input.curatedContext.destinations.find(
+        (d) =>
+          d.destinationName?.toLowerCase().includes(chunk.city.toLowerCase()) ||
+          chunk.city.toLowerCase().includes(d.destinationName?.toLowerCase() || ''),
+      );
+      if (destCtx && destCtx.bestBaseTrip) {
+        prompt += `### Base Curada de Referência para ${chunk.city} (ID: ${destCtx.bestBaseTrip.baseTrip.id}): ${destCtx.bestBaseTrip.baseTrip.title}\n`;
+        if (destCtx.attractions?.length) {
+          prompt += `Atrações Recomendadas:\n`;
+          destCtx.attractions.slice(0, 5).forEach((a) => {
+            prompt += `- ${a.attraction.name} (PlaceID: ${a.attraction.providerPlaceId || 'N/A'})\n`;
+          });
+        }
+        if (destCtx.restaurants?.length) {
+          prompt += `Restaurantes Recomendados:\n`;
+          destCtx.restaurants.slice(0, 3).forEach((r) => {
+            prompt += `- ${r.restaurant.name}\n`;
+          });
+        }
+        prompt += `\n`;
+      }
+    }
 
     if (chunk.isFirst) {
       prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Chegada): Primeiro dia no destino. Inclua transfer de chegada, check-in no hotel, caminhada de aclimatação e jantar de boas-vindas.\n`;

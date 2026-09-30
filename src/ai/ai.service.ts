@@ -294,11 +294,12 @@ export class AiService {
   }
 
   async generateGuestItinerary(journey: any): Promise<void> {
+    let curatedContext: any = null;
     try {
       const destinations = (journey.destinations as any[]) || [];
 
       // Phase G2: Retrieve Curated Knowledge Context from PostgreSQL
-      const curatedContext =
+      curatedContext =
         await this.curationRetrievalService.retrieveCuratedContext({
           destinations: destinations.map((d, idx) => ({
             name: d.name,
@@ -501,7 +502,7 @@ export class AiService {
       });
 
       this.logger.log(
-        `Geração de roteiro anônimo (Coverage: ${curatedContext.overallCoverage}) concluída com sucesso para jornada ${journey.id}`,
+        `Geração de roteiro anônimo (Coverage: ${curatedContext.overallCoverage}, BaseTrip: ${bestBaseTripId || 'None'}) concluída com sucesso para jornada ${journey.id}`,
       );
     } catch (error) {
       this.logger.error(
@@ -513,7 +514,7 @@ export class AiService {
 
       // Identify referenced base trips in error path too
       const bestBaseTripId =
-        (journey.destinations as any[])?.length > 0 ? null : null;
+        curatedContext?.destinations?.find((d: any) => d.bestBaseTrip)?.bestBaseTrip?.baseTrip?.id || null;
 
       await this.prisma.aIRequest
         .create({
