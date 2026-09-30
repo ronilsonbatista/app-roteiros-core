@@ -14,11 +14,13 @@ export interface PlaceSearchResult {
 }
 
 export interface PlaceDetails {
+  providerPlaceId?: string;
   name: string;
   formattedAddress?: string;
   latitude?: number;
   longitude?: number;
   rating?: number;
+  userRatingsTotal?: number;
   internationalPhoneNumber?: string;
   websiteUri?: string;
   googleMapsUri?: string;

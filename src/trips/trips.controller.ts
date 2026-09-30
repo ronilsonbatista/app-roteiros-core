@@ -12,6 +12,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TripsService } from './trips.service';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
+import { UpsertAccommodationDto } from './dto/upsert-accommodation.dto';
 import { CreateTripDayDto } from '../trip-days/dto/create-trip-day.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -65,5 +66,27 @@ export class TripsController {
     @Body() dto: CreateTripDayDto,
   ) {
     return this.tripsService.createDay(user.userId, tripId, dto);
+  }
+
+  @Get(':id/accommodation')
+  @ApiOperation({ summary: 'Obter hospedagem vinculada à viagem' })
+  getAccommodation(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tripsService.getAccommodation(user, id);
+  }
+
+  @Post(':id/accommodation')
+  @ApiOperation({ summary: 'Cadastrar ou atualizar hospedagem vinculada à viagem' })
+  upsertAccommodation(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: UpsertAccommodationDto,
+  ) {
+    return this.tripsService.upsertAccommodation(user, id, dto);
+  }
+
+  @Delete(':id/accommodation')
+  @ApiOperation({ summary: 'Remover hospedagem da viagem' })
+  removeAccommodation(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tripsService.removeAccommodation(user, id);
   }
 }

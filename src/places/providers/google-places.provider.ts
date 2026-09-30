@@ -89,11 +89,13 @@ export class GooglePlacesProvider implements PlacesProvider {
       if (!place) return null;
 
       return {
+        providerPlaceId: place.id || providerPlaceId,
         name: place.displayName?.text || '',
         formattedAddress: place.formattedAddress,
         latitude: place.location?.latitude,
         longitude: place.location?.longitude,
         rating: place.rating,
+        userRatingsTotal: place.userRatingCount,
         internationalPhoneNumber: place.internationalPhoneNumber,
         websiteUri: place.websiteUri,
         googleMapsUri: place.googleMapsUri,

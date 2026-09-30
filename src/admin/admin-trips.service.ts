@@ -14,6 +14,10 @@ import { ReorderItineraryItemDto } from '../itinerary/dto/reorder-itinerary-item
 import { InviteParticipantDto } from '../participants/dto/invite-participant.dto';
 import { TripStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import {
+  recalculateDayTimeLabels,
+  recalculateDayTransits,
+} from '../trips/itinerary-schedule.util';
 
 @Injectable()
 export class AdminTripsService {
@@ -139,6 +143,7 @@ export class AdminTripsService {
             },
           },
         },
+        accommodation: true,
         purchases: true,
       },
     });
@@ -248,13 +253,27 @@ export class AdminTripsService {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
 
-    return this.prisma.itineraryItem.update({
+    const updated = await this.prisma.itineraryItem.update({
       where: { id: itemId },
       data: {
         ...dto,
         isUserModified: true,
       },
     });
+
+    if (dto.duration !== undefined) {
+      await recalculateDayTimeLabels(item.tripDayId, this.prisma);
+    }
+    if (
+      dto.duration !== undefined ||
+      dto.latitude !== undefined ||
+      dto.longitude !== undefined ||
+      dto.location !== undefined
+    ) {
+      await recalculateDayTransits(item.tripDayId, this.prisma);
+    }
+
+    return updated;
   }
 
   async removeItineraryItem(itemId: string) {
@@ -265,9 +284,14 @@ export class AdminTripsService {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
 
-    return this.prisma.itineraryItem.delete({
+    const result = await this.prisma.itineraryItem.delete({
       where: { id: itemId },
     });
+
+    await recalculateDayTransits(item.tripDayId, this.prisma);
+    await recalculateDayTimeLabels(item.tripDayId, this.prisma);
+
+    return result;
   }
 
   async reorderItineraryItem(itemId: string, dto: ReorderItineraryItemDto) {
@@ -278,12 +302,17 @@ export class AdminTripsService {
       throw new NotFoundException('Item de itinerário não encontrado');
     }
 
-    return this.prisma.itineraryItem.update({
+    const updated = await this.prisma.itineraryItem.update({
       where: { id: itemId },
       data: {
         order: dto.order,
       },
     });
+
+    await recalculateDayTransits(item.tripDayId, this.prisma);
+    await recalculateDayTimeLabels(item.tripDayId, this.prisma);
+
+    return updated;
   }
 
   async findParticipants(tripId: string) {

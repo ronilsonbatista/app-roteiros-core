@@ -4,9 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { isTripLocked } from './trips.util';
 
+import { PlacesService } from '../places/places.service';
+
 describe('TripsService Entitlement & Security Audit (Phase M.1)', () => {
   let service: TripsService;
   let prisma: PrismaService;
+  let placesServiceMock: any;
 
   const mockPrismaService = {
     trip: {
@@ -16,13 +19,36 @@ describe('TripsService Entitlement & Security Audit (Phase M.1)', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    tripAccommodation: {
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    tripDay: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    itineraryItem: {
+      update: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
+    placesServiceMock = {
+      getPlaceDetails: jest.fn().mockResolvedValue({
+        provider: 'GOOGLE',
+        providerPlaceId: 'valid-place',
+        name: 'Hotel Roma',
+        formattedAddress: 'Via Roma, 1',
+        latitude: 41.8902,
+        longitude: 12.4922,
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TripsService,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: PlacesService, useValue: placesServiceMock },
       ],
     }).compile();
 
@@ -143,6 +169,58 @@ describe('TripsService Entitlement & Security Audit (Phase M.1)', () => {
 
       await expect(
         service.findOne(otherUserId, 'trip_unpaid_1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('Trip Accommodation Management (Phase 3)', () => {
+    it('should upsert accommodation for trip owner and validate Place ID', async () => {
+      const mockTrip = {
+        id: 'trip_acc_1',
+        userId: 'owner_user',
+      };
+      mockPrismaService.trip.findUnique.mockResolvedValue(mockTrip);
+      mockPrismaService.tripAccommodation.upsert.mockResolvedValue({
+        id: 'acc_1',
+        name: 'Hotel Roma',
+        providerPlaceId: 'valid-place',
+      });
+      mockPrismaService.tripDay.findFirst.mockResolvedValue(null);
+
+      const result = await service.upsertAccommodation(
+        { userId: 'owner_user' },
+        'trip_acc_1',
+        {
+          name: 'Hotel Roma',
+          providerPlaceId: 'valid-place',
+        },
+      );
+
+      expect(mockPrismaService.tripAccommodation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tripId: 'trip_acc_1' },
+          create: expect.objectContaining({
+            name: 'Hotel Roma',
+            providerPlaceId: 'valid-place',
+          }),
+        }),
+      );
+      expect(result.id).toBe('acc_1');
+    });
+
+    it('should forbid non-owner non-admin from modifying accommodation', async () => {
+      const mockTrip = {
+        id: 'trip_acc_1',
+        userId: 'owner_user',
+      };
+      mockPrismaService.trip.findUnique.mockResolvedValue(mockTrip);
+
+      await expect(
+        service.upsertAccommodation(
+          { userId: 'intruder_user' },
+          'trip_acc_1',
+          { name: 'Hotel Fake' },
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });

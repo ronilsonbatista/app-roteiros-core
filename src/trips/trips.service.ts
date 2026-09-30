@@ -4,14 +4,21 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacesService } from '../places/places.service';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
+import { UpsertAccommodationDto } from './dto/upsert-accommodation.dto';
 import { CreateTripDayDto } from '../trip-days/dto/create-trip-day.dto';
 import { isTripLocked } from './trips.util';
+import { Role } from '@prisma/client';
+import { recalculateDayTransits } from './itinerary-schedule.util';
 
 @Injectable()
 export class TripsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private placesService: PlacesService,
+  ) {}
 
   async create(userId: string, dto: CreateTripDto) {
     return this.prisma.trip.create({
@@ -112,5 +119,147 @@ export class TripsService {
         tripId,
       },
     });
+  }
+
+  async getAccommodation(user: any, tripId: string) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: { accommodation: true },
+    });
+    if (!trip) throw new NotFoundException('Viagem não encontrada');
+
+    const isOwner = trip.userId === user.userId;
+    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    return trip.accommodation;
+  }
+
+  async upsertAccommodation(
+    user: any,
+    tripId: string,
+    dto: UpsertAccommodationDto,
+  ) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: { accommodation: true },
+    });
+    if (!trip) throw new NotFoundException('Viagem não encontrada');
+
+    const isOwner = trip.userId === user.userId;
+    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    // Validate providerPlaceId if provided (strip fake place ID)
+    let validatedPlaceId = dto.providerPlaceId || null;
+    let latitude = dto.latitude ?? null;
+    let longitude = dto.longitude ?? null;
+    let address = dto.address ?? null;
+
+    if (validatedPlaceId) {
+      try {
+        const details =
+          await this.placesService.getPlaceDetails(validatedPlaceId);
+        if (details) {
+          validatedPlaceId = details.providerPlaceId || validatedPlaceId;
+          if (details.latitude != null && details.longitude != null) {
+            latitude = details.latitude;
+            longitude = details.longitude;
+          }
+          if (details.formattedAddress && !address) {
+            address = details.formattedAddress;
+          }
+        } else {
+          validatedPlaceId = null;
+        }
+      } catch {
+        // Strip fake / non-existent place ID
+        validatedPlaceId = null;
+      }
+    }
+
+    const accommodation = await this.prisma.tripAccommodation.upsert({
+      where: { tripId },
+      create: {
+        tripId,
+        name: dto.name,
+        address,
+        neighborhood: dto.neighborhood,
+        zipCode: dto.zipCode,
+        latitude,
+        longitude,
+        providerPlaceId: validatedPlaceId,
+        checkInDateTime: dto.checkInDateTime
+          ? new Date(dto.checkInDateTime)
+          : null,
+        checkOutDateTime: dto.checkOutDateTime
+          ? new Date(dto.checkOutDateTime)
+          : null,
+        checkInDate: dto.checkInDate ? new Date(dto.checkInDate) : null,
+        checkInTime: dto.checkInTime,
+        checkOutDate: dto.checkOutDate ? new Date(dto.checkOutDate) : null,
+        checkOutTime: dto.checkOutTime,
+      },
+      update: {
+        name: dto.name,
+        address,
+        neighborhood: dto.neighborhood,
+        zipCode: dto.zipCode,
+        latitude,
+        longitude,
+        providerPlaceId: validatedPlaceId,
+        checkInDateTime: dto.checkInDateTime
+          ? new Date(dto.checkInDateTime)
+          : null,
+        checkOutDateTime: dto.checkOutDateTime
+          ? new Date(dto.checkOutDateTime)
+          : null,
+        checkInDate: dto.checkInDate ? new Date(dto.checkInDate) : null,
+        checkInTime: dto.checkInTime,
+        checkOutDate: dto.checkOutDate ? new Date(dto.checkOutDate) : null,
+        checkOutTime: dto.checkOutTime,
+      },
+    });
+
+    // Recalculate transit for Day 1
+    const day1 = await this.prisma.tripDay.findFirst({
+      where: { tripId, dayNumber: 1 },
+    });
+    if (day1) {
+      await recalculateDayTransits(day1.id, this.prisma);
+    }
+
+    return accommodation;
+  }
+
+  async removeAccommodation(user: any, tripId: string) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: { accommodation: true },
+    });
+    if (!trip) throw new NotFoundException('Viagem não encontrada');
+
+    const isOwner = trip.userId === user.userId;
+    const isAdmin = user.role === 'ADMIN' || user.role === Role.ADMIN;
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    await this.prisma.tripAccommodation.deleteMany({
+      where: { tripId },
+    });
+
+    const day1 = await this.prisma.tripDay.findFirst({
+      where: { tripId, dayNumber: 1 },
+    });
+    if (day1) {
+      await recalculateDayTransits(day1.id, this.prisma);
+    }
+
+    return { message: 'Hospedagem removida com sucesso' };
   }
 }
