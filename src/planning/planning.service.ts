@@ -704,10 +704,27 @@ export class PlanningService {
         }
       }
 
-      const startDateStr = destinations[0]?.arrivalDate;
-      const endDateStr = destinations[destinations.length - 1]?.departureDate;
+      const firstDest = destinations[0];
+      const lastDest = destinations[destinations.length - 1];
+
+      const startDateStr = firstDest?.arrivalDate;
+      const endDateStr = lastDest?.departureDate;
       const startDate = startDateStr ? new Date(startDateStr) : null;
       const endDate = endDateStr ? new Date(endDateStr) : null;
+
+      let arrivalDateTime: Date | null = null;
+      if (firstDest?.arrivalDate) {
+        arrivalDateTime = firstDest.arrivalTime
+          ? new Date(`${firstDest.arrivalDate}T${firstDest.arrivalTime}:00`)
+          : new Date(`${firstDest.arrivalDate}T00:00:00`);
+      }
+
+      let departureDateTime: Date | null = null;
+      if (lastDest?.departureDate) {
+        departureDateTime = lastDest.departureTime
+          ? new Date(`${lastDest.departureDate}T${lastDest.departureTime}:00`)
+          : new Date(`${lastDest.departureDate}T00:00:00`);
+      }
 
       // Materialize Trip
       const trip = await tx.trip.create({
@@ -718,6 +735,10 @@ export class PlanningService {
           coverImage,
           startDate,
           endDate,
+          arrivalDateTime,
+          departureDateTime,
+          allowedSwapsCount: 4,
+          usedSwapsCount: 0,
           status: TripStatus.DRAFT,
           premiumUnlockedAt: null,
           preferences: {
@@ -726,6 +747,7 @@ export class PlanningService {
             activityHours: currentJourney.activityHours,
             budgetLevel: currentJourney.budgetLevel,
             travelStyle: currentJourney.travelStyle,
+            destinations, // Preservar lista completa multi-destino incluindo cidades intermediárias
           },
         },
       });
@@ -779,6 +801,18 @@ export class PlanningService {
                 item.sourceType === 'PLACES' || item.providerPlaceId
                   ? 'GOOGLE'
                   : null,
+              transitDistanceMeters:
+                item.transitDistanceMeters != null
+                  ? Number(item.transitDistanceMeters)
+                  : null,
+              transitDurationMinutes:
+                item.transitDurationMinutes != null
+                  ? Number(item.transitDurationMinutes)
+                  : null,
+              transitMode: item.transitMode || 'WALKING',
+              ticketStatus:
+                item.ticketStatus ||
+                (item.requiresTicket ? 'TICKET_REQUIRED' : 'UNKNOWN'),
             },
           });
         }

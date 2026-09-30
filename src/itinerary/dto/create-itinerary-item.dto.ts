@@ -7,7 +7,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ItineraryCategory } from '@prisma/client';
+import { ItineraryCategory, TransitMode, TicketStatus } from '@prisma/client';
 
 export class CreateItineraryItemDto {
   @ApiProperty({ example: 'Visita ao Museu do Louvre' })
@@ -92,4 +92,24 @@ export class CreateItineraryItemDto {
   @IsOptional()
   @IsBoolean()
   isUserModified?: boolean;
+
+  @ApiPropertyOptional({ example: 450, description: 'Distância de deslocamento em metros' })
+  @IsOptional()
+  @IsNumber()
+  transitDistanceMeters?: number;
+
+  @ApiPropertyOptional({ example: 8, description: 'Duração do deslocamento em minutos' })
+  @IsOptional()
+  @IsNumber()
+  transitDurationMinutes?: number;
+
+  @ApiPropertyOptional({ enum: TransitMode, default: TransitMode.WALKING })
+  @IsOptional()
+  @IsEnum(TransitMode)
+  transitMode?: TransitMode;
+
+  @ApiPropertyOptional({ enum: TicketStatus, default: TicketStatus.UNKNOWN })
+  @IsOptional()
+  @IsEnum(TicketStatus)
+  ticketStatus?: TicketStatus;
 }

@@ -37,6 +37,7 @@ export class TripsService {
           orderBy: { dayNumber: 'asc' },
           include: { items: { orderBy: { order: 'asc' } } },
         },
+        accommodation: true,
         participants: true,
         createdFromGuestJourneys: true,
         purchases: true,

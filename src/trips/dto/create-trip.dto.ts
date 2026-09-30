@@ -5,6 +5,8 @@ import {
   IsDateString,
   IsEnum,
   IsObject,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TripStatus } from '@prisma/client';
@@ -34,6 +36,28 @@ export class CreateTripDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-10T14:30:00.000Z' })
+  @IsOptional()
+  @IsDateString()
+  arrivalDateTime?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-20T18:00:00.000Z' })
+  @IsOptional()
+  @IsDateString()
+  departureDateTime?: string;
+
+  @ApiPropertyOptional({ example: 4, default: 4 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  allowedSwapsCount?: number;
+
+  @ApiPropertyOptional({ example: 0, default: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  usedSwapsCount?: number;
 
   @ApiPropertyOptional({ enum: TripStatus, default: TripStatus.DRAFT })
   @IsOptional()

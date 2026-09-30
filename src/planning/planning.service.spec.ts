@@ -694,6 +694,57 @@ describe('PlanningService', () => {
       });
     });
 
+    it('MULTI-DESTINATION: should preserve all destination cities and arrival/departure dateTimes with hours on Trip creation', async () => {
+      const multiDestJourney = {
+        id: 'journey-multi-claim',
+        status: GuestJourneyStatus.PREVIEW_READY,
+        expiresAt: new Date(Date.now() + 100000),
+        destinations: [
+          { name: 'Tóquio', arrivalDate: '2026-10-01', arrivalTime: '14:30', departureDate: '2026-10-05', departureTime: '10:00' },
+          { name: 'Quioto', arrivalDate: '2026-10-05', arrivalTime: '12:00', departureDate: '2026-10-08', departureTime: '09:00' },
+          { name: 'Osaka', arrivalDate: '2026-10-08', arrivalTime: '11:00', departureDate: '2026-10-10', departureTime: '18:00' },
+        ],
+        generatedItinerary: mockFullItinerary,
+        claimedUserId: null,
+        createdTripId: null,
+      };
+
+      const txMock = {
+        guestJourney: {
+          findUnique: jest.fn().mockResolvedValue(multiDestJourney),
+          update: jest.fn().mockResolvedValue({ ...multiDestJourney, status: GuestJourneyStatus.CLAIMED, claimedUserId: 'user-456', createdTripId: 'trip-multi-123' }),
+        },
+        baseTrip: { findFirst: jest.fn().mockResolvedValue(null) },
+        trip: { create: jest.fn().mockResolvedValue({ id: 'trip-multi-123', userId: 'user-456' }) },
+        tripDay: {
+          create: jest.fn().mockResolvedValue({ id: 'day-1', tripId: 'trip-multi-123', dayNumber: 1 }),
+        },
+        itineraryItem: { create: jest.fn().mockResolvedValue({}) },
+      };
+
+      prismaMock.$transaction = jest.fn().mockImplementation((cb) => cb(txMock));
+
+      await service.claimJourney('journey-multi-claim', 'user-456', multiDestJourney);
+
+      expect(txMock.trip.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-456',
+          destination: 'Tóquio',
+          allowedSwapsCount: 4,
+          usedSwapsCount: 0,
+          arrivalDateTime: new Date('2026-10-01T14:30:00'),
+          departureDateTime: new Date('2026-10-10T18:00:00'),
+          preferences: expect.objectContaining({
+            destinations: expect.arrayContaining([
+              expect.objectContaining({ name: 'Tóquio' }),
+              expect.objectContaining({ name: 'Quioto' }),
+              expect.objectContaining({ name: 'Osaka' }),
+            ]),
+          }),
+        }),
+      });
+    });
+
     it('IDEMPOTENCY (SAME USER): re-claiming by same user returns existing tripId without creating new Trip', async () => {
       const alreadyClaimedJourney = {
         id: 'journey-claim-idempotent',

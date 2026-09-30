@@ -118,28 +118,46 @@ enum ItineraryCategory {
   PAID_ACTIVITY
 }
 
+enum TransitMode {
+  WALKING
+  DRIVING
+  TRANSIT
+  BICYCLING
+}
+
+enum TicketStatus {
+  FREE
+  TICKET_REQUIRED
+  UNKNOWN
+}
+
 model Trip {
-  id          String      @id @default(uuid())
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(uuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title       String
-  destination String
-  coverImage  String?
-  startDate   DateTime?
-  endDate     DateTime?
-  status      TripStatus  @default(DRAFT)
-  preferences Json?
+  title              String
+  destination        String
+  coverImage         String?
+  startDate          DateTime?
+  endDate            DateTime?
+  arrivalDateTime    DateTime?
+  departureDateTime  DateTime?
+  allowedSwapsCount  Int                 @default(4)
+  usedSwapsCount     Int                 @default(0)
+  status             TripStatus          @default(DRAFT)
+  preferences        Json?
 
-  days        TripDay[]
-  aiRequests  AIRequest[]
-  participants TripParticipant[]
-  purchases   Purchase[]
+  accommodation      TripAccommodation?
+  days               TripDay[]
+  aiRequests         AIRequest[]
+  participants       TripParticipant[]
+  purchases          Purchase[]
   createdFromGuestJourneys GuestJourney[] @relation("CreatedTripGuestJourneys")
 
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  premiumUnlockedAt DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  premiumUnlockedAt  DateTime?
 
   @@map("trips")
 }
@@ -190,6 +208,11 @@ model ItineraryItem {
   providerPlaceId String?
   placeProvider   String?
 
+  transitDistanceMeters  Int?
+  transitDurationMinutes Int?
+  transitMode            TransitMode  @default(WALKING)
+  ticketStatus           TicketStatus @default(UNKNOWN)
+
   isEditable     Boolean           @default(true)
   isUserModified Boolean           @default(false)
 
@@ -199,6 +222,32 @@ model ItineraryItem {
   @@index([tripDayId, order])
   @@index([providerPlaceId])
   @@map("itinerary_items")
+}
+
+model TripAccommodation {
+  id                  String    @id @default(uuid())
+  tripId              String    @unique
+  trip                Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  name                String
+  address             String?
+  neighborhood        String?
+  zipCode             String?
+  latitude            Float?
+  longitude           Float?
+  providerPlaceId     String?
+
+  checkInDateTime     DateTime?
+  checkOutDateTime    DateTime?
+  checkInDate         DateTime?
+  checkInTime         String?
+  checkOutDate        DateTime?
+  checkOutTime        String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("trip_accommodations")
 }
 
 enum BaseTripStatus {
