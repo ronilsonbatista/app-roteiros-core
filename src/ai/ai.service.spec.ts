@@ -1,15 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenAIProvider } from './providers/openai.provider';
 import { CurationRetrievalService } from './curation/curation-retrieval.service';
-import { GuestJourneyStatus, ItineraryCategory } from '@prisma/client';
+import { PlacesService } from '../places/places.service';
+import { GuestJourneyStatus, ItineraryCategory, TicketStatus, TransitMode } from '@prisma/client';
 
 describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
   let service: AiService;
   let prismaMock: any;
   let openAIProviderMock: any;
   let curationRetrievalServiceMock: any;
+  let placesServiceMock: any;
 
   beforeEach(async () => {
     prismaMock = {
@@ -72,6 +75,23 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
       }),
     };
 
+    placesServiceMock = {
+      getPlaceDetails: jest.fn().mockImplementation((placeId: string) => {
+        if (placeId === 'fake-place-id' || placeId === 'invalid-place') {
+          return Promise.reject(new NotFoundException('Place not found'));
+        }
+        return Promise.resolve({
+          provider: 'GOOGLE',
+          providerPlaceId: placeId,
+          name: 'Genuine Place',
+          formattedAddress: 'Genuine Street, 100',
+          latitude: 41.8902,
+          longitude: 12.4922,
+          googleMapsUri: `https://maps.google.com/?q=${placeId}`,
+        });
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AiService,
@@ -80,6 +100,10 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         {
           provide: CurationRetrievalService,
           useValue: curationRetrievalServiceMock,
+        },
+        {
+          provide: PlacesService,
+          useValue: placesServiceMock,
         },
       ],
     }).compile();
@@ -363,6 +387,204 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
       expect(openAIProviderMock.generateItinerary).toHaveBeenCalledWith(
         expect.objectContaining({
           baseTrip: expect.objectContaining({ id: 'base-trip-roma' }),
+        }),
+      );
+    });
+  });
+
+  describe('Phase 2 Curated, Places, and Transit Capabilities', () => {
+    it('should strip fake place ID when PlacesProvider fails or returns not found (FAKE_PLACE_ID_NOT_STORED = YES)', async () => {
+      const mockJourney = {
+        id: 'journey-fake-place',
+        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-25' }],
+        travelers: { adults: 1, children: 0, elders: 0 },
+      };
+
+      openAIProviderMock.generateGuestItinerary.mockResolvedValue({
+        provider: 'OPENAI',
+        model: 'gpt-4o-mini',
+        parsedData: {
+          days: [
+            {
+              dayNumber: 1,
+              title: 'Dia 1',
+              items: [
+                {
+                  title: 'Fake Attraction',
+                  category: 'TOURIST_ATTRACTION',
+                  providerPlaceId: 'fake-place-id', // will fail in placesServiceMock
+                  cost: 0,
+                },
+                {
+                  title: 'Real Attraction',
+                  category: 'MUSEUM',
+                  providerPlaceId: 'valid-place-123', // will succeed
+                  cost: 15,
+                },
+              ],
+            },
+          ],
+        },
+        tokensUsed: 200,
+      });
+
+      await service.generateGuestItinerary(mockJourney);
+
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            generatedItinerary: expect.objectContaining({
+              days: expect.arrayContaining([
+                expect.objectContaining({
+                  items: expect.arrayContaining([
+                    expect.objectContaining({
+                      title: 'Fake Attraction',
+                      providerPlaceId: null, // stripped!
+                      placeProvider: null,
+                      latitude: null,
+                      longitude: null,
+                    }),
+                    expect.objectContaining({
+                      title: 'Real Attraction',
+                      providerPlaceId: 'valid-place-123',
+                      placeProvider: 'GOOGLE',
+                      latitude: 41.8902,
+                      longitude: 12.4922,
+                      ticketStatus: TicketStatus.TICKET_REQUIRED,
+                    }),
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should compute geodesic transit between consecutive items and not invent meters if coords null (TRANSIT_COMPUTED = YES)', async () => {
+      const mockJourney = {
+        id: 'journey-transit',
+        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-25' }],
+        travelers: { adults: 1, children: 0, elders: 0 },
+      };
+
+      // Two valid places with coordinates -> transit should be computed
+      placesServiceMock.getPlaceDetails.mockImplementation((placeId: string) => {
+        if (placeId === 'place-1') {
+          return Promise.resolve({
+            provider: 'GOOGLE',
+            providerPlaceId: 'place-1',
+            latitude: 41.8902, // Coliseu
+            longitude: 12.4922,
+          });
+        }
+        if (placeId === 'place-2') {
+          return Promise.resolve({
+            provider: 'GOOGLE',
+            providerPlaceId: 'place-2',
+            latitude: 41.8986, // Fontana di Trevi (~1.1 km)
+            longitude: 12.4828,
+          });
+        }
+        return Promise.reject(new NotFoundException());
+      });
+
+      openAIProviderMock.generateGuestItinerary.mockResolvedValue({
+        provider: 'OPENAI',
+        model: 'gpt-4o-mini',
+        parsedData: {
+          days: [
+            {
+              dayNumber: 1,
+              title: 'Dia 1',
+              items: [
+                {
+                  title: 'Coliseu',
+                  category: 'TOURIST_ATTRACTION',
+                  providerPlaceId: 'place-1',
+                },
+                {
+                  title: 'Fontana di Trevi',
+                  category: 'TOURIST_ATTRACTION',
+                  providerPlaceId: 'place-2',
+                },
+                {
+                  title: 'Sem Coordenadas',
+                  category: 'CAFE',
+                  providerPlaceId: null,
+                },
+              ],
+            },
+          ],
+        },
+        tokensUsed: 250,
+      });
+
+      await service.generateGuestItinerary(mockJourney);
+
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            generatedItinerary: expect.objectContaining({
+              days: expect.arrayContaining([
+                expect.objectContaining({
+                  items: [
+                    expect.objectContaining({
+                      title: 'Coliseu',
+                      transitDistanceMeters: null, // First item without accommodation has null
+                    }),
+                    expect.objectContaining({
+                      title: 'Fontana di Trevi',
+                      transitDistanceMeters: expect.any(Number), // Computed between 1 and 2
+                      transitDurationMinutes: expect.any(Number),
+                      transitMode: TransitMode.WALKING,
+                    }),
+                    expect.objectContaining({
+                      title: 'Sem Coordenadas',
+                      transitDistanceMeters: null, // Coords missing -> do not invent meters!
+                      transitDurationMinutes: null,
+                    }),
+                  ],
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should record baseTripId and referenced base trips in AIRequest audit log (BASE_REFS_RECORDED = YES)', async () => {
+      const mockJourney = {
+        id: 'journey-base-refs',
+        destinations: [{ name: 'Roma', arrivalDate: '2026-07-25', departureDate: '2026-07-25' }],
+        travelers: { adults: 1, children: 0, elders: 0 },
+      };
+
+      openAIProviderMock.generateGuestItinerary.mockResolvedValue({
+        provider: 'OPENAI',
+        model: 'gpt-4o-mini',
+        parsedData: {
+          days: [
+            {
+              dayNumber: 1,
+              title: 'Dia 1',
+              items: [{ title: 'Coliseu' }],
+            },
+          ],
+        },
+        tokensUsed: 150,
+      });
+
+      await service.generateGuestItinerary(mockJourney);
+
+      expect(prismaMock.aIRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            guestJourneyId: 'journey-base-refs',
+            baseTripId: 'base-trip-roma',
+            status: 'SUCCESS',
+            prompt: expect.stringContaining('Roma Antiga'),
+          }),
         }),
       );
     });

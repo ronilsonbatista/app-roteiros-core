@@ -67,6 +67,7 @@ export const DEFAULT_RETRIEVAL_WEIGHTS = {
   partialCityMatch: 30,
   tagOverlapMatch: 10,
   budgetMatch: 15,
+  travelStyleMatch: 15,
   durationMatch: 10,
   kidElderMatch: 10,
 };
@@ -251,7 +252,29 @@ export class CurationRetrievalService {
       matchReasons.push('Cidade correspondente');
     }
 
-    // 2. Tag / Interest overlap
+    // 2. Place ID match & verified places
+    if (dest.providerPlaceId) {
+      const hasPlaceIdMatch = (trip.days || []).some((d: any) =>
+        (d.attractions || []).some((a: any) => a.providerPlaceId === dest.providerPlaceId) ||
+        (d.restaurants || []).some((r: any) => r.providerPlaceId === dest.providerPlaceId)
+      );
+      if (hasPlaceIdMatch) {
+        score += DEFAULT_RETRIEVAL_WEIGHTS.providerPlaceIdMatch;
+        matchReasons.push('Place ID correspondente na curadoria base');
+      }
+    }
+
+    const verifiedPlacesCount = (trip.days || []).reduce((count: number, d: any) => {
+      const aCount = (d.attractions || []).filter((a: any) => !!a.providerPlaceId).length;
+      const rCount = (d.restaurants || []).filter((r: any) => !!r.providerPlaceId).length;
+      return count + aCount + rCount;
+    }, 0);
+    if (verifiedPlacesCount > 0) {
+      score += Math.min(20, verifiedPlacesCount * 2);
+      matchReasons.push(`${verifiedPlacesCount} locais com Place ID verificado na base`);
+    }
+
+    // 3. Tag / Interest overlap
     if (input.interests && input.interests.length > 0 && trip.tags) {
       const tripTags = (trip.tags as string[]).map((t) => t.toLowerCase());
       for (const interest of input.interests) {
@@ -264,7 +287,46 @@ export class CurationRetrievalService {
       }
     }
 
-    // 3. Duration match
+    // 4. Budget Level match
+    if (input.budgetLevel) {
+      const budgetMap: Record<string, string[]> = {
+        LOW: ['low', 'economico', 'econômico', 'mochileiro', 'budget'],
+        MEDIUM: ['medium', 'moderado', 'conforto', 'standard'],
+        HIGH: ['high', 'alto', 'premium', 'superior'],
+        PREMIUM: ['premium', 'luxo', 'luxury', 'alto padrão', 'vip'],
+      };
+      const keywords = budgetMap[input.budgetLevel] || [];
+      const tripTags = ((trip.tags as string[]) || []).map((t) => t.toLowerCase());
+      const profile = (trip.profile || '').toLowerCase();
+      const tagMatch = tripTags.some((t) => keywords.some((k) => t.includes(k)));
+      const profileMatch = keywords.some((k) => profile.includes(k));
+
+      let numericMatch = false;
+      if (trip.averageBudget != null && Number.isFinite(trip.averageBudget)) {
+        if (input.budgetLevel === 'LOW' && trip.averageBudget < 600) numericMatch = true;
+        else if (input.budgetLevel === 'MEDIUM' && trip.averageBudget >= 600 && trip.averageBudget <= 1800) numericMatch = true;
+        else if (input.budgetLevel === 'HIGH' && trip.averageBudget > 1800 && trip.averageBudget <= 3500) numericMatch = true;
+        else if (input.budgetLevel === 'PREMIUM' && trip.averageBudget > 3500) numericMatch = true;
+      }
+
+      if (tagMatch || profileMatch || numericMatch) {
+        score += DEFAULT_RETRIEVAL_WEIGHTS.budgetMatch;
+        matchReasons.push(`Orçamento compatível: ${input.budgetLevel}`);
+      }
+    }
+
+    // 5. Travel Style match
+    if (input.travelStyle) {
+      const styleClean = input.travelStyle.toLowerCase();
+      const tripTags = ((trip.tags as string[]) || []).map((t) => t.toLowerCase());
+      const profile = (trip.profile || '').toLowerCase();
+      if (tripTags.some((t) => t.includes(styleClean) || styleClean.includes(t)) || profile.includes(styleClean)) {
+        score += DEFAULT_RETRIEVAL_WEIGHTS.travelStyleMatch;
+        matchReasons.push(`Estilo de viagem compatível: ${input.travelStyle}`);
+      }
+    }
+
+    // 6. Duration match
     if (input.numberOfDays && trip.numberOfDays) {
       const diff = Math.abs(trip.numberOfDays - input.numberOfDays);
       if (diff === 0) {
@@ -276,7 +338,7 @@ export class CurationRetrievalService {
       }
     }
 
-    // 4. Traveler suitability (kids / elders)
+    // 7. Traveler suitability (kids / elders)
     if (input.travelers) {
       const hasKids = input.travelers.children > 0;
       const hasElders = input.travelers.elders > 0;

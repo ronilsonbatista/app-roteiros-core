@@ -196,4 +196,54 @@ describe('CurationRetrievalService (Phase G2 Audit & Retrieval)', () => {
       'Galleria degli Uffizi',
     );
   });
+
+  it('should rank higher BaseTrips matching budget, travelStyle, and Place IDs', async () => {
+    const mockTripA = {
+      id: 'trip-standard',
+      title: 'Tóquio Padrão',
+      destination: 'Tóquio',
+      status: BaseTripStatus.PUBLISHED,
+      numberOfDays: 5,
+      tags: ['cultura'],
+      days: [{ dayNumber: 1, attractions: [], restaurants: [] }],
+    };
+
+    const mockTripB = {
+      id: 'trip-budget-style-place',
+      title: 'Tóquio Econômico e Cultural',
+      destination: 'Tóquio',
+      status: BaseTripStatus.PUBLISHED,
+      numberOfDays: 5,
+      tags: ['cultura', 'economico', 'cultural'],
+      averageBudget: 450,
+      profile: 'Viajante cultural com foco econômico',
+      days: [
+        {
+          dayNumber: 1,
+          attractions: [
+            { id: 'attr-tokyo-1', name: 'Senso-ji', providerPlaceId: 'place-sensoji-123' },
+          ],
+          restaurants: [
+            { id: 'rest-tokyo-1', name: 'Ramen Ichiran', providerPlaceId: 'place-ichiran-456' },
+          ],
+        },
+      ],
+    };
+
+    mockPrismaService.baseTrip.findMany.mockResolvedValue([mockTripA, mockTripB]);
+
+    const result = await service.retrieveCuratedContext({
+      destinations: [{ name: 'Tóquio', providerPlaceId: 'place-sensoji-123' }],
+      numberOfDays: 5,
+      budgetLevel: 'LOW',
+      travelStyle: 'CULTURAL',
+      interests: ['cultura'],
+    });
+
+    expect(result.destinations[0].bestBaseTrip?.baseTrip.id).toEqual('trip-budget-style-place');
+    const reasons = result.destinations[0].bestBaseTrip?.matchReasons || [];
+    expect(reasons.some((r) => r.includes('Place ID correspondente'))).toBe(true);
+    expect(reasons.some((r) => r.includes('Orçamento compatível'))).toBe(true);
+    expect(reasons.some((r) => r.includes('Estilo de viagem compatível'))).toBe(true);
+  });
 });

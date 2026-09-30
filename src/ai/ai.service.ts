@@ -8,7 +8,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenAIProvider } from './providers/openai.provider';
 import { CurationRetrievalService } from './curation/curation-retrieval.service';
-import { ItineraryCategory, GuestJourneyStatus } from '@prisma/client';
+import { PlacesService } from '../places/places.service';
+import { estimateTransit } from './transit.util';
+import {
+  ItineraryCategory,
+  GuestJourneyStatus,
+  TicketStatus,
+  TransitMode,
+} from '@prisma/client';
 
 @Injectable()
 export class AiService {
@@ -18,6 +25,7 @@ export class AiService {
     private prisma: PrismaService,
     private openAIProvider: OpenAIProvider,
     private curationRetrievalService: CurationRetrievalService,
+    private placesService: PlacesService,
   ) {}
 
   async generateItinerary(userId: string, tripId: string, body: any) {
@@ -25,7 +33,7 @@ export class AiService {
 
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      include: { days: true },
+      include: { days: true, accommodation: true },
     });
 
     if (!trip) throw new NotFoundException('Trip não encontrada');
@@ -81,6 +89,36 @@ export class AiService {
       baseTrip = curated.destinations[0]?.bestBaseTrip?.baseTrip || null;
     }
 
+    const curatedMap = new Map<string, any>();
+    if (baseTrip?.days) {
+      for (const day of baseTrip.days) {
+        for (const attr of day.attractions || []) {
+          if (attr.name) {
+            curatedMap.set(attr.name.toLowerCase().trim(), {
+              providerPlaceId: attr.providerPlaceId,
+              latitude: attr.latitude,
+              longitude: attr.longitude,
+              requiresTicket: attr.requiresTicket,
+              address: attr.address,
+              googleMapsLink: attr.googleMapsLink,
+            });
+          }
+        }
+        for (const rest of day.restaurants || []) {
+          if (rest.name) {
+            curatedMap.set(rest.name.toLowerCase().trim(), {
+              providerPlaceId: rest.providerPlaceId,
+              latitude: rest.latitude,
+              longitude: rest.longitude,
+              requiresTicket: false,
+              address: rest.address,
+              googleMapsLink: rest.googleMapsLink,
+            });
+          }
+        }
+      }
+    }
+
     let aiRequestRecord;
 
     try {
@@ -128,62 +166,86 @@ export class AiService {
           throw new BadRequestException(
             'O roteiro foi alterado durante a geração. Atualize antes de tentar novamente.',
           );
+
+        const placeCache = new Map<string, any>();
+        const enrichedDays = await Promise.all(
+          parsedDays.map(async (day, index) => {
+            let dayDate: Date | null = null;
+            if (trip.startDate) {
+              const d = new Date(trip.startDate);
+              d.setDate(d.getDate() + index);
+              dayDate = d;
+            } else if (day.date) {
+              dayDate = new Date(day.date);
+            }
+
+            const enrichedItems = await this.validateAndEnrichDayItems(
+              day.items,
+              trip.accommodation,
+              curatedMap,
+              placeCache,
+            );
+
+            return {
+              dayNumber: day.dayNumber || index + 1,
+              date: dayDate,
+              title: String(day.title || `Dia ${index + 1}`),
+              description: String(day.description || ''),
+              items: {
+                create: enrichedItems.map((item: any, order: number) => {
+                  const categoryMatch =
+                    Object.values(ItineraryCategory).find(
+                      (c) => c === item.category,
+                    ) || ItineraryCategory.TOURIST_ATTRACTION;
+
+                  return {
+                    title: String(item.title || 'Atividade'),
+                    description: String(item.description || ''),
+                    category: categoryMatch,
+                    location: String(item.location || ''),
+                    period: String(item.period || ''),
+                    timeLabel: item.timeLabel
+                      ? String(item.timeLabel)
+                      : null,
+                    duration: Number.isFinite(Number(item.duration))
+                      ? Number(item.duration)
+                      : null,
+                    cost: Number.isFinite(
+                      Number(item.cost ?? item.estimatedCost),
+                    )
+                      ? Math.max(0, Number(item.cost ?? item.estimatedCost))
+                      : 0,
+                    currency: String(item.currency || 'EUR'),
+                    notes: item.notes ? String(item.notes) : null,
+                    googleMapsLink: item.googleMapsLink
+                      ? String(item.googleMapsLink)
+                      : null,
+                    latitude:
+                      item.latitude != null ? Number(item.latitude) : null,
+                    longitude:
+                      item.longitude != null ? Number(item.longitude) : null,
+                    providerPlaceId: item.providerPlaceId || null,
+                    placeProvider: item.placeProvider || null,
+                    transitDistanceMeters: item.transitDistanceMeters ?? null,
+                    transitDurationMinutes:
+                      item.transitDurationMinutes ?? null,
+                    transitMode: item.transitMode || TransitMode.WALKING,
+                    ticketStatus: item.ticketStatus || TicketStatus.UNKNOWN,
+                    order: order + 1,
+                    isEditable: true,
+                    isUserModified: false,
+                  };
+                }),
+              },
+            };
+          }),
+        );
+
         await tx.trip.update({
           where: { id: tripId },
           data: {
             days: {
-              create: parsedDays.map((day, index) => {
-                let dayDate: Date | null = null;
-                if (trip.startDate) {
-                  const d = new Date(trip.startDate);
-                  d.setDate(d.getDate() + index);
-                  dayDate = d;
-                } else if (day.date) {
-                  dayDate = new Date(day.date);
-                }
-
-                return {
-                  dayNumber: day.dayNumber || index + 1,
-                  date: dayDate,
-                  title: String(day.title || `Dia ${index + 1}`),
-                  description: String(day.description || ''),
-                  items: {
-                    create: day.items.map((item: any, order: number) => {
-                      const categoryMatch =
-                        Object.values(ItineraryCategory).find(
-                          (c) => c === item.category,
-                        ) || ItineraryCategory.TOURIST_ATTRACTION;
-
-                      return {
-                        title: String(item.title || 'Atividade'),
-                        description: String(item.description || ''),
-                        category: categoryMatch,
-                        location: String(item.location || ''),
-                        period: String(item.period || ''),
-                        timeLabel: item.timeLabel
-                          ? String(item.timeLabel)
-                          : null,
-                        duration: Number.isFinite(Number(item.duration))
-                          ? Number(item.duration)
-                          : null,
-                        cost: Number.isFinite(
-                          Number(item.cost ?? item.estimatedCost),
-                        )
-                          ? Math.max(0, Number(item.cost ?? item.estimatedCost))
-                          : 0,
-                        currency: String(item.currency || 'EUR'),
-                        notes: item.notes ? String(item.notes) : null,
-                        googleMapsLink: item.googleMapsLink
-                          ? String(item.googleMapsLink)
-                          : null,
-                        order: order + 1,
-                        isEditable: true,
-                        isUserModified: false,
-                      };
-                    }),
-                  },
-                };
-              }),
+              create: enrichedDays,
             },
           },
         });
@@ -273,63 +335,128 @@ export class AiService {
 
       const aiResult = await this.openAIProvider.generateGuestItinerary(input);
 
+      // Identify best base trip and referenced base trips for audit trail
+      const referencedBaseTrips = (curatedContext?.destinations || [])
+        .map((d: any) =>
+          d.bestBaseTrip?.baseTrip
+            ? { id: d.bestBaseTrip.baseTrip.id, title: d.bestBaseTrip.baseTrip.title }
+            : null,
+        )
+        .filter(Boolean);
+      const bestBaseTripId = referencedBaseTrips[0]?.id || null;
+
       // Save AIRequest Audit Log
       await this.prisma.aIRequest.create({
         data: {
           guestJourneyId: journey.id,
+          baseTripId: bestBaseTripId,
           provider: aiResult.provider,
           model: aiResult.model,
-          prompt: 'Guest System Prompt + Curated Context',
+          prompt: referencedBaseTrips.length
+            ? `Guest System Prompt + Curated Context (Ref: ${referencedBaseTrips.map((b: any) => b.title).join(', ')})`
+            : 'Guest System Prompt + Curated Context',
           response: aiResult.parsedData,
           status: 'SUCCESS',
           tokensUsed: aiResult.tokensUsed,
         },
       });
 
-      // Normalize itinerary and add Provenance metadata
-      const normalizedDays = (aiResult.parsedData.days || []).map(
-        (day: any, idx: number) => ({
-          dayNumber: day.dayNumber || idx + 1,
-          date: day.date,
-          destination:
-            day.destination || (journey.destinations?.[0]?.name ?? 'Destino'),
-          title: day.title || `Dia ${idx + 1}`,
-          description: day.description || '',
-          items: (day.items || []).map((item: any, itemIdx: number) => {
-            const categoryMatch = Object.values(ItineraryCategory).find(
-              (c) => c === item.category,
-            );
-
-            // Provenance resolution
-            let sourceType = item.sourceType || 'AI';
-            let sourceId = item.sourceId || null;
-            let providerPlaceId = item.providerPlaceId || null;
-
-            if (sourceType === 'AI' || !sourceType) {
-              if (providerPlaceId) {
-                sourceType = 'PLACES';
-              }
+      // Build curated lookup map from curatedContext
+      const curatedMap = new Map<string, any>();
+      if (curatedContext?.destinations) {
+        for (const destCtx of curatedContext.destinations) {
+          for (const attr of destCtx.attractions || []) {
+            if (attr.attraction?.name) {
+              curatedMap.set(attr.attraction.name.toLowerCase().trim(), {
+                providerPlaceId: attr.attraction.providerPlaceId,
+                latitude: attr.attraction.latitude,
+                longitude: attr.attraction.longitude,
+                requiresTicket: attr.attraction.requiresTicket,
+                address: attr.attraction.address,
+                googleMapsLink: attr.attraction.googleMapsLink,
+              });
             }
+          }
+          for (const rest of destCtx.restaurants || []) {
+            if (rest.restaurant?.name) {
+              curatedMap.set(rest.restaurant.name.toLowerCase().trim(), {
+                providerPlaceId: rest.restaurant.providerPlaceId,
+                latitude: rest.restaurant.latitude,
+                longitude: rest.restaurant.longitude,
+                requiresTicket: false,
+                address: rest.restaurant.address,
+                googleMapsLink: rest.restaurant.googleMapsLink,
+              });
+            }
+          }
+        }
+      }
 
-            return {
-              title: item.title || 'Atividade',
-              description: item.description || '',
-              category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
-              location: item.location || '',
-              period: item.period || 'Manhã',
-              timeLabel: item.timeLabel || null,
-              duration: Number.isFinite(Number(item.duration))
-                ? Number(item.duration)
-                : null,
-              cost: Number(item.cost ?? item.estimatedCost ?? 0),
-              currency: item.currency || 'EUR',
-              notes: item.notes || '',
-              order: itemIdx + 1,
-              sourceType,
-              sourceId,
-              providerPlaceId,
-            };
-          }),
+      const placeCache = new Map<string, any>();
+      const rawDays = aiResult.parsedData?.days || [];
+
+      // Normalize itinerary and add Provenance metadata + Places & Transit enrichment
+      const normalizedDays = await Promise.all(
+        rawDays.map(async (day: any, idx: number) => {
+          const enrichedDayItems = await this.validateAndEnrichDayItems(
+            day.items || [],
+            null,
+            curatedMap,
+            placeCache,
+          );
+
+          return {
+            dayNumber: day.dayNumber || idx + 1,
+            date: day.date,
+            destination:
+              day.destination || (journey.destinations?.[0]?.name ?? 'Destino'),
+            title: day.title || `Dia ${idx + 1}`,
+            description: day.description || '',
+            items: enrichedDayItems.map((item: any, itemIdx: number) => {
+              const categoryMatch = Object.values(ItineraryCategory).find(
+                (c) => c === item.category,
+              );
+
+              // Provenance resolution
+              let sourceType = item.sourceType || 'AI';
+              let sourceId = item.sourceId || null;
+              let providerPlaceId = item.providerPlaceId || null;
+
+              if (sourceType === 'AI' || !sourceType) {
+                if (providerPlaceId) {
+                  sourceType = 'PLACES';
+                }
+              }
+
+              return {
+                title: item.title || 'Atividade',
+                description: item.description || '',
+                category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
+                location: item.location || '',
+                period: item.period || 'Manhã',
+                timeLabel: item.timeLabel || null,
+                duration: Number.isFinite(Number(item.duration))
+                  ? Number(item.duration)
+                  : null,
+                cost: Number(item.cost ?? item.estimatedCost ?? 0),
+                currency: item.currency || 'EUR',
+                notes: item.notes || '',
+                order: itemIdx + 1,
+                sourceType,
+                sourceId,
+                providerPlaceId,
+                placeProvider: item.placeProvider || null,
+                latitude: item.latitude != null ? Number(item.latitude) : null,
+                longitude:
+                  item.longitude != null ? Number(item.longitude) : null,
+                googleMapsLink: item.googleMapsLink || null,
+                transitDistanceMeters: item.transitDistanceMeters ?? null,
+                transitDurationMinutes: item.transitDurationMinutes ?? null,
+                transitMode: item.transitMode || TransitMode.WALKING,
+                ticketStatus: item.ticketStatus || TicketStatus.UNKNOWN,
+              };
+            }),
+          };
         }),
       );
 
@@ -384,10 +511,15 @@ export class AiService {
       const errorMessage =
         error instanceof Error ? error.message : 'Erro desconhecido na IA';
 
+      // Identify referenced base trips in error path too
+      const bestBaseTripId =
+        (journey.destinations as any[])?.length > 0 ? null : null;
+
       await this.prisma.aIRequest
         .create({
           data: {
             guestJourneyId: journey.id,
+            baseTripId: bestBaseTripId,
             provider: 'OPENAI',
             model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
             prompt: 'Guest System Prompt + Curated Context',
@@ -437,6 +569,11 @@ export class AiService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, email: true, fullName: true } },
+          trip: { select: { id: true, title: true, destination: true } },
+          baseTrip: { select: { id: true, title: true } },
+        },
       }),
       this.prisma.aIRequest.count({ where }),
     ]);
@@ -458,6 +595,194 @@ export class AiService {
     });
     if (!req) throw new NotFoundException('AI Request não encontrado');
     return req;
+  }
+
+  private async validateAndEnrichDayItems(
+    rawItems: any[],
+    accommodation?: { latitude?: number | null; longitude?: number | null } | null,
+    curatedMap?: Map<string, any>,
+    placeCache?: Map<string, any>,
+  ): Promise<any[]> {
+    const items = [...(rawItems || [])];
+    const enrichedItems: any[] = [];
+
+    for (const item of items) {
+      const titleLower = (item.title || '').toLowerCase().trim();
+      const curated = curatedMap?.get(titleLower);
+
+      let providerPlaceId =
+        item.providerPlaceId || curated?.providerPlaceId || null;
+      let placeProvider =
+        item.placeProvider || (providerPlaceId ? 'GOOGLE' : null);
+      let latitude =
+        item.latitude != null
+          ? Number(item.latitude)
+          : curated?.latitude != null
+            ? Number(curated.latitude)
+            : null;
+      let longitude =
+        item.longitude != null
+          ? Number(item.longitude)
+          : curated?.longitude != null
+            ? Number(curated.longitude)
+            : null;
+      let location = item.location || curated?.address || '';
+      let googleMapsLink =
+        item.googleMapsLink || curated?.googleMapsLink || null;
+
+      // Validate providerPlaceId via PlacesService / cache before persisting
+      if (providerPlaceId) {
+        let details: any = null;
+        if (placeCache && placeCache.has(providerPlaceId)) {
+          details = placeCache.get(providerPlaceId);
+        } else {
+          try {
+            details = await this.placesService.getPlaceDetails(providerPlaceId);
+            if (placeCache) placeCache.set(providerPlaceId, details);
+          } catch (err: any) {
+            this.logger.warn(
+              `Provider place ID "${providerPlaceId}" para "${item.title}" inválido ou não encontrado: ${err.message}. Descartando fake place ID.`,
+            );
+            details = null;
+            if (placeCache) placeCache.set(providerPlaceId, null);
+          }
+        }
+
+        if (details) {
+          placeProvider = 'GOOGLE';
+          if (details.latitude != null && details.longitude != null) {
+            latitude = details.latitude;
+            longitude = details.longitude;
+          }
+          if (
+            details.formattedAddress &&
+            (!location || location === 'Destino')
+          ) {
+            location = details.formattedAddress;
+          }
+          if (details.googleMapsUri && !googleMapsLink) {
+            googleMapsLink = details.googleMapsUri;
+          }
+        } else {
+          // FAKE_PLACE_ID_NOT_STORED = YES
+          providerPlaceId = null;
+          placeProvider = null;
+          latitude = null;
+          longitude = null;
+        }
+      }
+
+      // Ticket Status determination
+      let ticketStatus: TicketStatus = TicketStatus.UNKNOWN;
+      if (curated) {
+        if (curated.requiresTicket === true) {
+          ticketStatus = TicketStatus.TICKET_REQUIRED;
+        } else if (
+          curated.requiresTicket === false &&
+          (curated.cost === 0 || curated.cost == null)
+        ) {
+          ticketStatus = TicketStatus.FREE;
+        }
+      }
+
+      if (ticketStatus === TicketStatus.UNKNOWN) {
+        const categoryMatch = Object.values(ItineraryCategory).find(
+          (c) => c === item.category,
+        );
+        const textToCheck =
+          `${item.title || ''} ${item.description || ''} ${item.notes || ''}`.toLowerCase();
+
+        if (
+          categoryMatch === ItineraryCategory.MUSEUM ||
+          textToCheck.includes('ingresso') ||
+          textToCheck.includes('ticket') ||
+          textToCheck.includes('entrada paga') ||
+          textToCheck.includes('bilhete') ||
+          (Number(item.cost ?? item.estimatedCost) > 0 &&
+            categoryMatch === ItineraryCategory.TOURIST_ATTRACTION)
+        ) {
+          ticketStatus = TicketStatus.TICKET_REQUIRED;
+        } else if (
+          categoryMatch === ItineraryCategory.PARK ||
+          categoryMatch === ItineraryCategory.BEACH ||
+          categoryMatch === ItineraryCategory.RESTAURANT ||
+          categoryMatch === ItineraryCategory.CAFE ||
+          categoryMatch === ItineraryCategory.BAR ||
+          textToCheck.includes('entrada livre') ||
+          textToCheck.includes('gratuito') ||
+          textToCheck.includes('grátis') ||
+          textToCheck.includes('gratis') ||
+          textToCheck.includes('acesso livre')
+        ) {
+          ticketStatus = TicketStatus.FREE;
+        } else {
+          ticketStatus = TicketStatus.UNKNOWN;
+        }
+      }
+
+      enrichedItems.push({
+        ...item,
+        location,
+        googleMapsLink,
+        latitude,
+        longitude,
+        providerPlaceId,
+        placeProvider,
+        ticketStatus,
+      });
+    }
+
+    // Transit Calculation (Haversine geodesic estimate; do not invent meters if coords null)
+    for (let i = 0; i < enrichedItems.length; i++) {
+      const current = enrichedItems[i];
+      if (i === 0) {
+        if (
+          accommodation &&
+          accommodation.latitude != null &&
+          accommodation.longitude != null &&
+          current.latitude != null &&
+          current.longitude != null
+        ) {
+          const transit = estimateTransit(
+            accommodation.latitude,
+            accommodation.longitude,
+            current.latitude,
+            current.longitude,
+          );
+          current.transitDistanceMeters = transit.transitDistanceMeters;
+          current.transitDurationMinutes = transit.transitDurationMinutes;
+          current.transitMode = transit.transitMode;
+        } else {
+          current.transitDistanceMeters = null;
+          current.transitDurationMinutes = null;
+          current.transitMode = TransitMode.WALKING;
+        }
+      } else {
+        const prev = enrichedItems[i - 1];
+        if (
+          prev.latitude != null &&
+          prev.longitude != null &&
+          current.latitude != null &&
+          current.longitude != null
+        ) {
+          const transit = estimateTransit(
+            prev.latitude,
+            prev.longitude,
+            current.latitude,
+            current.longitude,
+          );
+          current.transitDistanceMeters = transit.transitDistanceMeters;
+          current.transitDurationMinutes = transit.transitDurationMinutes;
+          current.transitMode = transit.transitMode;
+        } else {
+          current.transitDistanceMeters = null;
+          current.transitDurationMinutes = null;
+          current.transitMode = TransitMode.WALKING;
+        }
+      }
+    }
+
+    return enrichedItems;
   }
 
   private calculateExpectedDays(destinations: any[]): number {

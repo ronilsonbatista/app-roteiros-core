@@ -5,7 +5,10 @@ import { AdminAiRequestsController } from './admin-ai-requests/admin-ai-requests
 import { OpenAIProvider } from './providers/openai.provider';
 import { CurationRetrievalService } from './curation/curation-retrieval.service';
 
+import { PlacesModule } from '../places/places.module';
+
 @Module({
+  imports: [PlacesModule],
   providers: [AiService, OpenAIProvider, CurationRetrievalService],
   controllers: [AiController, AdminAiRequestsController],
   exports: [AiService, OpenAIProvider, CurationRetrievalService],
