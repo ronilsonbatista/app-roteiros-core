@@ -26,6 +26,11 @@ describe('MediaService', () => {
         size: 1024,
       }),
       deleteFile: jest.fn().mockResolvedValue(undefined),
+      getFile: jest.fn().mockResolvedValue({
+        buffer: Buffer.from(''),
+        mimeType: 'image/jpeg',
+        size: 0,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({

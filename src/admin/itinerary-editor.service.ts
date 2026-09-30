@@ -21,6 +21,11 @@ export class ItineraryEditorService {
   async generateTrip(id: string) {
     const trip = await this.prisma.trip.findUnique({ where: { id } });
     if (!trip) throw new NotFoundException('Viagem não encontrada');
+    if (trip.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'A geração com IA só é permitida em viagens no status DRAFT (rascunho).',
+      );
+    }
     return this.ai.generateItinerary(trip.userId, id, {});
   }
 
@@ -90,45 +95,103 @@ export class ItineraryEditorService {
         where: { id },
         data: {
           days: {
-            create: days.map((day, index) => ({
-              dayNumber: index + 1,
-              title: String(day.title || `Dia ${index + 1}`),
-              description: String(day.description || ''),
-              attractions: {
-                create: day.items.map(
-                  (
-                    item: {
-                      title: string;
-                      category: ItineraryCategory;
-                      description?: string;
-                      location?: string;
-                      period?: string;
-                      estimatedCost?: number;
-                    },
-                    order: number,
-                  ) => ({
-                    name: item.title,
-                    category: Object.values(ItineraryCategory).includes(
-                      item.category,
-                    )
-                      ? item.category
-                      : ItineraryCategory.TOURIST_ATTRACTION,
-                    fullDescription: String(item.description || ''),
-                    address: String(item.location || ''),
-                    period: String(item.period || ''),
-                    duration: Number.isFinite(Number((item as any).duration))
-                      ? Number((item as any).duration)
-                      : null,
-                    cost: Number.isFinite(Number((item as any).cost ?? item.estimatedCost))
-                      ? Math.max(0, Number((item as any).cost ?? item.estimatedCost))
-                      : 0,
-                    currency: (item as any).currency || trip.currency || 'EUR',
-                    notes: (item as any).notes ? String((item as any).notes) : null,
-                    order: order + 1,
-                  }),
-                ),
-              },
-            })),
+            create: days.map((day, index) => {
+              const items = Array.isArray(day.items) ? day.items : [];
+              const isRestaurantCategory = (cat: string) => {
+                const c = String(cat || '').toUpperCase();
+                return c === 'RESTAURANT' || c === 'CAFE' || c === 'BAR';
+              };
+              const restaurantItems = items.filter((item: any) =>
+                isRestaurantCategory(item.category),
+              );
+              const attractionItems = items.filter(
+                (item: any) => !isRestaurantCategory(item.category),
+              );
+
+              return {
+                dayNumber: index + 1,
+                title: String(day.title || `Dia ${index + 1}`),
+                description: String(day.description || ''),
+                restaurants: {
+                  create: restaurantItems.map(
+                    (
+                      item: {
+                        title: string;
+                        category: ItineraryCategory;
+                        description?: string;
+                        location?: string;
+                        period?: string;
+                        estimatedCost?: number;
+                      },
+                      order: number,
+                    ) => ({
+                      name: item.title,
+                      cuisineType:
+                        item.category === ItineraryCategory.CAFE
+                          ? 'Cafeteria / Café'
+                          : item.category === ItineraryCategory.BAR
+                            ? 'Bar / Coquetelaria'
+                            : 'Gastronomia Regional',
+                      address: String(item.location || ''),
+                      notes: (item as any).notes
+                        ? String((item as any).notes)
+                        : String(item.description || ''),
+                      order: order + 1,
+                      providerPlaceId: (item as any).providerPlaceId || null,
+                      placeProvider: (item as any).providerPlaceId
+                        ? 'GOOGLE'
+                        : null,
+                    }),
+                  ),
+                },
+                attractions: {
+                  create: attractionItems.map(
+                    (
+                      item: {
+                        title: string;
+                        category: ItineraryCategory;
+                        description?: string;
+                        location?: string;
+                        period?: string;
+                        estimatedCost?: number;
+                      },
+                      order: number,
+                    ) => ({
+                      name: item.title,
+                      category: Object.values(ItineraryCategory).includes(
+                        item.category,
+                      )
+                        ? item.category
+                        : ItineraryCategory.TOURIST_ATTRACTION,
+                      fullDescription: String(item.description || ''),
+                      address: String(item.location || ''),
+                      period: String(item.period || ''),
+                      duration: Number.isFinite(Number((item as any).duration))
+                        ? Number((item as any).duration)
+                        : null,
+                      cost: Number.isFinite(
+                        Number((item as any).cost ?? item.estimatedCost),
+                      )
+                        ? Math.max(
+                            0,
+                            Number((item as any).cost ?? item.estimatedCost),
+                          )
+                        : 0,
+                      currency:
+                        (item as any).currency || trip.currency || 'BRL',
+                      notes: (item as any).notes
+                        ? String((item as any).notes)
+                        : null,
+                      order: order + 1,
+                      providerPlaceId: (item as any).providerPlaceId || null,
+                      placeProvider: (item as any).providerPlaceId
+                        ? 'GOOGLE'
+                        : null,
+                    }),
+                  ),
+                },
+              };
+            }),
           },
         },
       });
@@ -175,27 +238,58 @@ export class ItineraryEditorService {
         tags: [],
         createdByAdminId: adminId,
         days: {
-          create: trip.days.map((day, index) => ({
-            dayNumber: index + 1,
-            title: day.title,
-            description: day.description,
-            attractions: {
-              create: day.items.map((item, order) => ({
-                name: item.title,
-                category: item.category,
-                fullDescription: item.description,
-                address: item.location,
-                period: item.period,
-                duration: item.duration,
-                cost: item.cost,
-                currency: item.currency,
-                googleMapsLink: item.googleMapsLink,
-                latitude: item.latitude,
-                longitude: item.longitude,
-                order: order + 1,
-              })),
-            },
-          })),
+          create: trip.days.map((day, index) => {
+            const isRestaurantCategory = (cat: string) => {
+              const c = String(cat || '').toUpperCase();
+              return c === 'RESTAURANT' || c === 'CAFE' || c === 'BAR';
+            };
+            const restaurantItems = day.items.filter((item) =>
+              isRestaurantCategory(item.category),
+            );
+            const attractionItems = day.items.filter(
+              (item) => !isRestaurantCategory(item.category),
+            );
+
+            return {
+              dayNumber: index + 1,
+              title: day.title,
+              description: day.description,
+              restaurants: {
+                create: restaurantItems.map((item, order) => ({
+                  name: item.title,
+                  cuisineType:
+                    item.category === 'CAFE'
+                      ? 'Cafeteria / Café'
+                      : item.category === 'BAR'
+                        ? 'Bar / Coquetelaria'
+                        : 'Gastronomia Regional',
+                  address: item.location,
+                  notes: item.notes || item.description,
+                  order: order + 1,
+                  providerPlaceId: item.providerPlaceId || null,
+                  placeProvider: item.providerPlaceId ? 'GOOGLE' : null,
+                })),
+              },
+              attractions: {
+                create: attractionItems.map((item, order) => ({
+                  name: item.title,
+                  category: item.category,
+                  fullDescription: item.description,
+                  address: item.location,
+                  period: item.period,
+                  duration: item.duration,
+                  cost: item.cost,
+                  currency: item.currency,
+                  googleMapsLink: item.googleMapsLink,
+                  latitude: item.latitude,
+                  longitude: item.longitude,
+                  order: order + 1,
+                  providerPlaceId: item.providerPlaceId,
+                  placeProvider: item.placeProvider,
+                })),
+              },
+            };
+          }),
         },
       },
     });

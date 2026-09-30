@@ -292,14 +292,15 @@ export class AiIntelligenceService {
         'O provedor de IA não está configurado.',
       );
     const localCurrency = inferCurrency(dto.destination);
+    const currencyStr = localCurrency || 'moeda local oficial do destino';
     const prompt = `Crie um roteiro completo, hiperdetalhado e realista de ${dto.numberOfDays} dias para ${dto.destination}.
-Estilo: ${dto.travelStyle || 'COMFORT'}. Orçamento: ${dto.budgetLevel || 'MEDIUM'}.
-Interesses: ${dto.interests?.join(', ') || 'Geral'}.
+Estilo: ${dto.travelStyle || 'Conforme perfil'}. Orçamento: ${dto.budgetLevel || 'Conforme perfil'}.
+Interesses: ${dto.interests?.length ? dto.interests.join(', ') : 'Geral'}.
 Instruções adicionais: ${dto.additionalPrompt || 'Nenhuma'}.
-Moeda local para estimativas: ${localCurrency}.
-Retorne JSON no formato {"days":[{"dayNumber":1,"title":"...","description":"...","items":[{"period":"Manhã","timeLabel":"08:30 - 09:15","duration":45,"title":"...","category":"CAFE","description":"...","location":"...","cost":10.0,"currency":"${localCurrency}","notes":"Deslocamento: ... | Reserva: ... | Alternativa: ..."}]}]}.
-Cada dia DEVE cobrir programação cronológica sem sobreposições: café da manhã (CAFE), atração da manhã (TOURIST_ATTRACTION/MUSEUM), almoço (RESTAURANT), pausa/café (CAFE/EXPERIENCE), atração da tarde (TOURIST_ATTRACTION/PARK), jantar (RESTAURANT) e noite opcional (BAR/NIGHTLIFE).
-Todos os itens devem conter timeLabel, duration em minutos, cost em ${localCurrency}, currency="${localCurrency}" e notes práticas com tempo de deslocamento, reserva e alternativas.
+Moeda local para estimativas: ${currencyStr}.
+Retorne JSON no formato {"days":[{"dayNumber":1,"title":"...","description":"...","items":[{"period":"Manhã","timeLabel":"09:00 - 10:30","duration":90,"title":"...","category":"TOURIST_ATTRACTION","description":"...","location":"...","cost":10.0,"currency":"${localCurrency || 'MOEDA_LOCAL_ISO'}","notes":"Deslocamento: ... | Reserva: ... | Alternativa: ..."}]}]}.
+Cada dia deve cobrir programação cronológica sequencial sem sobreposições: refeições e atrações adaptadas ao ritmo e interesses.
+Todos os itens devem conter timeLabel, duration em minutos, cost em ${currencyStr}, currency="${localCurrency || 'MOEDA_LOCAL_ISO'}" e notes práticas com tempo de deslocamento, reserva e alternativas.
 Inclua exatamente ${dto.numberOfDays} dias consecutivos com dayNumber de 1 a ${dto.numberOfDays}. Não invente reservas ou vouchers confirmados.`;
     let response;
     try {

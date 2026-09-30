@@ -27,6 +27,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Usuário não encontrado');
     }
 
+    if (user.blockedAt) {
+      throw new UnauthorizedException('Usuário bloqueado');
+    }
+
+    if (user.archivedAt) {
+      throw new UnauthorizedException('Usuário arquivado');
+    }
+
     // O retorno deste método é injetado no request (req.user)
     return {
       userId: payload.sub,

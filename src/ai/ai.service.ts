@@ -333,13 +333,26 @@ export class AiService {
         }),
       );
 
+      if (
+        !normalizedDays ||
+        normalizedDays.length === 0 ||
+        normalizedDays.every((d: any) => !d.items || d.items.length === 0)
+      ) {
+        throw new Error(
+          'Roteiro gerado incompleto: nenhum dia ou atividade válida retornada pela IA.',
+        );
+      }
+
       const normalizedItinerary = {
         days: normalizedDays,
         overallCoverage: curatedContext.overallCoverage,
       };
 
-      await this.prisma.guestJourney.update({
-        where: { id: journey.id },
+      await this.prisma.guestJourney.updateMany({
+        where: {
+          id: journey.id,
+          status: GuestJourneyStatus.GENERATING,
+        },
         data: {
           generatedItinerary: normalizedItinerary as any,
           generationCompletedAt: new Date(),
@@ -373,9 +386,13 @@ export class AiService {
           this.logger.error('Erro ao registrar falha de AIRequest', err),
         );
 
+      // CAS: Only mark FAILED if still in GENERATING state (late error cannot overwrite PREVIEW_READY or CLAIMED)
       await this.prisma.guestJourney
-        .update({
-          where: { id: journey.id },
+        .updateMany({
+          where: {
+            id: journey.id,
+            status: GuestJourneyStatus.GENERATING,
+          },
           data: {
             generationFailedAt: new Date(),
             generationErrorCode: 'OPENAI_ERROR',

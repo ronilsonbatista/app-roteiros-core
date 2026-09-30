@@ -17,6 +17,7 @@ describe('PlanningService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       product: {
         findFirst: jest.fn(),
@@ -236,6 +237,12 @@ describe('PlanningService', () => {
         id: 'journey-1',
         status: GuestJourneyStatus.READY_TO_GENERATE,
         expiresAt: new Date(Date.now() + 100000),
+        destinations: [{ city: 'Paris', country: 'France', days: 3 }],
+        travelers: { adults: 2, children: 0 },
+        interests: ['culture', 'food'],
+        activityHours: { start: '09:00', end: '20:00' },
+        travelStyle: 'BALANCED',
+        budgetLevel: 'MEDIUM',
       };
 
       const generatingJourney = {
@@ -244,13 +251,18 @@ describe('PlanningService', () => {
         generationStartedAt: new Date(),
       };
 
-      prismaMock.guestJourney.update.mockResolvedValue(generatingJourney);
+      prismaMock.guestJourney.findUnique.mockResolvedValue(generatingJourney);
 
       const result = await service.startGeneration('journey-1', readyJourney);
 
       expect(result.status).toBe(GuestJourneyStatus.GENERATING);
-      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith({
-        where: { id: 'journey-1' },
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'journey-1',
+          status: {
+            in: [GuestJourneyStatus.READY_TO_GENERATE, GuestJourneyStatus.FAILED],
+          },
+        },
         data: expect.objectContaining({
           status: GuestJourneyStatus.GENERATING,
         }),

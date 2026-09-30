@@ -34,6 +34,12 @@ describe('OpenAIProvider & inferCurrency', () => {
       expect(inferCurrency('Rio de Janeiro, Brasil')).toBe('BRL');
       expect(inferCurrency('São Paulo')).toBe('BRL');
     });
+
+    it('should return null for unknown destinations without defaulting to EUR', () => {
+      expect(inferCurrency('Cidade Desconhecida')).toBeNull();
+      expect(inferCurrency('')).toBeNull();
+      expect(inferCurrency(undefined)).toBeNull();
+    });
   });
 
   describe('OpenAIProvider instantiation', () => {

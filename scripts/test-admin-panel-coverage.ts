@@ -20,10 +20,10 @@ function unwrap(payload: any): any {
 }
 
 async function main() {
-  const dbUrl =
-    process.env.PROXY_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:ggAcspmVPUtCQCCUzUxQCJPeaTHqvdDY@sakura.proxy.rlwy.net:33701/railway?sslmode=require';
+  const dbUrl = process.env.PROXY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL ou PROXY_DATABASE_URL não configurado no ambiente.');
+  }
 
   const pool = new Pool({
     connectionString: dbUrl,
@@ -47,7 +47,10 @@ async function main() {
     throw new Error('Admin admin@2goroteiros.com não encontrado no banco!');
   }
 
-  const jwtSecret = process.env.JWT_SECRET || 'jwt-secret-dev-2go-2026';
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET não configurado no ambiente.');
+  }
   const jwtService = new JwtService({ secret: jwtSecret });
   const adminToken = jwtService.sign(
     { sub: admin.id, email: admin.email, role: admin.role },

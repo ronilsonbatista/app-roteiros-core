@@ -4,10 +4,10 @@ import { Pool } from 'pg';
 import { OpenAIProvider } from '../src/ai/providers/openai.provider';
 
 async function main() {
-  const dbUrl =
-    process.env.PROXY_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:ggAcspmVPUtCQCCUzUxQCJPeaTHqvdDY@sakura.proxy.rlwy.net:33701/railway?sslmode=require';
+  const dbUrl = process.env.PROXY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL ou PROXY_DATABASE_URL não configurado no ambiente.');
+  }
 
   const pool = new Pool({
     connectionString: dbUrl,

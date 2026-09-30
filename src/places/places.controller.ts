@@ -76,7 +76,8 @@ export class PlacesController {
   }
 
   @ApiTags('Admin - Places')
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Patch('admin/base-restaurants/:id/place')
   @ApiOperation({
@@ -87,7 +88,8 @@ export class PlacesController {
   }
 
   @ApiTags('Admin - Places')
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @Patch('admin/itinerary-items/:id/place')
   @ApiOperation({ summary: 'Enriquecer ItineraryItem com dados reais (Admin)' })

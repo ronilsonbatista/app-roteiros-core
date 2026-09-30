@@ -293,30 +293,21 @@ export class PlanningService {
 
     this.checkExpiration(journey);
 
-    // Idempotency: if PREVIEW_READY, return status
-    if (journey.status === GuestJourneyStatus.PREVIEW_READY) {
+    // Idempotency: if PREVIEW_READY or CLAIMED, return status
+    if (
+      journey.status === GuestJourneyStatus.PREVIEW_READY ||
+      journey.status === GuestJourneyStatus.CLAIMED
+    ) {
       return this.mapToGenerationStatusResponse(journey);
     }
 
-    // Idempotency & Stale Check for GENERATING status
+    // Active generation check: never restart while first call is in GENERATING status
     if (journey.status === GuestJourneyStatus.GENERATING) {
-      const elapsedMinutes = journey.generationStartedAt
-        ? (new Date().getTime() - new Date(journey.generationStartedAt).getTime()) /
-          (1000 * 60)
-        : 0;
-
-      if (elapsedMinutes < 3) {
-        return this.mapToGenerationStatusResponse(journey);
-      } else {
-        this.logger.warn(
-          `Geração estagnada detectada para jornada ${id} (iniciada há ${Math.round(elapsedMinutes)} min). Permitindo reinício.`,
-        );
-      }
+      return this.mapToGenerationStatusResponse(journey);
     }
 
     if (
       journey.status !== GuestJourneyStatus.READY_TO_GENERATE &&
-      journey.status !== GuestJourneyStatus.GENERATING &&
       journey.status !== GuestJourneyStatus.FAILED
     ) {
       throw new BadRequestException({
@@ -326,7 +317,41 @@ export class PlanningService {
       });
     }
 
-    // Cooldown check for retries
+    // Validate completeness before generation: incomplete guest cannot generate
+    const missing: string[] = [];
+    const destinations = journey.destinations as any[];
+    if (!destinations || !Array.isArray(destinations) || destinations.length === 0) {
+      missing.push('destinations');
+    }
+    const travelers = journey.travelers as any;
+    if (
+      !travelers ||
+      ((travelers.adults || 0) + (travelers.children || 0) + (travelers.elders || 0)) <= 0
+    ) {
+      missing.push('travelers');
+    }
+    const interests = journey.interests as string[];
+    if (!interests || !Array.isArray(interests) || interests.length === 0) {
+      missing.push('interests');
+    }
+    const activityHours = journey.activityHours as any;
+    const hasStartTime = activityHours?.startTime || activityHours?.start;
+    const hasEndTime = activityHours?.endTime || activityHours?.end;
+    if (!activityHours || !hasStartTime || !hasEndTime) {
+      missing.push('activityHours');
+    }
+    if (!journey.budgetLevel && !journey.travelStyle) {
+      missing.push('budgetLevel/travelStyle');
+    }
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PLANNING_INCOMPLETE',
+        message: `Questionário incompleto para geração. Seções pendentes: ${missing.join(', ')}`,
+      });
+    }
+
+    // Cooldown check for retries after failure
     if (journey.status === GuestJourneyStatus.FAILED && journey.generationFailedAt) {
       const elapsedSeconds =
         (new Date().getTime() - new Date(journey.generationFailedAt).getTime()) / 1000;
@@ -340,29 +365,37 @@ export class PlanningService {
       }
     }
 
-    // Concurrency Lock: Atomic status transition to GENERATING
-    try {
-      const updated = await this.prisma.guestJourney.update({
-        where: { id },
-        data: {
-          status: GuestJourneyStatus.GENERATING,
-          generationStartedAt: new Date(),
-          generationFailedAt: null,
-          generationErrorCode: null,
+    // CAS (Compare-and-Swap): atomically transition from READY_TO_GENERATE or FAILED to GENERATING
+    const casResult = await this.prisma.guestJourney.updateMany({
+      where: {
+        id,
+        status: {
+          in: [GuestJourneyStatus.READY_TO_GENERATE, GuestJourneyStatus.FAILED],
         },
-      });
+      },
+      data: {
+        status: GuestJourneyStatus.GENERATING,
+        generationStartedAt: new Date(),
+        generationFailedAt: null,
+        generationErrorCode: null,
+      },
+    });
 
-      this.aiService
-        .generateGuestItinerary(updated)
-        .catch((err) =>
-          this.logger.error(`Erro ao disparar geração assíncrona para ${id}`, err),
-        );
-
-      return this.mapToGenerationStatusResponse(updated);
-    } catch (error) {
+    if (casResult.count === 0) {
+      // Concurrency race: another call already claimed or started generation
       const current = await this.findAndValidate(id);
       return this.mapToGenerationStatusResponse(current);
     }
+
+    const updated = await this.findAndValidate(id);
+
+    this.aiService
+      .generateGuestItinerary(updated)
+      .catch((err) =>
+        this.logger.error(`Erro ao disparar geração assíncrona para ${id}`, err),
+      );
+
+    return this.mapToGenerationStatusResponse(updated);
   }
 
   async getGenerationStatus(
@@ -629,10 +662,7 @@ export class PlanningService {
         });
       }
 
-      if (
-        currentJourney.claimedUserId === userId &&
-        currentJourney.createdTripId
-      ) {
+      if (currentJourney.createdTripId) {
         return {
           journeyId: currentJourney.id,
           tripId: currentJourney.createdTripId,

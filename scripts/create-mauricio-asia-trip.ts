@@ -5,10 +5,10 @@ import * as bcrypt from 'bcrypt';
 import { OpenAIProvider } from '../src/ai/providers/openai.provider';
 
 async function main() {
-  const dbUrl =
-    process.env.PROXY_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:ggAcspmVPUtCQCCUzUxQCJPeaTHqvdDY@sakura.proxy.rlwy.net:33701/railway?sslmode=require';
+  const dbUrl = process.env.PROXY_DATABASE_URL || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL ou PROXY_DATABASE_URL não configurado no ambiente.');
+  }
 
   const pool = new Pool({
     connectionString: dbUrl,
@@ -22,8 +22,8 @@ async function main() {
   let user = await prisma.user.findUnique({ where: { email } });
 
   if (!user) {
-    // Generate secure password hash
-    const passwordHash = await bcrypt.hash('2GoAsia2026!SecureTest', 10);
+    const rawPassword = process.env.TEST_USER_PASSWORD || Math.random().toString(36).slice(-10) + '!A1b';
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
     user = await prisma.user.create({
       data: {
         email,

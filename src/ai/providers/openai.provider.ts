@@ -8,7 +8,7 @@ import {
 import { ItineraryCategory } from '@prisma/client';
 import OpenAI from 'openai';
 
-export function inferCurrency(destinationName?: string): string {
+export function inferCurrency(destinationName?: string): string | null {
   const norm = (destinationName || '')
     .toLowerCase()
     .normalize('NFD')
@@ -18,15 +18,22 @@ export function inferCurrency(destinationName?: string): string {
   if (/coreia|korea|seul|seoul|busan/.test(norm)) return 'KRW';
   if (/tailandia|thailand|bangkok|bangcoc|phuket|chiang mai|krabi/.test(norm)) return 'THB';
   if (
-    /italia|italy|roma|rome|milao|milan|florenca|florence|veneza|venice|napoles|franca|france|paris|espanha|spain|madrid|barcelona|portugal|lisboa|porto|alemanha|germany|berlim|grecia|greece|atenas|holanda|amsterdam|austria|viena/.test(
+    /italia|italy|roma|rome|milao|milan|florenca|florence|veneza|venice|napoles|franca|france|paris|espanha|spain|madrid|barcelona|portugal|lisboa|porto|alemanha|germany|berlim|grecia|greece|atenas|holanda|amsterdam|austria|viena|irlanda|dublin|belgica|bruxelas|finlandia|helsinki|europa/.test(
       norm,
     )
   )
     return 'EUR';
   if (/reino unido|united kingdom|londres|london|inglaterra|england|escocia|scotland/.test(norm)) return 'GBP';
-  if (/estados unidos|usa|united states|nova york|new york|miami|orlando|los angeles|san francisco/.test(norm)) return 'USD';
-  if (/brasil|brazil|rio de janeiro|sao paulo|salvador|florianopolis|fortaleza/.test(norm)) return 'BRL';
-  return 'EUR';
+  if (/estados unidos|usa|united states|nova york|new york|miami|orlando|los angeles|san francisco|las vegas|chicago/.test(norm)) return 'USD';
+  if (/brasil|brazil|rio de janeiro|sao paulo|salvador|florianopolis|fortaleza|recife|curitiba|brasilia|belo horizonte|manaus|fernando de noronha/.test(norm)) return 'BRL';
+  if (/argentina|buenos aires|mendoza|bariloche/.test(norm)) return 'ARS';
+  if (/chile|santiago|valparaiso|atacama/.test(norm)) return 'CLP';
+  if (/mexico|cancun|cidade do mexico|mexico city/.test(norm)) return 'MXN';
+  if (/canada|toronto|vancouver|montreal/.test(norm)) return 'CAD';
+  if (/australia|sydney|melbourne/.test(norm)) return 'AUD';
+  if (/suica|switzerland|zurique|genebra/.test(norm)) return 'CHF';
+  if (/emirados|emirates|dubai|abu dhabi/.test(norm)) return 'AED';
+  return null;
 }
 
 function normalizeCategory(category: string): ItineraryCategory {
@@ -585,12 +592,14 @@ export class OpenAIProvider implements AIProvider {
         const category = normalizeCategory(item.category);
         const costNum = Number(item.cost ?? item.estimatedCost ?? 0);
         const validCost = Number.isFinite(costNum) ? Math.max(0, costNum) : 0;
-        const itemCurrency = item.currency || localCurrency;
+        const itemCurrency = item.currency || localCurrency || null;
 
-        let timeLabel = item.timeLabel;
-        if (!timeLabel || typeof timeLabel !== 'string' || !timeLabel.trim()) {
-          timeLabel = this.synthesizeTimeLabel(itemIdx, item.period, item.duration);
-        }
+        const timeLabel =
+          item.timeLabel &&
+          typeof item.timeLabel === 'string' &&
+          item.timeLabel.trim()
+            ? item.timeLabel.trim()
+            : null;
 
         const duration = Number.isFinite(Number(item.duration))
           ? Number(item.duration)
@@ -599,13 +608,13 @@ export class OpenAIProvider implements AIProvider {
         return {
           title: String(item.title || 'Experiência').trim(),
           category,
-          timeLabel: String(timeLabel).trim(),
+          timeLabel,
           duration,
           period: String(item.period || 'Manhã').trim(),
           location: String(item.location || dayDest).trim(),
           description: String(item.description || '').trim(),
           cost: validCost,
-          currency: String(itemCurrency).toUpperCase().trim(),
+          currency: itemCurrency ? String(itemCurrency).toUpperCase().trim() : null,
           notes: String(item.notes || '').trim(),
           sourceType: item.sourceType || 'AI',
           sourceId: item.sourceId || null,
@@ -623,21 +632,6 @@ export class OpenAIProvider implements AIProvider {
         items: normalizedItems,
       };
     });
-  }
-
-  private synthesizeTimeLabel(idx: number, period?: string, duration?: number): string {
-    const slots = [
-      '08:30 - 09:15', // Café
-      '09:30 - 12:00', // Manhã
-      '12:15 - 13:45', // Almoço
-      '14:15 - 15:00', // Pausa / Café da tarde
-      '15:15 - 17:30', // Tarde
-      '19:30 - 21:30', // Jantar
-      '21:45 - 23:00', // Noite
-    ];
-    if (idx < slots.length) return slots[idx];
-    const hour = 18 + (idx - 5);
-    return `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:30`;
   }
 
   private inferDuration(category: ItineraryCategory, period?: string): number {
@@ -667,41 +661,38 @@ export class OpenAIProvider implements AIProvider {
 
   private getSystemPrompt(): string {
     return `Você é o Especialista Chefe em Roteiros e Curador de Viagens da 2GO.
-Sua missão é criar roteiros de viagem premium, hiperdetalhados, cronologicamente precisos e altamente acionáveis.
+Sua missão é criar roteiros de viagem personalizados, cronologicamente precisos, harmoniosos e altamente acionáveis para qualquer destino do mundo.
 
-DIRETRIZES DE ESTRUTURA OBRIGATÓRIAS POR DIA:
-Para cada dia completo, construa uma programação cronológica sequencial, rica e sem sobreposição de horários:
-1. Café da Manhã (category: "CAFE"): Cafeteria, confeitaria artesanal ou padaria histórica autêntica da cidade, indicando a especialidade matinal local. Duração típica: 45 min.
-2. Manhã - Atração / Experiência Principal (category: "TOURIST_ATTRACTION" ou "MUSEUM"): Visita cultural, histórica ou marco emblemático. Agrupe pontos geograficamente próximos. Duração típica: 1h30 a 2h30.
-3. Almoço (category: "RESTAURANT"): Trattoria, bistrô, mercado gastronômico ou restaurante típico com prato tradicional recomendado, coerente com o orçamento. Duração típica: 1h15 a 1h30.
-4. Pausa / Café da Tarde (category: "CAFE" ou "EXPERIENCE"): Parada para descanso com café especial, casa de chá tradicional ou sobremesa artesanal (gelato, confeitaria, matcha). Duração típica: 30 a 45 min.
-5. Tarde - Passeio Cultural ou Cênico (category: "TOURIST_ATTRACTION", "PARK" ou "SHOPPING"): Bairro charmoso, mirante, praça histórica, parque ou caminhada contemplativa. Duração típica: 1h30 a 2h30.
-6. Jantar (category: "RESTAURANT"): Restaurante selecionado para a noite com culinária autêntica regional e ambiente acolhedor. Duração típica: 1h30 a 2h.
-7. Noite (Opcional/Complementar) (category: "BAR", "NIGHTLIFE" ou "FREE_ACTIVITY"): Passeio noturno por marcos iluminados, rooftop com vista panorâmica ou bar icônico. Duração típica: 1h a 1h30.
-8. Transferências entre Cidades / Deslocamentos Longos (category: "TRANSPORT"): Quando houver troca de cidade ou país (ex: Shinkansen, voo regional, trem), inclua o transporte com orientações de estação/aeroporto, check-in e acomodação de bagagens.
+DIRETRIZES DE ESTRUTURA DIÁRIA:
+Organize cada dia de forma lógica, sequencial e adaptada ao perfil, ritmo e janela de horários do viajante:
+- Distribua as refeições principais (café da manhã, almoço, jantar) em estabelecimentos locais autênticos e compatíveis com a faixa de orçamento informada.
+- Organize atrações culturais, históricas, pausas e passeios de forma sequencial e geograficamente agrupada, sem sobreposição de horários e respeitando os tempos de deslocamento.
+- Respeite rigorosamente a janela diária de horários informada pelo viajante. Não force uma grade fixa ou rígida de atividades caso o ritmo do viajante, o tempo disponível ou os horários de chegada e partida peçam uma programação mais leve ou mais dinâmica.
+- No primeiro dia, considere o horário de chegada do viajante (se chegar à tarde ou noite, programe apenas check-in, caminhada leve de aclimatação e jantar).
+- No último dia, considere o horário de partida e o deslocamento necessário até o aeroporto ou estação de saída.
+- Para roteiros multi-cidades, inclua a atividade de transporte entre as cidades no início ou meio do dia de transferência (category: "TRANSPORT"), com tempos de estação/aeroporto e check-in.
 
 REGRAS DE CONTEÚDO PARA CADA ATIVIDADE:
 - title: Nome específico, autêntico e real do local ou experiência (NUNCA genérico como "Visitar um museu" ou "Almoço em restaurante local").
 - category: Exclusivamente um dos ENUMs: TOURIST_ATTRACTION, MUSEUM, RESTAURANT, CAFE, BAR, BEACH, PARK, SHOPPING, EXPERIENCE, TRANSPORT, EVENT, NIGHTLIFE, FREE_ACTIVITY, PAID_ACTIVITY.
-- timeLabel: Faixa horária sequencial e realista (ex: "08:30 - 09:15", "09:30 - 12:00", "12:15 - 13:45", "14:15 - 15:00", "15:15 - 17:30", "19:30 - 21:30"). Respeite a janela diária informada.
-- duration: Duração em minutos inteiros (ex: 45, 120, 90, 45, 135, 120).
+- timeLabel: Faixa horária sequencial e realista (ex: "09:00 - 10:30", "12:30 - 14:00"). Respeite a janela diária informada.
+- duration: Duração em minutos inteiros (ex: 45, 60, 90, 120).
 - period: "Manhã", "Almoço", "Tarde", "Pausa", "Jantar" ou "Noite".
 - location: Endereço, bairro ou referência geográfica verificável no destino.
 - description: Detalhamento prático do que fazer e experimentar + JUSTIFICATIVA explícita de por que essa atividade foi escolhida para o perfil do viajante (interesses, estilo, ritmo, orçamento).
-- cost: Custo estimado por pessoa em moeda local (número decimal, ex: 18.0 para ingresso, 25.0 para almoço, 4.0 para café, 0 para atrações gratuitas).
-- currency: Código ISO da moeda local oficial do destino (EUR na Itália/França, JPY no Japão, KRW na Coreia do Sul, THB na Tailândia, USD nos EUA, GBP no Reino Unido, BRL no Brasil). NUNCA assuma BRL fora do Brasil!
+- cost: Custo estimado por pessoa em moeda local (número decimal, 0 para gratuitas).
+- currency: Código ISO da moeda local oficial do destino (ex: BRL no Brasil, USD nos EUA, EUR na Europa, JPY no Japão, etc.). NUNCA assuma EUR ou BRL se o destino for de outro país!
 - notes: Texto estruturado contendo:
-  * Deslocamento: tempo e meio de transporte a partir da parada anterior (ex: "Caminhada de 8 min pela Via dei Fori Imperiali" ou "Metrô Linha Ginza: 12 min").
-  * Reserva / Ingresso: orientação prática (ex: "Ingresso online com horário marcado obrigatório", "Reserva recomendada com antecedência", ou "Entrada livre").
-  * Dica útil de visitação (melhor mesa, mirante secreto, traje adequado).
-  * Alternativa para mau tempo ou fechamento (ex: "Em caso de chuva, visite a Galeria X").
-  * Aviso: "Valores e horários são estimativas que devem ser confirmadas pelo viajante antes da visita."
+  * Deslocamento: tempo estimado e modo a partir da parada anterior (ex: caminhada curta, transporte público ou táxi).
+  * Reserva / Ingresso: orientação prática (ex: "Ingresso online com antecedência", "Entrada livre", "Reserva recomendada").
+  * Dica útil de visitação.
+  * Alternativa para mau tempo ou fechamento.
+  * Aviso: "Valores e horários são estimativas a serem confirmadas pelo viajante."
 
 IMPORTANTE:
 - Não crie horários sobrepostos.
-- Adapte o primeiro dia se houver chegada à tarde/noite (apenas check-in, caminhada de aclimatação e jantar).
-- Adapte o último dia para transfer e despedida.
-- Não invente confirmações de reservas reais ou vouchers definitivos; sempre oriente como recomendação curada.
+- Adapte o primeiro e o último dia conforme horários reais de chegada e partida.
+- Não invente confirmações de reservas reais ou códigos de vouchers definitivos; sempre oriente como recomendação curada.
 - Retorne EXATAMENTE no seguinte formato JSON, sem nenhum texto fora das chaves:
 {
   "days": [
@@ -715,14 +706,14 @@ IMPORTANTE:
         {
           "title": "Nome Exato do Local ou Experiência",
           "category": "CAFE",
-          "timeLabel": "08:30 - 09:15",
+          "timeLabel": "09:00 - 09:45",
           "duration": 45,
           "period": "Manhã",
           "location": "Rua / Bairro / Cidade",
           "description": "Descrição detalhada do que fazer e justificativa personalizada para o viajante.",
-          "cost": 5.0,
-          "currency": "EUR",
-          "notes": "Deslocamento: 5 min a pé do hotel. Reserva: Acesso livre. Dica: Peça no balcão. Alternativa em caso de chuva: Café histórico coberto. Valores e horários são estimativas.",
+          "cost": 10.0,
+          "currency": "MOEDA_LOCAL_ISO",
+          "notes": "Deslocamento: caminhada curta do hotel. Reserva: Acesso livre. Alternativa em caso de chuva: Local histórico coberto.",
           "sourceType": "AI",
           "sourceId": null,
           "providerPlaceId": null
@@ -742,7 +733,9 @@ IMPORTANTE:
     const localCurrency = inferCurrency(destination);
 
     let prompt = `Crie um roteiro completo de ${numberOfDays} dias para ${destination}.\n`;
-    prompt += `Moeda local obrigatória para estimativas: ${localCurrency}.\n\n`;
+    prompt += localCurrency
+      ? `Moeda local oficial para estimativas: ${localCurrency}.\n\n`
+      : `Moeda local para estimativas: identifique e utilize a moeda oficial (código ISO) do destino/país informado.\n\n`;
 
     if (travelProfile) {
       prompt += `### Perfil do Usuário e Preferências:\n`;
@@ -770,7 +763,7 @@ IMPORTANTE:
       prompt += `\n\n`;
     }
 
-    prompt += `Retorne exatamente ${numberOfDays} dias consecutivos com a programação detalhada solicitada (café da manhã, passeios da manhã, almoço, pausa/café da tarde, passeios da tarde, jantar e noite).`;
+    prompt += `Retorne exatamente ${numberOfDays} dias consecutivos com a programação detalhada solicitada, adaptada ao ritmo e janela de horários, sem sobreposição horária.`;
 
     return prompt;
   }
@@ -793,7 +786,9 @@ IMPORTANTE:
     let prompt = `ESTE É O PLANEJAMENTO DA ETAPA: DIAS ${chunk.startDay} A ${chunk.endDay} (Total do roteiro: ${numberOfDays} dias).\n`;
     prompt += `Destino principal do roteiro: ${destination}.\n`;
     prompt += `Cidade desta etapa: ${chunk.city || destination}.\n`;
-    prompt += `Moeda local oficial desta etapa: ${localCurrency}.\n\n`;
+    prompt += localCurrency
+      ? `Moeda local oficial desta etapa: ${localCurrency}.\n\n`
+      : `Moeda local para estimativas: identifique a moeda oficial (código ISO) de ${chunk.city || destination}.\n\n`;
 
     if (travelProfile) {
       prompt += `### Perfil do Viajante:\n`;
@@ -809,25 +804,19 @@ IMPORTANTE:
     if (chunk.isFirst) {
       prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Chegada): O viajante desembarca no destino. Inclua transfer/aeroporto, check-in no hotel, caminhada leve de aclimatação e jantar de boas-vindas.\n`;
     } else if (chunk.previousCity) {
-      prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Transferência de Cidade): O dia inicia com o deslocamento saindo de ${chunk.previousCity} com destino a ${chunk.city}. Inclua a atividade de transporte (ex: trem de alta velocidade, voo ou transfer), tempo de estação/aeroporto, check-in no novo hotel e programação da tarde/noite já na nova cidade.\n`;
+      prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Transferência de Cidade): O dia inicia com o deslocamento saindo de ${chunk.previousCity} com destino a ${chunk.city}. Inclua a atividade de transporte (ex: trem, voo ou transfer), tempo de estação/aeroporto, check-in no novo hotel e programação da tarde/noite já na nova cidade.\n`;
     }
 
     if (chunk.isLast) {
       prompt += `ORIENTAÇÃO DO DIA ${chunk.endDay} (Despedida): Dia de encerramento da viagem. Inclua últimas compras ou café especial, check-out do hotel e transfer para o aeroporto/estação de partida.\n`;
     }
 
-    prompt += `\nCOMANDO ESTRITO:
-Gere EXATAMENTE ${expectedDaysCount} dias no JSON: começando no dayNumber ${chunk.startDay} até o dayNumber ${chunk.endDay}.
-Para CADA dia, forneça a programação completa:
-1. Café da Manhã (CAFE)
-2. Passeio da Manhã (TOURIST_ATTRACTION ou MUSEUM)
-3. Almoço (RESTAURANT)
-4. Pausa da Tarde (CAFE ou EXPERIENCE)
-5. Passeio da Tarde (TOURIST_ATTRACTION ou PARK)
-6. Jantar (RESTAURANT)
-7. Programa Noturno (BAR, NIGHTLIFE ou FREE_ACTIVITY)
+    const currencyInstruction = localCurrency ? `cost em ${localCurrency}, currency="${localCurrency}"` : `cost em moeda local, currency no código ISO oficial do destino`;
 
-Todos com timeLabel sem sobreposição, duration em minutos, cost em ${localCurrency}, currency="${localCurrency}", e notes detalhadas com deslocamento, regras de reserva e alternativas.`;
+    prompt += `\nCOMANDO:
+Gere EXATAMENTE ${expectedDaysCount} dias no JSON: começando no dayNumber ${chunk.startDay} até o dayNumber ${chunk.endDay}.
+Cada dia deve conter uma programação completa, sequencial e harmoniosa: refeições bem posicionadas (café da manhã, almoço, jantar) e atividades/atrações culturais, gastronômicas ou de lazer que respeitem a janela de atividades e os interesses do viajante, sem sobreposição horária.
+Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction}, e notes detalhadas com deslocamento, regras de reserva e alternativas.`;
 
     return prompt;
   }
@@ -880,7 +869,9 @@ Todos com timeLabel sem sobreposição, duration em minutos, cost em ${localCurr
       prompt += `- Estilo de viagem: ${travelStyle}\n`;
     }
 
-    prompt += `- Moeda local para estimativas: ${localCurrency}\n\n`;
+    prompt += localCurrency
+      ? `- Moeda local para estimativas: ${localCurrency}\n\n`
+      : `- Moeda local para estimativas: identifique a moeda oficial (código ISO) de cada destino informado.\n\n`;
 
     if (curatedContext && curatedContext.destinations) {
       prompt += `### Conhecimento Curado 2GO por Destino:\n`;
@@ -906,7 +897,7 @@ Todos com timeLabel sem sobreposição, duration em minutos, cost em ${localCurr
       prompt += `\n`;
     }
 
-    prompt += `Retorne a programação diária completa estruturada em JSON (café da manhã, passeios da manhã, almoço, pausa da tarde, passeios da tarde, jantar e noite), com horários realistas, custos em moeda local e notas de deslocamento e reserva.`;
+    prompt += `Retorne a programação diária completa estruturada em JSON, adaptada ao ritmo e janela de horários informada, com horários sequenciais sem sobreposição, custos em moeda local e notas de deslocamento e reserva.`;
 
     return prompt;
   }
@@ -929,7 +920,9 @@ Todos com timeLabel sem sobreposição, duration em minutos, cost em ${localCurr
 
     let prompt = `ESTE É O PLANEJAMENTO DA ETAPA: DIAS ${chunk.startDay} A ${chunk.endDay} (Total do roteiro: ${totalDays} dias).\n`;
     prompt += `Cidade desta etapa: ${chunk.city}.\n`;
-    prompt += `Moeda local oficial desta etapa: ${localCurrency}.\n\n`;
+    prompt += localCurrency
+      ? `Moeda local oficial desta etapa: ${localCurrency}.\n\n`
+      : `Moeda local para estimativas: identifique a moeda oficial (código ISO) de ${chunk.city}.\n\n`;
 
     prompt += `### Perfil dos Viajantes:\n`;
     prompt += `- Composição: ${travelers.adults} adulto(s), ${travelers.children || 0} criança(s), ${travelers.elders || 0} idoso(s)\n`;
@@ -944,17 +937,19 @@ Todos com timeLabel sem sobreposição, duration em minutos, cost em ${localCurr
     if (chunk.isFirst) {
       prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Chegada): Primeiro dia no destino. Inclua transfer de chegada, check-in no hotel, caminhada de aclimatação e jantar de boas-vindas.\n`;
     } else if (chunk.previousCity) {
-      prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Transferência): Viagem saindo de ${chunk.previousCity} com destino a ${chunk.city}. Inclua a atividade de transporte (trem-bala, voo ou transfer), tempo de estação/aeroporto, check-in no hotel e programação da tarde/noite já em ${chunk.city}.\n`;
+      prompt += `ORIENTAÇÃO DO DIA ${chunk.startDay} (Transferência): Viagem saindo de ${chunk.previousCity} com destino a ${chunk.city}. Inclua a atividade de transporte (trem, voo ou transfer), tempo de estação/aeroporto, check-in no hotel e programação da tarde/noite já em ${chunk.city}.\n`;
     }
 
     if (chunk.isLast) {
       prompt += `ORIENTAÇÃO DO DIA ${chunk.endDay} (Despedida): Dia de encerramento da viagem. Inclua últimas compras ou café especial, check-out do hotel e transfer para o aeroporto de partida.\n`;
     }
 
-    prompt += `\nCOMANDO ESTRITO:
+    const currencyInstruction = localCurrency ? `cost em ${localCurrency}, currency="${localCurrency}"` : `cost em moeda local, currency no código ISO oficial do destino`;
+
+    prompt += `\nCOMANDO:
 Gere EXATAMENTE ${expectedDaysCount} dias no JSON: começando no dayNumber ${chunk.startDay} até o dayNumber ${chunk.endDay}.
-Cada dia deve conter a programação rica e sequencial: café da manhã (CAFE), atração da manhã (TOURIST_ATTRACTION/MUSEUM), almoço (RESTAURANT), pausa/café da tarde (CAFE/EXPERIENCE), atração da tarde (TOURIST_ATTRACTION/PARK), jantar (RESTAURANT) e noite (BAR/NIGHTLIFE).
-Todos com timeLabel sequencial, duration em minutos, cost em ${localCurrency}, currency="${localCurrency}" e notes práticas.`;
+Para CADA dia, forneça uma programação completa, fluida e sequencial com refeições bem distribuídas e atividades/atrações que respeitem a janela de atividades e os interesses do viajante, sem sobreposição horária.
+Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction} e notes práticas.`;
 
     return prompt;
   }

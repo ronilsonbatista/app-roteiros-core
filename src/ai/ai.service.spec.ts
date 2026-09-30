@@ -34,6 +34,7 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
       },
       guestJourney: {
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
 
@@ -162,9 +163,9 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         }),
       );
 
-      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith(
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'journey-guest-123' },
+          where: { id: 'journey-guest-123', status: GuestJourneyStatus.GENERATING },
           data: expect.objectContaining({
             status: GuestJourneyStatus.PREVIEW_READY,
             generatedItinerary: expect.objectContaining({
@@ -213,9 +214,9 @@ describe('AiService (Phase G3 AI Orchestration & Provenance)', () => {
         }),
       );
 
-      expect(prismaMock.guestJourney.update).toHaveBeenCalledWith(
+      expect(prismaMock.guestJourney.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'journey-guest-fail' },
+          where: { id: 'journey-guest-fail', status: GuestJourneyStatus.GENERATING },
           data: expect.objectContaining({
             status: GuestJourneyStatus.FAILED,
             generationErrorCode: 'OPENAI_ERROR',
