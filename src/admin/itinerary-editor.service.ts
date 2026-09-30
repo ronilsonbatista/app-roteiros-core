@@ -116,10 +116,14 @@ export class ItineraryEditorService {
                     fullDescription: String(item.description || ''),
                     address: String(item.location || ''),
                     period: String(item.period || ''),
-                    cost: Number.isFinite(Number(item.estimatedCost))
-                      ? Math.max(0, Number(item.estimatedCost))
+                    duration: Number.isFinite(Number((item as any).duration))
+                      ? Number((item as any).duration)
+                      : null,
+                    cost: Number.isFinite(Number((item as any).cost ?? item.estimatedCost))
+                      ? Math.max(0, Number((item as any).cost ?? item.estimatedCost))
                       : 0,
-                    currency: trip.currency || 'BRL',
+                    currency: (item as any).currency || trip.currency || 'EUR',
+                    notes: (item as any).notes ? String((item as any).notes) : null,
                     order: order + 1,
                   }),
                 ),

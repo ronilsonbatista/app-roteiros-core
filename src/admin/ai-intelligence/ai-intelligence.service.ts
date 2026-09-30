@@ -14,6 +14,7 @@ import {
   PlaygroundSimulateDto,
 } from './dto/ai-intelligence.dto';
 import OpenAI from 'openai';
+import { inferCurrency } from '../../ai/providers/openai.provider';
 
 @Injectable()
 export class AiIntelligenceService {
@@ -290,12 +291,16 @@ export class AiIntelligenceService {
       throw new ServiceUnavailableException(
         'O provedor de IA não está configurado.',
       );
-    const prompt = `Crie um roteiro de ${dto.numberOfDays} dias para ${dto.destination}.
+    const localCurrency = inferCurrency(dto.destination);
+    const prompt = `Crie um roteiro completo, hiperdetalhado e realista de ${dto.numberOfDays} dias para ${dto.destination}.
 Estilo: ${dto.travelStyle || 'COMFORT'}. Orçamento: ${dto.budgetLevel || 'MEDIUM'}.
 Interesses: ${dto.interests?.join(', ') || 'Geral'}.
 Instruções adicionais: ${dto.additionalPrompt || 'Nenhuma'}.
-Retorne JSON no formato {"days":[{"dayNumber":1,"title":"...","description":"...","items":[{"period":"Manhã","title":"...","category":"TOURIST_ATTRACTION","description":"..."}]}]}.
-Inclua exatamente ${dto.numberOfDays} dias consecutivos, cada um com atividades reais e específicas do destino. Escreva em português. Não invente preços, disponibilidade ou reservas confirmadas.`;
+Moeda local para estimativas: ${localCurrency}.
+Retorne JSON no formato {"days":[{"dayNumber":1,"title":"...","description":"...","items":[{"period":"Manhã","timeLabel":"08:30 - 09:15","duration":45,"title":"...","category":"CAFE","description":"...","location":"...","cost":10.0,"currency":"${localCurrency}","notes":"Deslocamento: ... | Reserva: ... | Alternativa: ..."}]}]}.
+Cada dia DEVE cobrir programação cronológica sem sobreposições: café da manhã (CAFE), atração da manhã (TOURIST_ATTRACTION/MUSEUM), almoço (RESTAURANT), pausa/café (CAFE/EXPERIENCE), atração da tarde (TOURIST_ATTRACTION/PARK), jantar (RESTAURANT) e noite opcional (BAR/NIGHTLIFE).
+Todos os itens devem conter timeLabel, duration em minutos, cost em ${localCurrency}, currency="${localCurrency}" e notes práticas com tempo de deslocamento, reserva e alternativas.
+Inclua exatamente ${dto.numberOfDays} dias consecutivos com dayNumber de 1 a ${dto.numberOfDays}. Não invente reservas ou vouchers confirmados.`;
     let response;
     try {
       response = await this.openai.chat.completions.create(

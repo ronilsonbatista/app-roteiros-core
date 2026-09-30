@@ -722,11 +722,12 @@ export class PlanningService {
               latitude: item.latitude != null ? Number(item.latitude) : null,
               longitude:
                 item.longitude != null ? Number(item.longitude) : null,
-              timeLabel: item.period || item.timeLabel || null,
+              timeLabel: item.timeLabel || item.period || null,
               period: item.period || null,
               duration: item.duration != null ? Number(item.duration) : null,
               cost: item.cost != null ? Number(item.cost) : null,
-              currency: item.currency || 'BRL',
+              currency: item.currency || 'EUR',
+              notes: item.notes || null,
               externalLink:
                 item.ticketUrl ||
                 item.reservationUrl ||

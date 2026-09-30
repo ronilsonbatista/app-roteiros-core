@@ -5,10 +5,15 @@ export interface GenerateItineraryInput {
   numberOfDays: number;
   travelProfile: any;
   baseTrip?: any;
+  destinations?: any[];
 }
 
 export interface GuestDestinationInput {
   name: string;
+  numberOfDays?: number;
+  days?: number;
+  city?: string;
+  country?: string;
   arrivalDate?: string;
   arrivalTime?: string;
   departureDate?: string;

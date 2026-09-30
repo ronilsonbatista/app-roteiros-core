@@ -87,7 +87,12 @@ export class AiService {
       const aiResult = await this.openAIProvider.generateItinerary({
         destination: trip.destination,
         numberOfDays,
-        travelProfile: { ...travelProfile, tripPreferences: trip.preferences },
+        travelProfile: {
+          ...travelProfile,
+          tripPreferences: trip.preferences,
+          destinations: (trip.preferences as any)?.destinations,
+        },
+        destinations: (trip.preferences as any)?.destinations,
         baseTrip,
       });
 
@@ -127,42 +132,58 @@ export class AiService {
           where: { id: tripId },
           data: {
             days: {
-              create: parsedDays.map((day, index) => ({
-                dayNumber: index + 1,
-                title: String(day.title || `Dia ${index + 1}`),
-                description: String(day.description || ''),
-                items: {
-                  create: day.items.map(
-                    (
-                      item: {
-                        title: string;
-                        category: ItineraryCategory;
-                        description?: string;
-                        location?: string;
-                        period?: string;
-                        estimatedCost?: number;
-                      },
-                      order: number,
-                    ) => ({
-                      title: item.title,
-                      description: String(item.description || ''),
-                      category: Object.values(ItineraryCategory).includes(
-                        item.category,
-                      )
-                        ? item.category
-                        : ItineraryCategory.TOURIST_ATTRACTION,
-                      location: String(item.location || ''),
-                      period: String(item.period || ''),
-                      cost: Number.isFinite(Number(item.estimatedCost))
-                        ? Math.max(0, Number(item.estimatedCost))
-                        : 0,
-                      order: order + 1,
-                      isEditable: true,
-                      isUserModified: false,
+              create: parsedDays.map((day, index) => {
+                let dayDate: Date | null = null;
+                if (trip.startDate) {
+                  const d = new Date(trip.startDate);
+                  d.setDate(d.getDate() + index);
+                  dayDate = d;
+                } else if (day.date) {
+                  dayDate = new Date(day.date);
+                }
+
+                return {
+                  dayNumber: day.dayNumber || index + 1,
+                  date: dayDate,
+                  title: String(day.title || `Dia ${index + 1}`),
+                  description: String(day.description || ''),
+                  items: {
+                    create: day.items.map((item: any, order: number) => {
+                      const categoryMatch =
+                        Object.values(ItineraryCategory).find(
+                          (c) => c === item.category,
+                        ) || ItineraryCategory.TOURIST_ATTRACTION;
+
+                      return {
+                        title: String(item.title || 'Atividade'),
+                        description: String(item.description || ''),
+                        category: categoryMatch,
+                        location: String(item.location || ''),
+                        period: String(item.period || ''),
+                        timeLabel: item.timeLabel
+                          ? String(item.timeLabel)
+                          : null,
+                        duration: Number.isFinite(Number(item.duration))
+                          ? Number(item.duration)
+                          : null,
+                        cost: Number.isFinite(
+                          Number(item.cost ?? item.estimatedCost),
+                        )
+                          ? Math.max(0, Number(item.cost ?? item.estimatedCost))
+                          : 0,
+                        currency: String(item.currency || 'EUR'),
+                        notes: item.notes ? String(item.notes) : null,
+                        googleMapsLink: item.googleMapsLink
+                          ? String(item.googleMapsLink)
+                          : null,
+                        order: order + 1,
+                        isEditable: true,
+                        isUserModified: false,
+                      };
                     }),
-                  ),
-                },
-              })),
+                  },
+                };
+              }),
             },
           },
         });
@@ -296,7 +317,13 @@ export class AiService {
               category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
               location: item.location || '',
               period: item.period || 'Manhã',
-              cost: Number(item.estimatedCost || item.cost || 0),
+              timeLabel: item.timeLabel || null,
+              duration: Number.isFinite(Number(item.duration))
+                ? Number(item.duration)
+                : null,
+              cost: Number(item.cost ?? item.estimatedCost ?? 0),
+              currency: item.currency || 'EUR',
+              notes: item.notes || '',
               order: itemIdx + 1,
               sourceType,
               sourceId,
