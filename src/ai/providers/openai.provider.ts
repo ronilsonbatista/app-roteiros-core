@@ -246,82 +246,84 @@ export class OpenAIProvider implements AIProvider {
     const chunks = this.planItineraryChunks(input);
 
     this.logger.log(
-      `Iniciando geração de roteiro longo (${numberOfDays} dias) em ${chunks.length} etapas para evitar limite de tokens e perda de qualidade.`,
+      `Iniciando geração de roteiro longo (${numberOfDays} dias) em ${chunks.length} etapas paralelas para máxima performance e qualidade.`,
     );
 
-    const allDays: any[] = [];
     let totalTokens = 0;
 
-    for (const chunk of chunks) {
-      this.logger.log(
-        `Gerando etapa: Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city || destination})...`,
-      );
+    const chunkResults = await Promise.all(
+      chunks.map(async (chunk) => {
+        this.logger.log(
+          `Disparando etapa: Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city || destination})...`,
+        );
 
-      const chunkPrompt = this.buildChunkPrompt(input, chunk);
+        const chunkPrompt = this.buildChunkPrompt(input, chunk);
+        let attempts = 0;
+        const maxAttempts = 3;
 
-      let success = false;
-      let attempts = 0;
-      const maxAttempts = 2;
-
-      while (!success && attempts < maxAttempts) {
-        attempts++;
-        try {
-          const response = await this.openai.chat.completions.create(
-            {
-              model: this.model,
-              messages: [
-                { role: 'system', content: this.getSystemPrompt() },
-                { role: 'user', content: chunkPrompt },
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.7,
-            },
-            { timeout: 90000, maxRetries: 1 },
-          );
-
-          totalTokens += response.usage?.total_tokens || 0;
-          const content = response.choices[0]?.message?.content;
-          if (!content) throw new Error('Resposta vazia da OpenAI no chunk');
-
-          const parsed = JSON.parse(content);
-          const rawChunkDays = Array.isArray(parsed.days) ? parsed.days : [];
-
-          const expectedCount = chunk.endDay - chunk.startDay + 1;
-          if (rawChunkDays.length !== expectedCount) {
-            throw new Error(
-              `Esperava ${expectedCount} dias no chunk, recebeu ${rawChunkDays.length}`,
+        while (attempts < maxAttempts) {
+          attempts++;
+          try {
+            const response = await this.openai.chat.completions.create(
+              {
+                model: this.model,
+                messages: [
+                  { role: 'system', content: this.getSystemPrompt() },
+                  { role: 'user', content: chunkPrompt },
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.7,
+              },
+              { timeout: 120000, maxRetries: 2 },
             );
-          }
 
-          // Normalize and assign proper dayNumber
-          rawChunkDays.forEach((d: any, idx: number) => {
-            const currentDayNumber = chunk.startDay + idx;
-            d.dayNumber = currentDayNumber;
-            if (!d.destination) d.destination = chunk.city || destination;
-            allDays.push(d);
-          });
+            totalTokens += response.usage?.total_tokens || 0;
+            const content = response.choices[0]?.message?.content;
+            if (!content) throw new Error('Resposta vazia da OpenAI no chunk');
 
-          success = true;
-        } catch (err: any) {
-          this.logger.warn(
-            `Falha na etapa Dias ${chunk.startDay}-${chunk.endDay} (tentativa ${attempts}/${maxAttempts}): ${err.message}`,
-          );
-          if (attempts >= maxAttempts) {
-            throw new BadRequestException(
-              `Falha na geração detalhada dos dias ${chunk.startDay} a ${chunk.endDay}: ${err.message}`,
+            const parsed = JSON.parse(content);
+            const rawChunkDays = Array.isArray(parsed.days) ? parsed.days : [];
+
+            const expectedCount = chunk.endDay - chunk.startDay + 1;
+            if (rawChunkDays.length !== expectedCount) {
+              throw new Error(
+                `Esperava ${expectedCount} dias no chunk, recebeu ${rawChunkDays.length}`,
+              );
+            }
+
+            const processedDays: any[] = [];
+            rawChunkDays.forEach((d: any, idx: number) => {
+              const currentDayNumber = chunk.startDay + idx;
+              d.dayNumber = currentDayNumber;
+              if (!d.destination) d.destination = chunk.city || destination;
+              processedDays.push(d);
+            });
+
+            this.logger.log(
+              `Etapa Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city || destination}) concluída com sucesso!`,
             );
+            return processedDays;
+          } catch (err: any) {
+            this.logger.warn(
+              `Falha na etapa Dias ${chunk.startDay}-${chunk.endDay} (tentativa ${attempts}/${maxAttempts}): ${err.message}`,
+            );
+            if (attempts >= maxAttempts) {
+              throw new BadRequestException(
+                `Falha na geração detalhada dos dias ${chunk.startDay} a ${chunk.endDay}: ${err.message}`,
+              );
+            }
           }
         }
-      }
-    }
+        return [];
+      }),
+    );
 
-    // Sort by dayNumber ascending
+    const allDays = chunkResults.flat();
     allDays.sort((a, b) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
-    // Validate that we have all days from 1 to numberOfDays
     if (allDays.length !== numberOfDays) {
       throw new BadRequestException(
-        `O roteiro longo assembled resultou em ${allDays.length} dias, mas eram esperados ${numberOfDays}.`,
+        `O roteiro longo resultou em ${allDays.length} dias, mas eram esperados ${numberOfDays}.`,
       );
     }
 
@@ -344,74 +346,79 @@ export class OpenAIProvider implements AIProvider {
     const primaryDest = input.destinations?.[0]?.name || 'Ásia';
 
     this.logger.log(
-      `Iniciando geração GuestJourney longa (${totalDays} dias) em ${chunks.length} etapas.`,
+      `Iniciando geração GuestJourney longa (${totalDays} dias) em ${chunks.length} etapas paralelas.`,
     );
 
-    const allDays: any[] = [];
     let totalTokens = 0;
 
-    for (const chunk of chunks) {
-      this.logger.log(
-        `Gerando etapa Guest: Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city})...`,
-      );
+    const chunkResults = await Promise.all(
+      chunks.map(async (chunk) => {
+        this.logger.log(
+          `Disparando etapa Guest: Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city})...`,
+        );
 
-      const chunkPrompt = this.buildGuestChunkPrompt(input, chunk, totalDays);
+        const chunkPrompt = this.buildGuestChunkPrompt(input, chunk, totalDays);
+        let attempts = 0;
+        const maxAttempts = 3;
 
-      let success = false;
-      let attempts = 0;
-      const maxAttempts = 2;
-
-      while (!success && attempts < maxAttempts) {
-        attempts++;
-        try {
-          const response = await this.openai.chat.completions.create(
-            {
-              model: this.model,
-              messages: [
-                { role: 'system', content: this.getGuestSystemPrompt() },
-                { role: 'user', content: chunkPrompt },
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.7,
-            },
-            { timeout: 90000, maxRetries: 1 },
-          );
-
-          totalTokens += response.usage?.total_tokens || 0;
-          const content = response.choices[0]?.message?.content;
-          if (!content) throw new Error('Resposta vazia da OpenAI no chunk');
-
-          const parsed = JSON.parse(content);
-          const rawChunkDays = Array.isArray(parsed.days) ? parsed.days : [];
-          const expectedCount = chunk.endDay - chunk.startDay + 1;
-
-          if (rawChunkDays.length !== expectedCount) {
-            throw new Error(
-              `Esperava ${expectedCount} dias no chunk, recebeu ${rawChunkDays.length}`,
+        while (attempts < maxAttempts) {
+          attempts++;
+          try {
+            const response = await this.openai.chat.completions.create(
+              {
+                model: this.model,
+                messages: [
+                  { role: 'system', content: this.getGuestSystemPrompt() },
+                  { role: 'user', content: chunkPrompt },
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.7,
+              },
+              { timeout: 120000, maxRetries: 2 },
             );
-          }
 
-          rawChunkDays.forEach((d: any, idx: number) => {
-            const currentDayNumber = chunk.startDay + idx;
-            d.dayNumber = currentDayNumber;
-            if (!d.destination) d.destination = chunk.city;
-            allDays.push(d);
-          });
+            totalTokens += response.usage?.total_tokens || 0;
+            const content = response.choices[0]?.message?.content;
+            if (!content) throw new Error('Resposta vazia da OpenAI no chunk');
 
-          success = true;
-        } catch (err: any) {
-          this.logger.warn(
-            `Falha na etapa Guest Dias ${chunk.startDay}-${chunk.endDay} (tentativa ${attempts}/${maxAttempts}): ${err.message}`,
-          );
-          if (attempts >= maxAttempts) {
-            throw new BadRequestException(
-              `Falha na geração detalhada dos dias ${chunk.startDay} a ${chunk.endDay}: ${err.message}`,
+            const parsed = JSON.parse(content);
+            const rawChunkDays = Array.isArray(parsed.days) ? parsed.days : [];
+            const expectedCount = chunk.endDay - chunk.startDay + 1;
+
+            if (rawChunkDays.length !== expectedCount) {
+              throw new Error(
+                `Esperava ${expectedCount} dias no chunk, recebeu ${rawChunkDays.length}`,
+              );
+            }
+
+            const processedDays: any[] = [];
+            rawChunkDays.forEach((d: any, idx: number) => {
+              const currentDayNumber = chunk.startDay + idx;
+              d.dayNumber = currentDayNumber;
+              if (!d.destination) d.destination = chunk.city;
+              processedDays.push(d);
+            });
+
+            this.logger.log(
+              `Etapa Guest Dias ${chunk.startDay} a ${chunk.endDay} (${chunk.city}) concluída!`,
             );
+            return processedDays;
+          } catch (err: any) {
+            this.logger.warn(
+              `Falha na etapa Guest Dias ${chunk.startDay}-${chunk.endDay} (tentativa ${attempts}/${maxAttempts}): ${err.message}`,
+            );
+            if (attempts >= maxAttempts) {
+              throw new BadRequestException(
+                `Falha na geração detalhada dos dias ${chunk.startDay} a ${chunk.endDay}: ${err.message}`,
+              );
+            }
           }
         }
-      }
-    }
+        return [];
+      }),
+    );
 
+    const allDays = chunkResults.flat();
     allDays.sort((a, b) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
     if (allDays.length !== totalDays) {
