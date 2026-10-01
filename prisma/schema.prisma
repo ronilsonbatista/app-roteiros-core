@@ -51,6 +51,7 @@ model User {
   authoredCampaigns   Campaign[]
   authoredBlogPosts   BlogPost[]
   authoredKnowledgeArticles KnowledgeArticle[]
+  createdCompanyExpenses CompanyExpense[] @relation("CompanyExpenseCreator")
 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -989,3 +990,35 @@ model CrmContact {
   @@index([status, createdAt])
   @@map("crm_contacts")
 }
+
+enum CompanyExpenseCategory {
+  INFRA
+  SAAS
+  MARKETING
+  PESSOAS
+  VIAGEM
+  OUTROS
+}
+
+model CompanyExpense {
+  id               String                 @id @default(uuid())
+  title            String
+  category         CompanyExpenseCategory
+  amountCents      Int
+  currency         String                 @default("BRL")
+  spentAt          DateTime
+  competenceMonth  String                 // YYYY-MM
+  vendor           String?
+  notes            String?
+  createdByAdminId String?
+  createdByAdmin   User?                  @relation("CompanyExpenseCreator", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  archivedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([competenceMonth, spentAt])
+  @@index([category])
+  @@index([archivedAt])
+  @@map("company_expenses")
+}
+

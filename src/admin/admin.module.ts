@@ -26,6 +26,8 @@ import { AiIntelligenceService } from './ai-intelligence/ai-intelligence.service
 import { AiIntelligenceController } from './ai-intelligence/ai-intelligence.controller';
 import { SystemService } from './system/system.service';
 import { SystemController } from './system/system.controller';
+import { CompanyExpensesService } from './company-expenses/company-expenses.service';
+import { CompanyExpensesController } from './company-expenses/company-expenses.controller';
 import { EmailModule } from '../email/email.module';
 
 @Module({
@@ -40,6 +42,7 @@ import { EmailModule } from '../email/email.module';
     BlogService,
     AiIntelligenceService,
     SystemService,
+    CompanyExpensesService,
   ],
   controllers: [
     ItineraryEditorController,
@@ -54,6 +57,7 @@ import { EmailModule } from '../email/email.module';
     BlogPublicController,
     AiIntelligenceController,
     SystemController,
+    CompanyExpensesController,
   ],
   exports: [
     AuditService,
@@ -62,6 +66,7 @@ import { EmailModule } from '../email/email.module';
     BlogService,
     AiIntelligenceService,
     SystemService,
+    CompanyExpensesService,
   ],
 })
 export class AdminModule {}
