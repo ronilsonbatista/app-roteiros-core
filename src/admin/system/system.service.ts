@@ -51,6 +51,7 @@ export class SystemService {
           name: 'Media Storage',
           provider: process.env.MEDIA_STORAGE_PROVIDER || 'local',
           bucketConfigured: Boolean(process.env.S3_BUCKET),
+          configured: true,
           status: 'CONFIGURED',
         },
       },

@@ -24,6 +24,12 @@ export class SystemController {
     return this.systemService.getProviderHealth();
   }
 
+  @Get('providers')
+  @ApiOperation({ summary: 'Status de configuração e saúde de todos os provedores (alias)' })
+  getProviders() {
+    return this.systemService.getProviderHealth();
+  }
+
   @Get('search')
   @ApiOperation({ summary: 'Busca global unificada no ecossistema (clientes, viagens, compras, blog)' })
   @ApiQuery({ name: 'q', required: true, type: String })

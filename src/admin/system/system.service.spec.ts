@@ -37,6 +37,8 @@ describe('SystemService', () => {
       expect(res.providers.openai).toBeDefined();
       expect(res.providers.email).toBeDefined();
       expect(res.providers.mercadoPago).toBeDefined();
+      expect(res.providers.mediaStorage.configured).toBe(true);
+      expect(res.providers.mediaStorage.status).toBe('CONFIGURED');
       // Ensure no raw secrets are leaked
       const stringified = JSON.stringify(res);
       expect(stringified).not.toContain('sk-');
