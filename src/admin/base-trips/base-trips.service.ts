@@ -55,22 +55,21 @@ export class BaseTripsService {
 
   async updateBaseTrip(id: string, dto: UpdateBaseTripDto) {
     const trip = await this.findOneBaseTrip(id);
-    if (
-      dto.status === 'PUBLISHED' ||
-      (trip.status === 'PUBLISHED' && dto.numberOfDays !== undefined)
-    ) {
-      const days = dto.numberOfDays ?? trip.numberOfDays;
-      if (
-        trip.days.length !== days ||
-        trip.days.some(
-          (day, index) =>
-            day.dayNumber !== index + 1 ||
-            (!day.attractions.length && !day.restaurants.length),
-        )
-      )
+    if (dto.status === 'PUBLISHED') {
+      const totalDays = trip.days.length;
+      if (totalDays === 0) {
         throw new BadRequestException(
-          'Revise e preencha todos os dias antes de publicar.',
+          'Cadastre pelo menos 1 dia com atrações ou restaurantes antes de publicar.',
         );
+      }
+      const hasContent = trip.days.some(
+        (day) => day.attractions.length > 0 || day.restaurants.length > 0,
+      );
+      if (!hasContent) {
+        throw new BadRequestException(
+          'Cadastre pelo menos uma atração ou restaurante na biblioteca antes de publicar.',
+        );
+      }
     }
     return this.prisma.baseTrip.update({ where: { id }, data: dto });
   }
@@ -91,19 +90,28 @@ export class BaseTripsService {
     baseTripDayId: string,
     dto: CreateBaseAttractionDto,
   ) {
+    if (!dto.address || !dto.address.trim()) {
+      throw new BadRequestException('Endereço da atração é obrigatório.');
+    }
     const day = await this.prisma.baseTripDay.findUnique({
       where: { id: baseTripDayId },
     });
     if (!day) throw new NotFoundException('Base Trip Day não encontrado');
     return this.prisma.baseAttraction.create({
-      data: { ...dto, baseTripDayId },
+      data: { ...dto, baseTripDayId, address: dto.address.trim() },
     });
   }
 
   async updateBaseAttraction(id: string, dto: UpdateBaseAttractionDto) {
+    if (dto.address !== undefined && !dto.address?.trim()) {
+      throw new BadRequestException('Endereço da atração não pode ser vazio.');
+    }
     const item = await this.prisma.baseAttraction.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Base Attraction não encontrada');
-    return this.prisma.baseAttraction.update({ where: { id }, data: dto });
+    return this.prisma.baseAttraction.update({
+      where: { id },
+      data: { ...dto, address: dto.address ? dto.address.trim() : undefined },
+    });
   }
 
   async removeBaseAttraction(id: string) {
@@ -116,19 +124,28 @@ export class BaseTripsService {
     baseTripDayId: string,
     dto: CreateBaseRestaurantDto,
   ) {
+    if (!dto.address || !dto.address.trim()) {
+      throw new BadRequestException('Endereço do restaurante é obrigatório.');
+    }
     const day = await this.prisma.baseTripDay.findUnique({
       where: { id: baseTripDayId },
     });
     if (!day) throw new NotFoundException('Base Trip Day não encontrado');
     return this.prisma.baseRestaurant.create({
-      data: { ...dto, baseTripDayId },
+      data: { ...dto, baseTripDayId, address: dto.address.trim() },
     });
   }
 
   async updateBaseRestaurant(id: string, dto: UpdateBaseRestaurantDto) {
+    if (dto.address !== undefined && !dto.address?.trim()) {
+      throw new BadRequestException('Endereço do restaurante não pode ser vazio.');
+    }
     const item = await this.prisma.baseRestaurant.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Base Restaurant não encontrado');
-    return this.prisma.baseRestaurant.update({ where: { id }, data: dto });
+    return this.prisma.baseRestaurant.update({
+      where: { id },
+      data: { ...dto, address: dto.address ? dto.address.trim() : undefined },
+    });
   }
 
   async removeBaseRestaurant(id: string) {

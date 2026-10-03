@@ -22,10 +22,10 @@ export class CreateBaseRestaurantDto {
   @IsNumber()
   priceLevel?: number;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ description: 'Endereço completo do restaurante' })
   @IsString()
-  address?: string;
+  @IsNotEmpty({ message: 'Endereço é obrigatório para cadastrar o restaurante' })
+  address: string;
 
   @ApiPropertyOptional()
   @IsOptional()

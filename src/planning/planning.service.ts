@@ -55,14 +55,29 @@ export class PlanningService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + ttlDays);
 
+    const initialData: any = {
+      guestTokenHash: tokenHash,
+      status: GuestJourneyStatus.COLLECTING,
+      answersVersion: dto.answersVersion || 1,
+      currentStep: dto.initialStep || 1,
+      expiresAt,
+    };
+
+    if (dto.destinations) initialData.destinations = dto.destinations;
+    if (dto.travelers) initialData.travelers = dto.travelers;
+    if (dto.interests) initialData.interests = dto.interests;
+    const effectiveHours = dto.activityHours || dto.activityWindow;
+    if (effectiveHours) {
+      initialData.activityHours = {
+        startTime: effectiveHours.startTime || effectiveHours.start || '09:00',
+        endTime: effectiveHours.endTime || effectiveHours.end || '18:30',
+      };
+    }
+    if (dto.travelStyle) initialData.travelStyle = dto.travelStyle;
+    if (dto.budgetLevel) initialData.budgetLevel = dto.budgetLevel;
+
     const journey = await this.prisma.guestJourney.create({
-      data: {
-        guestTokenHash: tokenHash,
-        status: GuestJourneyStatus.COLLECTING,
-        answersVersion: dto.answersVersion || 1,
-        currentStep: dto.initialStep || 1,
-        expiresAt,
-      },
+      data: initialData,
     });
 
     return {

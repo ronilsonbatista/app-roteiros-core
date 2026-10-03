@@ -34,10 +34,10 @@ export class CreateBaseAttractionDto {
   @IsString()
   image?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ description: 'Endereço completo da atração' })
   @IsString()
-  address?: string;
+  @IsNotEmpty({ message: 'Endereço é obrigatório para cadastrar a atração' })
+  address: string;
 
   @ApiPropertyOptional()
   @IsOptional()

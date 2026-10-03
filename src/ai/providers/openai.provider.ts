@@ -661,16 +661,21 @@ export class OpenAIProvider implements AIProvider {
 
   private getSystemPrompt(): string {
     return `Você é o Especialista Chefe em Roteiros e Curador de Viagens da 2GO.
-Sua missão é criar roteiros de viagem personalizados, cronologicamente precisos, harmoniosos e altamente acionáveis para qualquer destino do mundo.
+Sua missão é criar roteiros de viagem personalizados, cronologicamente precisos, harmoniosos e altamente acionáveis para qualquer destino do mundo, integrando prioritariamente o acervo curado da biblioteca 2GO com a inteligência do modelo.
 
-DIRETRIZES DE ESTRUTURA DIÁRIA:
-Organize cada dia de forma lógica, sequencial e adaptada ao perfil, ritmo e janela de horários do viajante:
-- Distribua as refeições principais (café da manhã, almoço, jantar) em estabelecimentos locais autênticos e compatíveis com a faixa de orçamento informada.
-- Organize atrações culturais, históricas, pausas e passeios de forma sequencial e geograficamente agrupada, sem sobreposição de horários e respeitando os tempos de deslocamento.
-- Respeite rigorosamente a janela diária de horários informada pelo viajante. Não force uma grade fixa ou rígida de atividades caso o ritmo do viajante, o tempo disponível ou os horários de chegada e partida peçam uma programação mais leve ou mais dinâmica.
-- No primeiro dia, considere o horário de chegada do viajante (se chegar à tarde ou noite, programe apenas check-in, caminhada leve de aclimatação e jantar).
-- No último dia, considere o horário de partida e o deslocamento necessário até o aeroporto ou estação de saída.
-- Para roteiros multi-cidades, inclua a atividade de transporte entre as cidades no início ou meio do dia de transferência (category: "TRANSPORT"), com tempos de estação/aeroporto e check-in.
+DIRETRIZES DE ESTRUTURA DIÁRIA (GRADE HORA A HORA ATÉ O JANTAR — OBRIGATÓRIO):
+Organize cada dia com uma programação contínua, rica e sequencial da manhã até a noite:
+1. CAFÉ DA MANHÃ (início da janela, ex: 08:30 - 09:30): Parada matinal para café/refeição em cafeteria ou bistrô local autêntico (priorize indicação da biblioteca 2GO se couber na faixa/horário, ou sugestão local autêntica da IA).
+2. BLOCO DA MANHÃ: Pelo menos 3 atrações ou atividades culturais/históricas/passeios marcantes (priorize fortemente a biblioteca 2GO).
+3. ALMOÇO (meio do dia, ex: 12:45 - 14:15): Restaurante para almoço em horário apropriado, alinhado à gastronomia local e ao orçamento do viajante (priorize restaurante da biblioteca 2GO).
+4. BLOCO DA TARDE: Pelo menos 2 atrações ou experiências à tarde (priorize a biblioteca 2GO).
+5. JANTAR (OBRIGATÓRIO, ex: 20:00 - 21:45): Restaurante para jantar memorável (o dia NÃO acaba à tarde; deve ir continuamente até a noite com um jantar bem indicado).
+
+INTEGRAÇÃO COM A BIBLIOTECA 2GO (PRIORIDADE ABSOLUTA):
+- Quando houver atrações e restaurantes cadastrados na biblioteca 2GO informados no contexto, você DEVE priorizá-los e incluí-los no roteiro.
+- Para itens da biblioteca 2GO: preserve o nome e o endereço exatos, e defina sourceType: "BASE_TRIP" e sourceId: "[id da biblioteca]".
+- Para itens adicionais sugeridos pela IA: complete a ordem, transfers e o que faltar com seu conhecimento especialista, definindo sourceType: "AI", sourceId: null, providerPlaceId: null.
+- ZERO PLACE ID SINTÉTICO: providerPlaceId deve ser nulo se não veio especificado na biblioteca 2GO. NUNCA invente Place IDs fictícios!
 
 REGRAS DE CONTEÚDO PARA CADA ATIVIDADE:
 - title: Nome específico, autêntico e real do local ou experiência (NUNCA genérico como "Visitar um museu" ou "Almoço em restaurante local").
@@ -678,21 +683,15 @@ REGRAS DE CONTEÚDO PARA CADA ATIVIDADE:
 - timeLabel: Faixa horária sequencial e realista (ex: "09:00 - 10:30", "12:30 - 14:00"). Respeite a janela diária informada.
 - duration: Duração em minutos inteiros (ex: 45, 60, 90, 120).
 - period: "Manhã", "Almoço", "Tarde", "Pausa", "Jantar" ou "Noite".
-- location: Endereço, bairro ou referência geográfica verificável no destino.
-- description: Detalhamento prático do que fazer e experimentar + JUSTIFICATIVA explícita de por que essa atividade foi escolhida para o perfil do viajante (interesses, estilo, ritmo, orçamento).
+- location: Endereço completo, bairro ou referência geográfica verificável no destino.
+- description: Detalhamento prático do que fazer e experimentar + justificativa personalizada para o viajante.
 - cost: Custo estimado por pessoa em moeda local (número decimal, 0 para gratuitas).
 - currency: Código ISO da moeda local oficial do destino (ex: BRL no Brasil, USD nos EUA, EUR na Europa, JPY no Japão, etc.). NUNCA assuma EUR ou BRL se o destino for de outro país!
-- notes: Texto estruturado contendo:
-  * Deslocamento: tempo estimado e modo a partir da parada anterior (ex: caminhada curta, transporte público ou táxi).
-  * Reserva / Ingresso: orientação prática (ex: "Ingresso online com antecedência", "Entrada livre", "Reserva recomendada").
-  * Dica útil de visitação.
-  * Alternativa para mau tempo ou fechamento.
-  * Aviso: "Valores e horários são estimativas a serem confirmadas pelo viajante."
+- notes: Texto estruturado com Deslocamento, Reserva/Ingresso, Dica útil e Alternativa.
 
 IMPORTANTE:
 - Não crie horários sobrepostos.
-- Adapte o primeiro e o último dia conforme horários reais de chegada e partida.
-- Não invente confirmações de reservas reais ou códigos de vouchers definitivos; sempre oriente como recomendação curada.
+- Adapte o primeiro dia conforme horário real de chegada e o último dia conforme partida.
 - Retorne EXATAMENTE no seguinte formato JSON, sem nenhum texto fora das chaves:
 {
   "days": [
@@ -706,16 +705,16 @@ IMPORTANTE:
         {
           "title": "Nome Exato do Local ou Experiência",
           "category": "CAFE",
-          "timeLabel": "09:00 - 09:45",
-          "duration": 45,
+          "timeLabel": "08:30 - 09:30",
+          "duration": 60,
           "period": "Manhã",
           "location": "Rua / Bairro / Cidade",
           "description": "Descrição detalhada do que fazer e justificativa personalizada para o viajante.",
           "cost": 10.0,
           "currency": "MOEDA_LOCAL_ISO",
-          "notes": "Deslocamento: caminhada curta do hotel. Reserva: Acesso livre. Alternativa em caso de chuva: Local histórico coberto.",
-          "sourceType": "AI",
-          "sourceId": null,
+          "notes": "Deslocamento: caminhada curta do hotel. Reserva: Acesso livre.",
+          "sourceType": "BASE_TRIP",
+          "sourceId": "id-se-da-biblioteca-ou-null",
           "providerPlaceId": null
         }
       ]
@@ -874,30 +873,44 @@ Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction}, e n
       : `- Moeda local para estimativas: identifique a moeda oficial (código ISO) de cada destino informado.\n\n`;
 
     if (curatedContext && curatedContext.destinations) {
-      prompt += `### Conhecimento Curado 2GO por Destino:\n`;
+      prompt += `### BIBLIOTECA DE CURADORIA 2GO (INDICAÇÕES PRÓPRIAS E SESSÃO ESCRITA):\n`;
       for (const destCtx of curatedContext.destinations) {
         prompt += `\nDestino: ${destCtx.destinationName} (Cobertura: ${destCtx.coverage})\n`;
         if (destCtx.bestBaseTrip) {
           const bt = destCtx.bestBaseTrip.baseTrip;
-          prompt += `[BaseTrip Curada - ID: ${bt.id}] ${bt.title}\n`;
-          if (destCtx.attractions?.length) {
-            prompt += `Atrações Recomendadas:\n`;
-            destCtx.attractions.forEach((a) => {
-              prompt += `- ${a.attraction.name} (PlaceID: ${a.attraction.providerPlaceId || 'N/A'})\n`;
-            });
-          }
-          if (destCtx.restaurants?.length) {
-            prompt += `Restaurantes Recomendados:\n`;
-            destCtx.restaurants.forEach((r) => {
-              prompt += `- ${r.restaurant.name} (Prato: ${r.restaurant.recommendedDish || 'Especialidade local'})\n`;
-            });
-          }
+          prompt += `[Roteiro Base / Sessão Escrita 2GO - ID: ${bt.id}] ${bt.title}\n`;
+          if (bt.shortDescription) prompt += `Resumo: ${bt.shortDescription}\n`;
+          if (bt.fullDescription) prompt += `Sessão Escrita do Destino / Guia: ${bt.fullDescription}\n`;
+        }
+        if (destCtx.attractions?.length) {
+          prompt += `\n[Indicações 2GO - Pontos Turísticos / Atrações da Biblioteca]:\n`;
+          destCtx.attractions.forEach((a) => {
+            const attr = a.attraction;
+            prompt += `- ${attr.name} (ID: ${attr.id}) | Endereço: ${attr.address || 'N/A'} | Categoria: ${attr.category || 'Atração'} | Ingresso: ${attr.requiresTicket ? 'Sim' : 'Não'}${attr.providerPlaceId ? ` | PlaceID: ${attr.providerPlaceId}` : ''}\n`;
+          });
+        }
+        if (destCtx.restaurants?.length) {
+          prompt += `\n[Indicações 2GO - Restaurantes / Gastronomia da Biblioteca]:\n`;
+          destCtx.restaurants.forEach((r) => {
+            const rest = r.restaurant;
+            prompt += `- ${rest.name} (ID: ${rest.id}) | Endereço: ${rest.address || 'N/A'} | Cozinha: ${rest.cuisineType || 'Local'} | Faixa: ${rest.priceRange || rest.priceLevel || 'Média'}${rest.recommendedDish ? ` | Especialidade: ${rest.recommendedDish}` : ''}${rest.providerPlaceId ? ` | PlaceID: ${rest.providerPlaceId}` : ''}\n`;
+          });
+        }
+        if (destCtx.knowledgeArticles?.length) {
+          prompt += `\n[Artigos de Conhecimento 2GO / Dicas do Destino]:\n`;
+          destCtx.knowledgeArticles.forEach((ka: any) => {
+            prompt += `- Artigo: ${ka.title} (${ka.category}): ${ka.summary || ka.content?.slice(0, 300)}\n`;
+          });
         }
       }
       prompt += `\n`;
     }
 
-    prompt += `Retorne a programação diária completa estruturada em JSON, adaptada ao ritmo e janela de horários informada, com horários sequenciais sem sobreposição, custos em moeda local e notas de deslocamento e reserva.`;
+    prompt += `\nCOMANDOS OBRIGATÓRIOS PARA CADA DIA:
+1. Monte uma grade cronológica contínua HORA A HORA até o jantar (café da manhã, ≥3 atrações de manhã, almoço, ≥2 atrações de tarde e jantar obrigatório). O dia NÃO termina à tarde!
+2. Incorpore prioritariamente as atrações e restaurantes acima da Biblioteca 2GO (com seus nomes e endereços exatos).
+3. Para itens da Biblioteca 2GO, defina sourceType="BASE_TRIP" e sourceId="[id da biblioteca]". Para novos itens sugeridos pela IA, defina sourceType="AI", sourceId=null, providerPlaceId=null (SEM Place IDs inventados).
+4. Retorne a resposta exclusivamente no JSON estruturado com horários sequenciais realistas.`;
 
     return prompt;
   }
@@ -940,18 +953,29 @@ Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction}, e n
           d.destinationName?.toLowerCase().includes(chunk.city.toLowerCase()) ||
           chunk.city.toLowerCase().includes(d.destinationName?.toLowerCase() || ''),
       );
-      if (destCtx && destCtx.bestBaseTrip) {
-        prompt += `### Base Curada de Referência para ${chunk.city} (ID: ${destCtx.bestBaseTrip.baseTrip.id}): ${destCtx.bestBaseTrip.baseTrip.title}\n`;
+      if (destCtx) {
+        if (destCtx.bestBaseTrip) {
+          const bt = destCtx.bestBaseTrip.baseTrip;
+          prompt += `### Base Curada 2GO para ${chunk.city} (ID: ${bt.id}): ${bt.title}\n`;
+          if (bt.shortDescription) prompt += `Resumo: ${bt.shortDescription}\n`;
+          if (bt.fullDescription) prompt += `Sessão Escrita: ${bt.fullDescription}\n`;
+        }
         if (destCtx.attractions?.length) {
-          prompt += `Atrações Recomendadas:\n`;
-          destCtx.attractions.slice(0, 5).forEach((a) => {
-            prompt += `- ${a.attraction.name} (PlaceID: ${a.attraction.providerPlaceId || 'N/A'})\n`;
+          prompt += `Atrações Recomendadas da Biblioteca 2GO:\n`;
+          destCtx.attractions.slice(0, 8).forEach((a) => {
+            prompt += `- ${a.attraction.name} (ID: ${a.attraction.id}) | Endereço: ${a.attraction.address || 'N/A'} | Categoria: ${a.attraction.category}\n`;
           });
         }
         if (destCtx.restaurants?.length) {
-          prompt += `Restaurantes Recomendados:\n`;
-          destCtx.restaurants.slice(0, 3).forEach((r) => {
-            prompt += `- ${r.restaurant.name}\n`;
+          prompt += `Restaurantes Recomendados da Biblioteca 2GO:\n`;
+          destCtx.restaurants.slice(0, 5).forEach((r) => {
+            prompt += `- ${r.restaurant.name} (ID: ${r.restaurant.id}) | Endereço: ${r.restaurant.address || 'N/A'} | Cozinha: ${r.restaurant.cuisineType || 'Local'}\n`;
+          });
+        }
+        if (destCtx.knowledgeArticles?.length) {
+          prompt += `Dicas e Artigos de Conhecimento 2GO:\n`;
+          destCtx.knowledgeArticles.forEach((ka: any) => {
+            prompt += `- ${ka.title}: ${ka.summary || ka.content?.slice(0, 200)}\n`;
           });
         }
         prompt += `\n`;
@@ -972,8 +996,10 @@ Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction}, e n
 
     prompt += `\nCOMANDO:
 Gere EXATAMENTE ${expectedDaysCount} dias no JSON: começando no dayNumber ${chunk.startDay} até o dayNumber ${chunk.endDay}.
-Para CADA dia, forneça uma programação completa, fluida e sequencial com refeições bem distribuídas e atividades/atrações que respeitem a janela de atividades e os interesses do viajante, sem sobreposição horária.
-Todos com timeLabel sequencial, duration em minutos, ${currencyInstruction} e notes práticas.`;
+Cada dia deve cobrir uma grade contínua HORA A HORA até o jantar (café da manhã, ≥3 atrações manhã, almoço, ≥2 atrações tarde e jantar obrigatório). O dia NÃO pode acabar à tarde!
+Priorize fortemente as atrações e restaurantes da Biblioteca 2GO (marcando sourceType="BASE_TRIP" e sourceId="[id]").
+Sem Place IDs sintéticos (providerPlaceId deve ser nulo se não veio da biblioteca).
+Todos os itens com timeLabel sequencial, duration em minutos, ${currencyInstruction} e notes práticas.`;
 
     return prompt;
   }

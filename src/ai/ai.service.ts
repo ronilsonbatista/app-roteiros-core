@@ -369,24 +369,30 @@ export class AiService {
           for (const attr of destCtx.attractions || []) {
             if (attr.attraction?.name) {
               curatedMap.set(attr.attraction.name.toLowerCase().trim(), {
+                id: attr.attraction.id,
+                name: attr.attraction.name,
                 providerPlaceId: attr.attraction.providerPlaceId,
                 latitude: attr.attraction.latitude,
                 longitude: attr.attraction.longitude,
                 requiresTicket: attr.attraction.requiresTicket,
                 address: attr.attraction.address,
                 googleMapsLink: attr.attraction.googleMapsLink,
+                sourceType: 'BASE_ATTRACTION',
               });
             }
           }
           for (const rest of destCtx.restaurants || []) {
             if (rest.restaurant?.name) {
               curatedMap.set(rest.restaurant.name.toLowerCase().trim(), {
+                id: rest.restaurant.id,
+                name: rest.restaurant.name,
                 providerPlaceId: rest.restaurant.providerPlaceId,
                 latitude: rest.restaurant.latitude,
                 longitude: rest.restaurant.longitude,
                 requiresTicket: false,
                 address: rest.restaurant.address,
                 googleMapsLink: rest.restaurant.googleMapsLink,
+                sourceType: 'BASE_RESTAURANT',
               });
             }
           }
@@ -419,11 +425,19 @@ export class AiService {
               );
 
               // Provenance resolution
+              const titleNorm = (item.title || '').toLowerCase().trim();
+              const curated = curatedMap.get(titleNorm);
+
               let sourceType = item.sourceType || 'AI';
               let sourceId = item.sourceId || null;
               let providerPlaceId = item.providerPlaceId || null;
 
-              if (sourceType === 'AI' || !sourceType) {
+              if (curated) {
+                if (!['BASE_TRIP', 'BASE_ATTRACTION', 'BASE_RESTAURANT'].includes(sourceType)) {
+                  sourceType = curated.sourceType || 'BASE_ATTRACTION';
+                }
+                sourceId = sourceId || curated.id;
+              } else if (sourceType === 'AI' || !sourceType) {
                 if (providerPlaceId) {
                   sourceType = 'PLACES';
                 }

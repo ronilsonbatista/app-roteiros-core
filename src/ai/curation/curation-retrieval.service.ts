@@ -54,6 +54,7 @@ export interface SingleDestinationCuratedContext {
   otherBaseTrips: ScoredBaseTrip[];
   attractions: ScoredBaseAttraction[];
   restaurants: ScoredBaseRestaurant[];
+  knowledgeArticles?: any[];
 }
 
 export interface CuratedContextResult {
@@ -171,59 +172,107 @@ export class CurationRetrievalService {
     const bestBaseTrip = limitedBaseTrips.length > 0 ? limitedBaseTrips[0] : undefined;
     const otherBaseTrips = limitedBaseTrips.length > 1 ? limitedBaseTrips.slice(1) : [];
 
-    if (bestBaseTrip && bestBaseTrip.score >= 40) {
-      // STRONG coverage: We have a high-matching published BaseTrip
-      const attractions: ScoredBaseAttraction[] = [];
-      const restaurants: ScoredBaseRestaurant[] = [];
+    // Fetch relevant KnowledgeArticles for this destination
+    const knowledgeArticles = this.prisma.knowledgeArticle?.findMany
+      ? await this.prisma.knowledgeArticle.findMany({
+          where: {
+            status: 'PUBLISHED' as any,
+            OR: [
+              { category: 'DESTINO' },
+              { destination: { contains: dest.name || '', mode: 'insensitive' } },
+              dest.city
+                ? { destination: { contains: dest.city, mode: 'insensitive' } }
+                : undefined,
+            ].filter(Boolean) as any[],
+          },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            summary: true,
+            content: true,
+            destination: true,
+          },
+        })
+      : [];
 
-      for (const day of bestBaseTrip.baseTrip.days || []) {
+    const seenAttrNames = new Set<string>();
+    const attractions: ScoredBaseAttraction[] = [];
+    const seenRestNames = new Set<string>();
+    const restaurants: ScoredBaseRestaurant[] = [];
+
+    // Collect from bestBaseTrip and other matching published base trips
+    for (const scoredTrip of limitedBaseTrips) {
+      for (const day of scoredTrip.baseTrip.days || []) {
         for (const attr of day.attractions || []) {
-          attractions.push({
-            attraction: attr,
-            score: 50,
-            matchedTags: [],
-          });
+          const norm = (attr.name || '').toLowerCase().trim();
+          if (norm && !seenAttrNames.has(norm)) {
+            seenAttrNames.add(norm);
+            attractions.push({
+              attraction: attr,
+              score: scoredTrip === bestBaseTrip ? 50 : 35,
+              matchedTags: [],
+            });
+          }
         }
         for (const rest of day.restaurants || []) {
-          restaurants.push({
-            restaurant: rest,
-            score: 50,
-          });
+          const norm = (rest.name || '').toLowerCase().trim();
+          if (norm && !seenRestNames.has(norm)) {
+            seenRestNames.add(norm);
+            restaurants.push({
+              restaurant: rest,
+              score: scoredTrip === bestBaseTrip ? 50 : 35,
+            });
+          }
         }
       }
-
-      return {
-        destinationName: dest.name,
-        providerPlaceId: dest.providerPlaceId,
-        coverage: 'STRONG',
-        bestBaseTrip,
-        otherBaseTrips,
-        attractions: attractions.slice(
-          0,
-          DEFAULT_RETRIEVAL_LIMITS.maxAttractionsPerDestination,
-        ),
-        restaurants: restaurants.slice(
-          0,
-          DEFAULT_RETRIEVAL_LIMITS.maxRestaurantsPerDestination,
-        ),
-      };
     }
 
-    // Fallback: Query standalone BaseAttractions & BaseRestaurants for destination
-    const attractions = await this.retrieveAttractionsForDestination(dest, input);
-    const restaurants = await this.retrieveRestaurantsForDestination(dest, input);
+    // Also query standalone pool if needed
+    if (attractions.length < DEFAULT_RETRIEVAL_LIMITS.maxAttractionsPerDestination) {
+      const extraAttrs = await this.retrieveAttractionsForDestination(dest, input);
+      for (const a of extraAttrs) {
+        const norm = (a.attraction?.name || '').toLowerCase().trim();
+        if (norm && !seenAttrNames.has(norm)) {
+          seenAttrNames.add(norm);
+          attractions.push(a);
+        }
+      }
+    }
+    if (restaurants.length < DEFAULT_RETRIEVAL_LIMITS.maxRestaurantsPerDestination) {
+      const extraRests = await this.retrieveRestaurantsForDestination(dest, input);
+      for (const r of extraRests) {
+        const norm = (r.restaurant?.name || '').toLowerCase().trim();
+        if (norm && !seenRestNames.has(norm)) {
+          seenRestNames.add(norm);
+          restaurants.push(r);
+        }
+      }
+    }
 
-    const hasContent = attractions.length > 0 || restaurants.length > 0;
-    const coverage: CurationCoverage = hasContent ? 'PARTIAL' : 'NONE';
+    const hasContent = (bestBaseTrip != null) || attractions.length > 0 || restaurants.length > 0;
+    const coverage: CurationCoverage = (bestBaseTrip && bestBaseTrip.score >= 40)
+      ? 'STRONG'
+      : hasContent
+        ? 'PARTIAL'
+        : 'NONE';
 
     return {
       destinationName: dest.name,
       providerPlaceId: dest.providerPlaceId,
       coverage,
-      bestBaseTrip: undefined,
-      otherBaseTrips: [],
-      attractions,
-      restaurants,
+      bestBaseTrip,
+      otherBaseTrips,
+      attractions: attractions.slice(
+        0,
+        DEFAULT_RETRIEVAL_LIMITS.maxAttractionsPerDestination,
+      ),
+      restaurants: restaurants.slice(
+        0,
+        DEFAULT_RETRIEVAL_LIMITS.maxRestaurantsPerDestination,
+      ),
+      knowledgeArticles,
     };
   }
 

@@ -20,6 +20,11 @@ export class PlanningDestinationDto {
   @IsString()
   providerPlaceId?: string;
 
+  @ApiPropertyOptional({ example: 'ChIJaX7xOX1gLxMRFC23l00vM-Q' })
+  @IsOptional()
+  @IsString()
+  placeId?: string;
+
   @ApiPropertyOptional({ example: 'Roma' })
   @IsString()
   name: string;
