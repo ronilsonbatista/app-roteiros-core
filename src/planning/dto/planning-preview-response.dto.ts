@@ -39,6 +39,12 @@ export class PlanningVisibleActivityDto {
   @ApiProperty({ required: false, example: 'Manhã' })
   period?: string;
 
+  @ApiProperty({ required: false, example: '08:30 - 09:30' })
+  timeLabel?: string;
+
+  @ApiProperty({ required: false, example: 60 })
+  duration?: number;
+
   @ApiProperty({ example: 20.0 })
   cost: number;
 

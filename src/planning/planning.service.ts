@@ -523,6 +523,8 @@ export class PlanningService {
             description: item.description || '',
             category: categoryMatch || ItineraryCategory.TOURIST_ATTRACTION,
             period: item.period || 'Manhã',
+            timeLabel: item.timeLabel || undefined,
+            duration: item.duration || undefined,
             cost: Number(item.cost || item.estimatedCost || 0),
             order: item.order || itemIdx + 1,
             location: item.location || '',
