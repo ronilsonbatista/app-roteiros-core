@@ -779,17 +779,26 @@ export class PlanningService {
         });
 
         // Materialize Days & Items
+        const usedDates = new Set<string>();
         for (const [dayIdx, day] of generatedItinerary.days.entries()) {
           const dayNumber = day.dayNumber || dayIdx + 1;
           let dayDate: Date | null = null;
-          if (day.date) {
-            const parsed = new Date(day.date);
-            if (!isNaN(parsed.getTime())) dayDate = parsed;
-          }
-          if (!dayDate && startDate) {
+          if (startDate) {
             const calc = new Date(startDate);
             calc.setDate(calc.getDate() + (dayNumber - 1));
             dayDate = calc;
+          } else if (day.date) {
+            const parsed = new Date(day.date);
+            if (!isNaN(parsed.getTime())) dayDate = parsed;
+          }
+
+          if (dayDate) {
+            let dateKey = dayDate.toISOString().slice(0, 10);
+            while (usedDates.has(dateKey)) {
+              dayDate.setDate(dayDate.getDate() + 1);
+              dateKey = dayDate.toISOString().slice(0, 10);
+            }
+            usedDates.add(dateKey);
           }
 
           const tripDay = await tx.tripDay.create({
