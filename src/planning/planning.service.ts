@@ -20,7 +20,7 @@ import {
   PlanningLockedDayDto,
 } from './dto/planning-preview-response.dto';
 import { ClaimGuestJourneyResponseDto } from './dto/claim-guest-journey-response.dto';
-import { GuestJourneyStatus, ProductType, ItineraryCategory, TripStatus } from '@prisma/client';
+import { GuestJourneyStatus, ProductType, ItineraryCategory, TripStatus, TransitMode, TicketStatus } from '@prisma/client';
 import { AiService } from '../ai/ai.service';
 import * as crypto from 'crypto';
 
@@ -662,196 +662,226 @@ export class PlanningService {
       });
     }
 
-    // Atomic transaction for Trip creation and GuestJourney linking
-    return this.prisma.$transaction(async (tx) => {
-      // Re-fetch inside transaction for concurrency safety
-      const currentJourney = await tx.guestJourney.findUnique({
-        where: { id },
-      });
-
-      if (!currentJourney) {
-        throw new NotFoundException({
-          statusCode: 404,
-          code: 'PLANNING_JOURNEY_NOT_FOUND',
-          message: 'Jornada não encontrada',
+    // Atomic transaction for Trip creation and GuestJourney linking with safe timeout
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Re-fetch inside transaction for concurrency safety
+        const currentJourney = await tx.guestJourney.findUnique({
+          where: { id },
         });
-      }
 
-      // Check again inside transaction for race conditions
-      if (
-        currentJourney.claimedUserId &&
-        currentJourney.claimedUserId !== userId
-      ) {
-        throw new BadRequestException({
-          statusCode: 400,
-          code: 'PLANNING_JOURNEY_ALREADY_CLAIMED',
-          message: 'Jornada já vinculada a outra conta',
+        if (!currentJourney) {
+          throw new NotFoundException({
+            statusCode: 404,
+            code: 'PLANNING_JOURNEY_NOT_FOUND',
+            message: 'Jornada não encontrada',
+          });
+        }
+
+        // Check again inside transaction for race conditions
+        if (
+          currentJourney.claimedUserId &&
+          currentJourney.claimedUserId !== userId
+        ) {
+          throw new BadRequestException({
+            statusCode: 400,
+            code: 'PLANNING_JOURNEY_ALREADY_CLAIMED',
+            message: 'Jornada já vinculada a outra conta',
+          });
+        }
+
+        if (currentJourney.createdTripId) {
+          return {
+            journeyId: currentJourney.id,
+            tripId: currentJourney.createdTripId,
+            status: GuestJourneyStatus.CLAIMED,
+            nextAction: 'CHECKOUT',
+          };
+        }
+
+        const destinations = Array.isArray(currentJourney.destinations)
+          ? (currentJourney.destinations as any[])
+          : [];
+        const primaryDestination = destinations[0]?.name || 'Destino';
+        const tripTitle =
+          destinations.length > 0
+            ? `Viagem para ${destinations.map((d: any) => d.name).join(' & ')}`
+            : 'Minha Viagem 2GO';
+
+        let coverImage: string | null = destinations[0]?.coverImage || null;
+        if (!coverImage && primaryDestination) {
+          const baseMatch = await tx.baseTrip.findFirst({
+            where: {
+              destination: { contains: primaryDestination, mode: 'insensitive' },
+              coverImage: { not: null },
+            },
+            select: { coverImage: true },
+          });
+          if (baseMatch?.coverImage) {
+            coverImage = baseMatch.coverImage;
+          }
+        }
+
+        const firstDest = destinations[0];
+        const lastDest = destinations[destinations.length - 1];
+
+        const startDateStr = firstDest?.arrivalDate;
+        const endDateStr = lastDest?.departureDate;
+        const startDate =
+          startDateStr && !isNaN(new Date(startDateStr).getTime())
+            ? new Date(startDateStr)
+            : null;
+        const endDate =
+          endDateStr && !isNaN(new Date(endDateStr).getTime())
+            ? new Date(endDateStr)
+            : null;
+
+        let arrivalDateTime: Date | null = null;
+        if (firstDest?.arrivalDate) {
+          const rawArrival = firstDest.arrivalTime
+            ? new Date(`${firstDest.arrivalDate}T${firstDest.arrivalTime}:00`)
+            : new Date(`${firstDest.arrivalDate}T00:00:00`);
+          if (!isNaN(rawArrival.getTime())) arrivalDateTime = rawArrival;
+        }
+
+        let departureDateTime: Date | null = null;
+        if (lastDest?.departureDate) {
+          const rawDeparture = lastDest.departureTime
+            ? new Date(`${lastDest.departureDate}T${lastDest.departureTime}:00`)
+            : new Date(`${lastDest.departureDate}T00:00:00`);
+          if (!isNaN(rawDeparture.getTime())) departureDateTime = rawDeparture;
+        }
+
+        // Materialize Trip
+        const trip = await tx.trip.create({
+          data: {
+            userId,
+            title: tripTitle,
+            destination: primaryDestination,
+            coverImage,
+            startDate,
+            endDate,
+            arrivalDateTime,
+            departureDateTime,
+            allowedSwapsCount: 4,
+            usedSwapsCount: 0,
+            status: TripStatus.DRAFT,
+            premiumUnlockedAt: null,
+            preferences: {
+              travelers: currentJourney.travelers,
+              interests: currentJourney.interests,
+              activityHours: currentJourney.activityHours,
+              budgetLevel: currentJourney.budgetLevel,
+              travelStyle: currentJourney.travelStyle,
+              destinations, // Preservar lista completa multi-destino incluindo cidades intermediárias
+            },
+          },
         });
-      }
 
-      if (currentJourney.createdTripId) {
+        // Materialize Days & Items
+        for (const [dayIdx, day] of generatedItinerary.days.entries()) {
+          const dayNumber = day.dayNumber || dayIdx + 1;
+          let dayDate: Date | null = null;
+          if (day.date) {
+            const parsed = new Date(day.date);
+            if (!isNaN(parsed.getTime())) dayDate = parsed;
+          }
+          if (!dayDate && startDate) {
+            const calc = new Date(startDate);
+            calc.setDate(calc.getDate() + (dayNumber - 1));
+            dayDate = calc;
+          }
+
+          const tripDay = await tx.tripDay.create({
+            data: {
+              tripId: trip.id,
+              dayNumber,
+              date: dayDate,
+              title: day.title || `Dia ${dayNumber}`,
+              description: day.description || null,
+            },
+          });
+
+          const items = Array.isArray(day.items) ? day.items : [];
+          await Promise.all(
+            items.map((item: any, itemIdx: number) => {
+              const categoryMatch =
+                Object.values(ItineraryCategory).find((c) => c === item.category) ||
+                ItineraryCategory.TOURIST_ATTRACTION;
+
+              const transitModeMatch =
+                Object.values(TransitMode).find((m) => m === item.transitMode) ||
+                TransitMode.WALKING;
+
+              const ticketStatusMatch =
+                Object.values(TicketStatus).find((s) => s === item.ticketStatus) ||
+                (item.requiresTicket ? TicketStatus.TICKET_REQUIRED : TicketStatus.UNKNOWN);
+
+              return tx.itineraryItem.create({
+                data: {
+                  tripDayId: tripDay.id,
+                  title: String(item.title || 'Atividade').trim(),
+                  description: item.description ? String(item.description).trim() : null,
+                  category: categoryMatch,
+                  location: item.location ? String(item.location).trim() : null,
+                  googleMapsLink: item.googleMapsLink || null,
+                  latitude: item.latitude != null && !isNaN(Number(item.latitude)) ? Number(item.latitude) : null,
+                  longitude: item.longitude != null && !isNaN(Number(item.longitude)) ? Number(item.longitude) : null,
+                  timeLabel: item.timeLabel || item.period || null,
+                  period: item.period ? String(item.period).trim() : null,
+                  duration: item.duration != null && !isNaN(Number(item.duration)) ? Math.round(Number(item.duration)) : null,
+                  cost: item.cost != null && !isNaN(Number(item.cost)) ? Number(item.cost) : null,
+                  currency: item.currency ? String(item.currency).toUpperCase().trim().slice(0, 3) : 'EUR',
+                  notes: item.notes ? String(item.notes).trim() : null,
+                  externalLink:
+                    item.ticketUrl ||
+                    item.reservationUrl ||
+                    item.externalLink ||
+                    null,
+                  order: Number.isFinite(Number(item.order)) ? Number(item.order) : itemIdx + 1,
+                  providerPlaceId: item.providerPlaceId || null,
+                  placeProvider:
+                    item.sourceType === 'PLACES' || item.providerPlaceId
+                      ? 'GOOGLE'
+                      : null,
+                  transitDistanceMeters:
+                    item.transitDistanceMeters != null && !isNaN(Number(item.transitDistanceMeters))
+                      ? Math.round(Number(item.transitDistanceMeters))
+                      : null,
+                  transitDurationMinutes:
+                    item.transitDurationMinutes != null && !isNaN(Number(item.transitDurationMinutes))
+                      ? Math.round(Number(item.transitDurationMinutes))
+                      : null,
+                  transitMode: transitModeMatch,
+                  ticketStatus: ticketStatusMatch,
+                },
+              });
+            }),
+          );
+        }
+
+        // Link GuestJourney to User and Trip and set status CLAIMED
+        await tx.guestJourney.update({
+          where: { id },
+          data: {
+            claimedUserId: userId,
+            createdTripId: trip.id,
+            status: GuestJourneyStatus.CLAIMED,
+          },
+        });
+
         return {
           journeyId: currentJourney.id,
-          tripId: currentJourney.createdTripId,
+          tripId: trip.id,
           status: GuestJourneyStatus.CLAIMED,
           nextAction: 'CHECKOUT',
         };
-      }
-
-      const destinations = Array.isArray(currentJourney.destinations)
-        ? (currentJourney.destinations as any[])
-        : [];
-      const primaryDestination = destinations[0]?.name || 'Destino';
-      const tripTitle =
-        destinations.length > 0
-          ? `Viagem para ${destinations.map((d: any) => d.name).join(' & ')}`
-          : 'Minha Viagem 2GO';
-
-      let coverImage: string | null = destinations[0]?.coverImage || null;
-      if (!coverImage && primaryDestination) {
-        const baseMatch = await tx.baseTrip.findFirst({
-          where: {
-            destination: { contains: primaryDestination, mode: 'insensitive' },
-            coverImage: { not: null },
-          },
-          select: { coverImage: true },
-        });
-        if (baseMatch?.coverImage) {
-          coverImage = baseMatch.coverImage;
-        }
-      }
-
-      const firstDest = destinations[0];
-      const lastDest = destinations[destinations.length - 1];
-
-      const startDateStr = firstDest?.arrivalDate;
-      const endDateStr = lastDest?.departureDate;
-      const startDate = startDateStr ? new Date(startDateStr) : null;
-      const endDate = endDateStr ? new Date(endDateStr) : null;
-
-      let arrivalDateTime: Date | null = null;
-      if (firstDest?.arrivalDate) {
-        arrivalDateTime = firstDest.arrivalTime
-          ? new Date(`${firstDest.arrivalDate}T${firstDest.arrivalTime}:00`)
-          : new Date(`${firstDest.arrivalDate}T00:00:00`);
-      }
-
-      let departureDateTime: Date | null = null;
-      if (lastDest?.departureDate) {
-        departureDateTime = lastDest.departureTime
-          ? new Date(`${lastDest.departureDate}T${lastDest.departureTime}:00`)
-          : new Date(`${lastDest.departureDate}T00:00:00`);
-      }
-
-      // Materialize Trip
-      const trip = await tx.trip.create({
-        data: {
-          userId,
-          title: tripTitle,
-          destination: primaryDestination,
-          coverImage,
-          startDate,
-          endDate,
-          arrivalDateTime,
-          departureDateTime,
-          allowedSwapsCount: 4,
-          usedSwapsCount: 0,
-          status: TripStatus.DRAFT,
-          premiumUnlockedAt: null,
-          preferences: {
-            travelers: currentJourney.travelers,
-            interests: currentJourney.interests,
-            activityHours: currentJourney.activityHours,
-            budgetLevel: currentJourney.budgetLevel,
-            travelStyle: currentJourney.travelStyle,
-            destinations, // Preservar lista completa multi-destino incluindo cidades intermediárias
-          },
-        },
-      });
-
-      // Materialize Days & Items
-      for (const [dayIdx, day] of generatedItinerary.days.entries()) {
-        const dayNumber = day.dayNumber || dayIdx + 1;
-        const dayDate = day.date ? new Date(day.date) : null;
-
-        const tripDay = await tx.tripDay.create({
-          data: {
-            tripId: trip.id,
-            dayNumber,
-            date: dayDate,
-            title: day.title || `Dia ${dayNumber}`,
-            description: day.description || null,
-          },
-        });
-
-        const items = Array.isArray(day.items) ? day.items : [];
-        for (const [itemIdx, item] of items.entries()) {
-          const categoryMatch =
-            Object.values(ItineraryCategory).find((c) => c === item.category) ||
-            ItineraryCategory.TOURIST_ATTRACTION;
-
-          await tx.itineraryItem.create({
-            data: {
-              tripDayId: tripDay.id,
-              title: item.title || 'Atividade',
-              description: item.description || null,
-              category: categoryMatch,
-              location: item.location || null,
-              googleMapsLink: item.googleMapsLink || null,
-              latitude: item.latitude != null ? Number(item.latitude) : null,
-              longitude:
-                item.longitude != null ? Number(item.longitude) : null,
-              timeLabel: item.timeLabel || item.period || null,
-              period: item.period || null,
-              duration: item.duration != null ? Number(item.duration) : null,
-              cost: item.cost != null ? Number(item.cost) : null,
-              currency: item.currency || 'EUR',
-              notes: item.notes || null,
-              externalLink:
-                item.ticketUrl ||
-                item.reservationUrl ||
-                item.externalLink ||
-                null,
-              order: item.order || itemIdx + 1,
-              providerPlaceId: item.providerPlaceId || null,
-              placeProvider:
-                item.sourceType === 'PLACES' || item.providerPlaceId
-                  ? 'GOOGLE'
-                  : null,
-              transitDistanceMeters:
-                item.transitDistanceMeters != null
-                  ? Number(item.transitDistanceMeters)
-                  : null,
-              transitDurationMinutes:
-                item.transitDurationMinutes != null
-                  ? Number(item.transitDurationMinutes)
-                  : null,
-              transitMode: item.transitMode || 'WALKING',
-              ticketStatus:
-                item.ticketStatus ||
-                (item.requiresTicket ? 'TICKET_REQUIRED' : 'UNKNOWN'),
-            },
-          });
-        }
-      }
-
-      // Link GuestJourney to User and Trip and set status CLAIMED
-      await tx.guestJourney.update({
-        where: { id },
-        data: {
-          claimedUserId: userId,
-          createdTripId: trip.id,
-          status: GuestJourneyStatus.CLAIMED,
-        },
-      });
-
-      return {
-        journeyId: currentJourney.id,
-        tripId: trip.id,
-        status: GuestJourneyStatus.CLAIMED,
-        nextAction: 'CHECKOUT',
-      };
-    });
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
+      },
+    );
   }
 
   private mapToResponse(journey: any): PlanningSessionResponseDto {
