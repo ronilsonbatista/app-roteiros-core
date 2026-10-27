@@ -4,6 +4,7 @@ import {
   IsString,
   MinLength,
   IsEnum,
+  IsOptional,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -29,4 +30,9 @@ export class CreateUserAdminDto {
   @IsEnum(Role)
   @IsNotEmpty()
   role: Role;
+
+  @ApiProperty({ example: '+5511999999999', required: false })
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }

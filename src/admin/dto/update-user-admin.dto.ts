@@ -17,4 +17,9 @@ export class UpdateUserAdminDto {
   @IsEnum(Role)
   @IsOptional()
   role?: Role;
+
+  @ApiProperty({ example: '+5511999999999', required: false })
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }

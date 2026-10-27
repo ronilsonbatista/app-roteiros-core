@@ -43,6 +43,7 @@ export class AdminService {
           id: true,
           email: true,
           fullName: true,
+          phone: true,
           role: true,
           emailConfirmed: true,
           blockedAt: true,
@@ -151,6 +152,7 @@ export class AdminService {
       data: {
         email: dto.email,
         fullName: dto.fullName,
+        phone: dto.phone,
         passwordHash,
         role: dto.role,
         emailConfirmed: true,
