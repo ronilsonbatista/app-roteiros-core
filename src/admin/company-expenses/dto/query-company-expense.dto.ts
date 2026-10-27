@@ -26,6 +26,17 @@ export class QueryCompanyExpenseDto {
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month deve estar no formato YYYY-MM' })
   month?: string;
 
+  @ApiPropertyOptional({ description: 'Ano de competência cheio (YYYY)', example: '2026' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}$/, { message: 'competenceYear deve estar no formato YYYY' })
+  competenceYear?: string;
+
+  @ApiPropertyOptional({ description: 'Múltiplos meses separados por vírgula (YYYY-MM,YYYY-MM)', example: '2026-09,2026-10' })
+  @IsOptional()
+  @IsString()
+  competenceMonths?: string;
+
   @ApiPropertyOptional({
     enum: CompanyExpenseCategory,
     description: 'Filtrar por categoria',
@@ -85,4 +96,15 @@ export class QueryCompanyExpenseSummaryDto {
   @IsString()
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month deve estar no formato YYYY-MM' })
   month?: string;
+
+  @ApiPropertyOptional({ description: 'Ano de competência cheio (YYYY)', example: '2026' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}$/, { message: 'competenceYear deve estar no formato YYYY' })
+  competenceYear?: string;
+
+  @ApiPropertyOptional({ description: 'Múltiplos meses separados por vírgula (YYYY-MM,YYYY-MM)', example: '2026-09,2026-10' })
+  @IsOptional()
+  @IsString()
+  competenceMonths?: string;
 }

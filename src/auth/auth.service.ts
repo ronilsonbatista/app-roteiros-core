@@ -102,14 +102,17 @@ export class AuthService {
   private async generateTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
 
+    const accessExpiresIn = process.env.JWT_EXPIRES_IN || '8h';
+    const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_SECRET,
-        expiresIn: '15m',
+        expiresIn: accessExpiresIn as any,
       }),
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_REFRESH_SECRET,
-        expiresIn: '7d',
+        expiresIn: refreshExpiresIn as any,
       }),
     ]);
 
@@ -120,7 +123,7 @@ export class AuthService {
       data: {
         userId,
         tokenHash,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 dias
       },
     });
 

@@ -121,6 +121,7 @@ export class AdminTripsService {
             id: true,
             email: true,
             fullName: true,
+            phone: true,
             photoUrl: true,
             blockedAt: true,
           },
@@ -161,9 +162,15 @@ export class AdminTripsService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
+    const { startDate, endDate, arrivalDateTime, departureDateTime, ...rest } = dto;
+
     return this.prisma.trip.create({
       data: {
-        ...dto,
+        ...rest,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+        arrivalDateTime: arrivalDateTime ? new Date(arrivalDateTime) : undefined,
+        departureDateTime: departureDateTime ? new Date(departureDateTime) : undefined,
         userId,
       },
     });
@@ -175,9 +182,25 @@ export class AdminTripsService {
       throw new NotFoundException('Viagem não encontrada');
     }
 
+    const { startDate, endDate, arrivalDateTime, departureDateTime, ...rest } = dto;
+    const updateData: any = { ...rest };
+
+    if (startDate !== undefined) {
+      updateData.startDate = startDate ? new Date(startDate) : null;
+    }
+    if (endDate !== undefined) {
+      updateData.endDate = endDate ? new Date(endDate) : null;
+    }
+    if (arrivalDateTime !== undefined) {
+      updateData.arrivalDateTime = arrivalDateTime ? new Date(arrivalDateTime) : null;
+    }
+    if (departureDateTime !== undefined) {
+      updateData.departureDateTime = departureDateTime ? new Date(departureDateTime) : null;
+    }
+
     return this.prisma.trip.update({
       where: { id: tripId },
-      data: dto,
+      data: updateData,
     });
   }
 

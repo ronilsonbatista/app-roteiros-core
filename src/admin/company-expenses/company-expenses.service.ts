@@ -94,7 +94,15 @@ export class CompanyExpensesService {
 
     const where: Prisma.CompanyExpenseWhereInput = {};
 
-    if (targetMonth) {
+    if (query.competenceYear) {
+      where.competenceMonth = { startsWith: `${query.competenceYear}-` };
+    } else if (query.competenceMonths) {
+      const monthList = query.competenceMonths
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean);
+      where.competenceMonth = { in: monthList };
+    } else if (targetMonth) {
       where.competenceMonth = targetMonth;
     }
 
@@ -148,22 +156,60 @@ export class CompanyExpensesService {
   }
 
   /**
-   * Obtém o resumo financeiro de despesas de um mês de competência
+   * Obtém o resumo financeiro de despesas de um período (mês, ano ou múltiplos meses)
+   * comparando despesas com faturamento real (bruto e líquido)
    */
   async getSummary(query: QueryCompanyExpenseSummaryDto) {
-    const targetMonth =
+    const expenseWhere: Prisma.CompanyExpenseWhereInput = { archivedAt: null };
+    let targetMonth =
       query.competenceMonth ||
       query.month ||
       this.deriveCompetenceMonth(new Date());
+    let periodLabel = targetMonth;
+    let purchasesWhere: any = { status: 'PAID' };
 
-    const previousMonth = this.getPreviousCompetenceMonth(targetMonth);
+    if (query.competenceYear) {
+      periodLabel = query.competenceYear;
+      targetMonth = query.competenceYear;
+      expenseWhere.competenceMonth = { startsWith: `${query.competenceYear}-` };
+      purchasesWhere.paidAt = {
+        gte: new Date(`${query.competenceYear}-01-01T00:00:00.000Z`),
+        lte: new Date(`${query.competenceYear}-12-31T23:59:59.999Z`),
+      };
+    } else if (query.competenceMonths) {
+      const monthList = query.competenceMonths
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean);
+      periodLabel = monthList.join(', ');
+      targetMonth = monthList[0] || targetMonth;
+      expenseWhere.competenceMonth = { in: monthList };
+      if (monthList.length > 0) {
+        const sorted = [...monthList].sort();
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        const [ly, lm] = last.split('-').map(Number);
+        purchasesWhere.paidAt = {
+          gte: new Date(`${first}-01T00:00:00.000Z`),
+          lt: new Date(Date.UTC(ly, lm, 1)),
+        };
+      }
+    } else {
+      expenseWhere.competenceMonth = targetMonth;
+      const [y, m] = targetMonth.split('-').map(Number);
+      purchasesWhere.paidAt = {
+        gte: new Date(Date.UTC(y, m - 1, 1)),
+        lt: new Date(Date.UTC(y, m, 1)),
+      };
+    }
 
-    // Despesas ativas do mês atual
-    const currentMonthExpenses = await this.prisma.companyExpense.findMany({
-      where: {
-        competenceMonth: targetMonth,
-        archivedAt: null,
-      },
+    const previousMonth = this.getPreviousCompetenceMonth(
+      targetMonth.includes('-') ? targetMonth : `${targetMonth}-01`,
+    );
+
+    // Despesas do período selecionado
+    const currentPeriodExpenses = await this.prisma.companyExpense.findMany({
+      where: expenseWhere,
       select: {
         id: true,
         amountCents: true,
@@ -171,11 +217,11 @@ export class CompanyExpensesService {
       },
     });
 
-    const totalCents = currentMonthExpenses.reduce(
+    const totalCents = currentPeriodExpenses.reduce(
       (sum, item) => sum + item.amountCents,
       0,
     );
-    const totalCount = currentMonthExpenses.length;
+    const totalCount = currentPeriodExpenses.length;
 
     // Agrupamento por categoria
     const categoryMap = new Map<
@@ -188,7 +234,7 @@ export class CompanyExpensesService {
       categoryMap.set(cat, { totalCents: 0, count: 0 });
     });
 
-    currentMonthExpenses.forEach((item) => {
+    currentPeriodExpenses.forEach((item) => {
       const existing = categoryMap.get(item.category) || {
         totalCents: 0,
         count: 0,
@@ -210,7 +256,7 @@ export class CompanyExpensesService {
       }),
     );
 
-    // Comparativo com mês anterior
+    // Comparativo com mês/período anterior
     const previousMonthExpenses = await this.prisma.companyExpense.findMany({
       where: {
         competenceMonth: previousMonth,
@@ -232,8 +278,45 @@ export class CompanyExpensesService {
         ? Number(((differenceCents / prevMonthTotalCents) * 100).toFixed(1))
         : null;
 
+    // Faturamento real do período a partir das compras aprovadas (Mercado Pago / PIX / Cartão)
+    let grossRevenueCents = 0;
+    let netRevenueCents = 0;
+    let gatewayFeesEstimatedCents = 0;
+    let purchasesCount = 0;
+
+    try {
+      const paidPurchases = await this.prisma.purchase.findMany({
+        where: purchasesWhere,
+        select: {
+          id: true,
+          amount: true,
+          finalAmount: true,
+          originalAmount: true,
+          discountAmount: true,
+        },
+      });
+
+      purchasesCount = paidPurchases.length;
+      grossRevenueCents = paidPurchases.reduce((sum, p) => {
+        const val = Number(p.finalAmount ?? p.amount ?? 0);
+        return sum + Math.round(val * 100);
+      }, 0);
+
+      // Taxa estimada de gateway de pagamento ~3.99%
+      gatewayFeesEstimatedCents = Math.round(grossRevenueCents * 0.0399);
+      netRevenueCents = Math.max(0, grossRevenueCents - gatewayFeesEstimatedCents);
+    } catch (revenueErr) {
+      // Fallback seguro caso haja erro ao agregar compras
+      grossRevenueCents = 0;
+      netRevenueCents = 0;
+      gatewayFeesEstimatedCents = 0;
+    }
+
+    const operationalBalanceCents = netRevenueCents - totalCents;
+
     return {
       competenceMonth: targetMonth,
+      periodLabel,
       totalCents,
       totalCount,
       byCategory,
@@ -242,6 +325,13 @@ export class CompanyExpensesService {
         totalCents: prevMonthTotalCents,
         differenceCents,
         percentageChange,
+      },
+      revenue: {
+        grossCents: grossRevenueCents,
+        netCents: netRevenueCents,
+        gatewayFeesEstimatedCents,
+        purchasesCount,
+        operationalBalanceCents,
       },
     };
   }
