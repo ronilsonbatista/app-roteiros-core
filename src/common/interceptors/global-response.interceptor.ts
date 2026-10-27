@@ -25,8 +25,8 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<
     const ctx = context.switchToHttp();
     const request = ctx.getRequest();
 
-    // Ignora a rota raiz e swagger se necessário para não quebrar UI e Heathcheck
-    if (request.url.startsWith('/api') || request.url.startsWith('/health')) {
+    // Ignora a rota raiz, swagger e version para manter compatibilidade pública e healthcheck
+    if (request.url.startsWith('/api') || request.url.startsWith('/health') || request.url.startsWith('/version')) {
       return next.handle();
     }
 
