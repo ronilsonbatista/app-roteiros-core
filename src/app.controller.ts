@@ -17,7 +17,7 @@ export class AppController {
     return {
       name: 'app-roteiros-core',
       version: '1.0.0',
-      commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || '686eee3',
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'unknown',
       environment: process.env.NODE_ENV || 'production',
       jwt: {
         accessExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
