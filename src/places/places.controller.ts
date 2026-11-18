@@ -6,12 +6,14 @@ import {
   Param,
   Body,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
   ApiQuery,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { PlacesService } from './places.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,6 +23,11 @@ import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { EnrichPlaceDto } from './dto/enrich-place.dto';
 import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import {
+  PlacesAutocompleteQueryDto,
+  PlacesAutocompleteResponseDto,
+} from './dto/places-autocomplete.dto';
 
 @ApiTags('Places - App')
 @Controller()
@@ -35,6 +42,28 @@ export class PlacesController {
   searchPlaces(@Query('query') query: string) {
     if (!query) return [];
     return this.placesService.searchPlaces(query);
+  }
+
+  // Público (guest + auth). Deve ficar antes de places/:providerPlaceId.
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @ApiTags('Places - App')
+  @Get('places/autocomplete')
+  @ApiOperation({
+    summary: 'Autocomplete de localidades (passo Onde)',
+    description:
+      'Público (auth opcional). Retorna cidades/regiões/países com iconUrl sempre preenchido. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP.',
+  })
+  @ApiResponse({ status: 200, type: PlacesAutocompleteResponseDto })
+  autocomplete(
+    @Query() query: PlacesAutocompleteQueryDto,
+    @Req() req: Request,
+  ) {
+    const origin =
+      process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    return this.placesService.autocomplete(
+      query.q,
+      `${origin.replace(/\/$/, '')}/static/place-icons`,
+    );
   }
 
   @ApiTags('Places - App')

@@ -22,6 +22,7 @@ import { BillingModule } from './billing/billing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health.module';
 import { PlanningModule } from './planning/planning.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -44,14 +45,22 @@ import { PlanningModule } from './planning/planning.module';
     UserTravelProfileModule,
     PlacesModule,
     MediaModule,
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads'),
-      serveRoot: '/uploads',
-    }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(process.cwd(), 'uploads'),
+        serveRoot: '/uploads',
+      },
+      {
+        // Ícones padrão do autocomplete de localidades (GET /places/autocomplete).
+        rootPath: join(process.cwd(), 'assets', 'place-icons'),
+        serveRoot: '/static/place-icons',
+      },
+    ),
     BillingModule,
     AnalyticsModule,
     HealthModule,
     PlanningModule,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [

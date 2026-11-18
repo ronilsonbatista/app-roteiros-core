@@ -32,3 +32,10 @@ export interface PlacesProvider {
   searchPlaces(query: string): Promise<PlaceSearchResult[]>;
   getPlaceDetails(providerPlaceId: string): Promise<PlaceDetails | null>;
 }
+
+export interface PlaceAutocompleteResult {
+  providerPlaceId: string;
+  name: string;
+  subtitle: string;
+  types: string[];
+}

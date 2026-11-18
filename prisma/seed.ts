@@ -1,8 +1,65 @@
-import { PrismaClient, Role } from '@prisma/client';
+import {
+  BaseTripStatus,
+  BaseTripVisibility,
+  PrismaClient,
+  Role,
+} from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
+
+// Imagens públicas (Wikimedia Commons, HTTPS). `file` = "<hash>/<arquivo codificado>".
+const HOME_DESTINATIONS = [
+  { slug: 'capadocia', name: 'Capadócia', country: 'Turquia', file: '8/89/Cappadocia_Balloon_Inflating_Wikimedia_Commons.JPG' },
+  { slug: 'rio-de-janeiro', name: 'Rio de Janeiro', country: 'Brasil', file: 'a/ae/Christ_on_Corcovado_mountain.JPG' },
+  { slug: 'nova-york', name: 'Nova York', country: 'Estados Unidos', file: '5/5f/Manhattan_from_Weehawken%2C_NJ.jpg' },
+  { slug: 'paris', name: 'Paris', country: 'França', file: 'b/b7/Paris_-_The_Eiffel_Tower_in_spring_-_2307.jpg' },
+  { slug: 'roma', name: 'Roma', country: 'Itália', file: 'd/d8/Colosseum_in_Rome-April_2007-1-_copie_2B.jpg' },
+  { slug: 'lisboa', name: 'Lisboa', country: 'Portugal', file: 'f/f6/View_from_Miradouro_de_Santa_Luzia%2C_Lisbon%2C_20250603_2016_9045.jpg' },
+  { slug: 'toquio', name: 'Tóquio', country: 'Japão', file: '3/35/Minato_City%2C_Tokyo%2C_Japan.jpg' },
+  { slug: 'santorini', name: 'Santorini', country: 'Grécia', file: '2/27/1000_Three_domes_of_Oia_in_Santorini_Photo_by_Giles_Laurent.jpg' },
+  { slug: 'machu-picchu', name: 'Machu Picchu', country: 'Peru', file: '6/62/80_-_Machu_Picchu_-_Juin_2009_-_edit.jpg' },
+  { slug: 'dubai', name: 'Dubai', country: 'Emirados Árabes Unidos', file: 'c/cc/Dubai_Skyline_mit_Burj_Khalifa_%2818241030269%29.jpg' },
+];
+
+function commonsThumb(file: string, width: number): string {
+  const name = file.split('/')[2];
+  return `https://upload.wikimedia.org/wikipedia/commons/thumb/${file}/${width}px-${name}`;
+}
+
+// Resolve o providerPlaceId via Google Places Text Search (mesmo provedor de
+// GET /places/search). Retorna null sem GOOGLE_MAPS_API_KEY ou sem resultado.
+async function resolveProviderPlaceId(d: {
+  name: string;
+  country: string;
+}): Promise<string | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.displayName',
+    },
+    body: JSON.stringify({
+      textQuery: `${d.name}, ${d.country}`,
+      languageCode: 'pt-BR',
+      pageSize: 1,
+    }),
+  });
+  if (!res.ok) {
+    console.warn(`⚠️ Places Text Search falhou para ${d.name}: HTTP ${res.status}`);
+    return null;
+  }
+  const body: any = await res.json();
+  const place = body.places?.[0];
+  if (place?.id) {
+    console.log(`ℹ️ ${d.name} -> ${place.id} (${place.displayName?.text ?? '?'})`);
+  }
+  return place?.id ?? null;
+}
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -66,6 +123,47 @@ async function main() {
     } else {
       console.log(
         '✅ Produto ITINERARY_FULL_ACCESS já existe. Ignorando seed de produto.',
+      );
+    }
+  }
+
+  // Seed Home destinations (catálogo BaseTrip). Idempotente por slug.
+  if (process.env.SEED_HOME_DESTINATIONS !== 'false') {
+    const missingPlaceIds: string[] = [];
+    for (const [index, d] of HOME_DESTINATIONS.entries()) {
+      const existing = await prisma.baseTrip.findUnique({
+        where: { slug: d.slug },
+        select: { providerPlaceId: true },
+      });
+      const providerPlaceId =
+        existing?.providerPlaceId ?? (await resolveProviderPlaceId(d));
+      if (!providerPlaceId) missingPlaceIds.push(d.slug);
+
+      const data = {
+        title: `Destaque: ${d.name}`,
+        destination: d.name,
+        country: d.country,
+        numberOfDays: 1,
+        tags: ['home'],
+        coverImage: commonsThumb(d.file, 1920),
+        cardImage: commonsThumb(d.file, 960),
+        homeSortOrder: index,
+        ...(providerPlaceId ? { providerPlaceId } : {}),
+        status: BaseTripStatus.PUBLISHED,
+        visibility: BaseTripVisibility.PUBLIC,
+      };
+      await prisma.baseTrip.upsert({
+        where: { slug: d.slug },
+        create: { slug: d.slug, ...data },
+        update: data,
+      });
+    }
+    console.log(
+      `✅ ${HOME_DESTINATIONS.length} destinos da Home semeados/atualizados.`,
+    );
+    if (missingPlaceIds.length > 0) {
+      console.warn(
+        `⚠️ Sem providerPlaceId (não aparecem em GET /home/destinations): ${missingPlaceIds.join(', ')}. Defina GOOGLE_MAPS_API_KEY e rode o seed novamente.`,
       );
     }
   }
