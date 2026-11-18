@@ -7,6 +7,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GooglePlacesProvider } from './providers/google-places.provider';
 import { isTripLocked } from '../trips/trips.util';
 
+export type PlaceIconKind = 'city' | 'region' | 'country' | 'place';
+
+export function placeIconKind(types: string[] = []): PlaceIconKind {
+  if (types.includes('country')) return 'country';
+  if (types.includes('locality') || types.includes('sublocality'))
+    return 'city';
+  if (types.some((t) => t.startsWith('administrative_area_level_')))
+    return 'region';
+  return 'place';
+}
+
 @Injectable()
 export class PlacesService {
   constructor(
@@ -16,6 +27,42 @@ export class PlacesService {
 
   async searchPlaces(query: string) {
     return this.placesProvider.searchPlaces(query);
+  }
+
+  async autocomplete(rawQuery: string, iconBaseUrl: string) {
+    const q = (rawQuery ?? '').trim();
+    if (q.length < 2) return { items: [] };
+
+    const predictions = await this.placesProvider.autocompletePlaces(q);
+    if (predictions.length === 0) return { items: [] };
+
+    // Destinos curados da Home casam pelo mesmo providerPlaceId.
+    const curated = await this.prisma.baseTrip.findMany({
+      where: {
+        providerPlaceId: { in: predictions.map((p) => p.providerPlaceId) },
+        status: 'PUBLISHED',
+        visibility: 'PUBLIC',
+        homeSortOrder: { not: null },
+      },
+      select: { providerPlaceId: true, cardImage: true, coverImage: true },
+    });
+    const curatedImage = new Map<string, string>();
+    for (const c of curated) {
+      const img = c.cardImage ?? c.coverImage;
+      if (c.providerPlaceId && img) curatedImage.set(c.providerPlaceId, img);
+    }
+
+    const base = iconBaseUrl.replace(/\/$/, '');
+    return {
+      items: predictions.map((p) => ({
+        providerPlaceId: p.providerPlaceId,
+        name: p.name,
+        subtitle: p.subtitle,
+        iconUrl:
+          curatedImage.get(p.providerPlaceId) ??
+          `${base}/${placeIconKind(p.types)}.svg`,
+      })),
+    };
   }
 
   async getPlaceDetails(providerPlaceId: string) {

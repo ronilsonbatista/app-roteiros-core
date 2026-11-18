@@ -3,6 +3,7 @@ import {
   PlacesProvider,
   PlaceSearchResult,
   PlaceDetails,
+  PlaceAutocompleteResult,
 } from './places-provider.interface';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -59,6 +60,61 @@ export class GooglePlacesProvider implements PlacesProvider {
       }));
     } catch (error) {
       this.logger.error('Failed to search Google Places', error);
+      throw new HttpException(
+        'Falha ao buscar lugares no provedor externo',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
+  async autocompletePlaces(input: string): Promise<PlaceAutocompleteResult[]> {
+    if (!this.apiKey) {
+      this.logger.warn(
+        'Google Maps API Key is not configured. Returning empty list.',
+      );
+      return [];
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}:autocomplete`,
+          {
+            input,
+            languageCode: 'pt-BR',
+            includedPrimaryTypes: [
+              'locality',
+              'administrative_area_level_1',
+              'administrative_area_level_2',
+              'country',
+            ],
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': this.apiKey,
+              'X-Goog-FieldMask':
+                'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.types',
+            },
+          },
+        ),
+      );
+
+      const suggestions: any[] = response.data.suggestions || [];
+
+      return suggestions
+        .map((s) => s.placePrediction)
+        .filter((p) => p?.placeId)
+        .map((p) => ({
+          providerPlaceId: p.placeId,
+          name: p.structuredFormat?.mainText?.text || p.text?.text || '',
+          subtitle:
+            p.structuredFormat?.secondaryText?.text || p.text?.text || '',
+          types: p.types || [],
+        }));
+    } catch {
+      // Não logar o erro bruto: pode conter a URL/headers com a chave.
+      this.logger.error('Failed to autocomplete Google Places');
       throw new HttpException(
         'Falha ao buscar lugares no provedor externo',
         HttpStatus.BAD_GATEWAY,

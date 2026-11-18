@@ -9,20 +9,34 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UsersService } from './users.service';
 
 @ApiTags('Users - App')
 @ApiBearerAuth()
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
   @Get('me')
   @ApiOperation({ summary: 'Obter perfil do usuário autenticado' })
-  @ApiResponse({ status: 200, description: 'Perfil retornado com sucesso.' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Perfil retornado com sucesso. `user` inclui id, displayName (nome completo) e photoUrl (null quando sem foto), além dos campos anteriores (userId, email, role).',
+  })
   @ApiResponse({ status: 401, description: 'Não autorizado.' })
-  getProfile(@CurrentUser() user: any) {
+  async getProfile(@CurrentUser() user: any) {
+    const dbUser = await this.usersService.findById(user.userId);
+
     return {
       message: 'Acesso liberado!',
-      user,
+      user: {
+        ...user,
+        id: user.userId,
+        displayName: dbUser?.fullName ?? null,
+        photoUrl: dbUser?.photoUrl ?? null,
+      },
     };
   }
 

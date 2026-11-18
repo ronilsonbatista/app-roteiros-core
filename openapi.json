@@ -21,7 +21,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Perfil retornado com sucesso."
+            "description": "Perfil retornado com sucesso. `user` inclui id, displayName (nome completo) e photoUrl (null quando sem foto), além dos campos anteriores (userId, email, role)."
           },
           "401": {
             "description": "Não autorizado."
@@ -2642,6 +2642,41 @@
         ]
       }
     },
+    "/places/autocomplete": {
+      "get": {
+        "description": "Público (auth opcional). Retorna cidades/regiões/países com iconUrl sempre preenchido. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP.",
+        "operationId": "PlacesController_autocomplete",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Texto digitado (mín. 2 caracteres úteis; máx. 100).",
+            "schema": {
+              "example": "Roma",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacesAutocompleteResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Autocomplete de localidades (passo Onde)",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
     "/places/{providerPlaceId}": {
       "get": {
         "operationId": "PlacesController_getPlaceDetails",
@@ -3035,6 +3070,118 @@
         "tags": [
           "Media - App",
           "Media - App"
+        ]
+      }
+    },
+    "/media/file/{folder}/{filename}": {
+      "get": {
+        "operationId": "MediaPublicController_getMediaByFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Obter arquivo de mídia por pasta (Público)",
+        "tags": [
+          "Media - Public"
+        ]
+      }
+    },
+    "/media/file/{filename}": {
+      "get": {
+        "operationId": "MediaPublicController_getMediaRoot",
+        "parameters": [
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Obter arquivo de mídia na raiz (Público)",
+        "tags": [
+          "Media - Public"
+        ]
+      }
+    },
+    "/uploads/{folder}/{filename}": {
+      "get": {
+        "operationId": "MediaPublicController_getUploadsByFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Compatibilidade de uploads por pasta (Público)",
+        "tags": [
+          "Media - Public"
+        ]
+      }
+    },
+    "/uploads/{filename}": {
+      "get": {
+        "operationId": "MediaPublicController_getUploadsRoot",
+        "parameters": [
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Compatibilidade de uploads na raiz (Público)",
+        "tags": [
+          "Media - Public"
         ]
       }
     },
@@ -4251,6 +4398,42 @@
         "summary": "Reivindicar jornada anônima e materializar Trip para o usuário autenticado",
         "tags": [
           "Planning Sessions (Anonymous)"
+        ]
+      }
+    },
+    "/home/destinations": {
+      "get": {
+        "description": "Público (auth opcional). Retorna apenas destinos PUBLISHED/PUBLIC ordenados por sortOrder. Resposta envelopada pelo padrão do Core ({ success, data, timestamp }).",
+        "operationId": "HomeController_listDestinations",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Máximo de destinos retornados (1-50).",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "example": 12,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeDestinationsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Destinos ativos da Home (carrossel / Destinos em alta)",
+        "tags": [
+          "Home - Public"
         ]
       }
     }
@@ -5574,6 +5757,57 @@
           }
         }
       },
+      "PlaceAutocompleteItemDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ…",
+            "description": "Mesmo ID de GET /places/search e de GET /home/destinations (providerPlaceId)."
+          },
+          "name": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "subtitle": {
+            "type": "string",
+            "example": "Lácio, Itália",
+            "description": "Linha secundária."
+          },
+          "iconUrl": {
+            "type": "string",
+            "example": "https://api.example/static/place-icons/city.svg",
+            "description": "Thumb/ícone sempre preenchido: imagem do destino curado da Home quando o ID casa; senão ícone padrão do produto por tipo (city, region, country, place)."
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Não retornado pelo autocomplete; use GET /places/:providerPlaceId para coordenadas."
+          },
+          "longitude": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "providerPlaceId",
+          "name",
+          "subtitle",
+          "iconUrl"
+        ]
+      },
+      "PlacesAutocompleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceAutocompleteItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "EnrichPlaceDto": {
         "type": "object",
         "properties": {
@@ -6532,6 +6766,73 @@
           "tripId",
           "status",
           "nextAction"
+        ]
+      },
+      "HomeDestinationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "capadocia",
+            "description": "Slug estável."
+          },
+          "name": {
+            "type": "string",
+            "example": "Capadócia",
+            "description": "Nome em PT-BR."
+          },
+          "country": {
+            "type": "string",
+            "example": "Turquia",
+            "nullable": true
+          },
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ…",
+            "description": "ID estável do provedor de Places (o mesmo retornado por GET /places/search). Sempre presente: destinos sem ele não são listados."
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://cdn.example/destinations/capadocia/hero.jpg",
+            "description": "Hero full-bleed (HTTPS)."
+          },
+          "cardImageUrl": {
+            "type": "string",
+            "example": "https://cdn.example/destinations/capadocia/card.jpg",
+            "description": "Opcional; ausente => o app usa imageUrl."
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 0,
+            "description": "Ordem ascendente."
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "country",
+          "providerPlaceId",
+          "imageUrl",
+          "sortOrder",
+          "active"
+        ]
+      },
+      "HomeDestinationsResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeDestinationDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       }
     }

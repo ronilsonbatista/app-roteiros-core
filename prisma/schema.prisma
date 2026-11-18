@@ -217,6 +217,13 @@ model BaseTrip {
 
   coverImage        String?
 
+  // Home (app): slug estável, imagem de card opcional e ordem de exibição.
+  // homeSortOrder null = fora da Home.
+  slug              String?             @unique
+  cardImage         String?
+  homeSortOrder     Int?
+  providerPlaceId   String?
+
   bestTime          String?
   climate           String?
   averageBudget     Float?
@@ -240,6 +247,7 @@ model BaseTrip {
   @@index([destination])
   @@index([status])
   @@index([visibility])
+  @@index([homeSortOrder])
 
   @@map("base_trips")
 }
