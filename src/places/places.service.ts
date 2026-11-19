@@ -29,6 +29,70 @@ export class PlacesService {
     return this.placesProvider.searchPlaces(query);
   }
 
+  async searchHotels(
+    rawQuery: string,
+    bias?: { lat?: number; lng?: number; radiusMeters?: number },
+  ) {
+    const q = (rawQuery ?? '').trim();
+    if (q.length < 2) return { items: [] };
+
+    const locationBias =
+      bias?.lat != null && bias?.lng != null
+        ? {
+            latitude: bias.lat,
+            longitude: bias.lng,
+            radiusMeters: bias.radiusMeters,
+          }
+        : undefined;
+
+    const places = await this.placesProvider.searchPlaces(q, {
+      includedType: 'lodging',
+      locationBias,
+    });
+
+    return {
+      items: places.map((p) => ({
+        providerPlaceId: p.providerPlaceId,
+        name: p.name,
+        formattedAddress: p.formattedAddress ?? '',
+        latitude: p.latitude,
+        longitude: p.longitude,
+        rating: p.rating,
+        types: p.types ?? [],
+      })),
+    };
+  }
+
+  async autocompleteHotels(
+    rawQuery: string,
+    bias?: { lat?: number; lng?: number; radiusMeters?: number },
+  ) {
+    const q = (rawQuery ?? '').trim();
+    if (q.length < 2) return { items: [] };
+
+    const locationBias =
+      bias?.lat != null && bias?.lng != null
+        ? {
+            latitude: bias.lat,
+            longitude: bias.lng,
+            radiusMeters: bias.radiusMeters,
+          }
+        : undefined;
+
+    const predictions = await this.placesProvider.autocompleteHotels(
+      q,
+      locationBias,
+    );
+
+    return {
+      items: predictions.map((p) => ({
+        providerPlaceId: p.providerPlaceId,
+        name: p.name,
+        subtitle: p.subtitle,
+      })),
+    };
+  }
+
   async autocomplete(rawQuery: string, iconBaseUrl: string) {
     const q = (rawQuery ?? '').trim();
     if (q.length < 2) return { items: [] };
