@@ -43,6 +43,25 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
           rating: 4.8,
           userRatingsTotal: 345000,
           googleMapsUri: 'https://maps.google.com/?cid=123',
+          priceLevel: 'PRICE_LEVEL_MODERATE',
+          priceLevelDisplay: '$$',
+          openingHoursText: '09:00-19:00',
+          editorialSummary: 'O maior anfiteatro do mundo.',
+          photos: [
+            {
+              name: 'places/x/photos/y',
+              photoUri: 'https://lh3.googleusercontent.com/photo',
+            },
+          ],
+          reviews: [
+            {
+              rating: 4,
+              text: 'Experiência incrível',
+              authorName: 'Rachel Mendonça',
+            },
+          ],
+          latitude: 41.8902,
+          longitude: 12.4922,
         });
       }),
       searchPlaces: jest.fn().mockResolvedValue([
@@ -89,6 +108,16 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
           name: 'Coliseu Romano',
           rating: 4.8,
           formattedAddress: expect.any(String),
+          priceLevelDisplay: '$$',
+          openingHoursText: '09:00-19:00',
+          photos: expect.arrayContaining([
+            expect.objectContaining({
+              photoUri: 'https://lh3.googleusercontent.com/photo',
+            }),
+          ]),
+          reviews: expect.arrayContaining([
+            expect.objectContaining({ authorName: 'Rachel Mendonça' }),
+          ]),
         }),
       );
       expect(result.ticketStatus).toBe(TicketStatus.TICKET_REQUIRED);

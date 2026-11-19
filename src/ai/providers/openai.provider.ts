@@ -684,10 +684,14 @@ REGRAS DE CONTEÚDO PARA CADA ATIVIDADE:
 - duration: Duração em minutos inteiros (ex: 45, 60, 90, 120).
 - period: "Manhã", "Almoço", "Tarde", "Pausa", "Jantar" ou "Noite".
 - location: Endereço completo, bairro ou referência geográfica verificável no destino.
-- description: Detalhamento prático do que fazer e experimentar + justificativa personalizada para o viajante.
+- description: 3–6 frases em pt-BR, estilo guia 2GO, prontas para o bloco editorial da tela Detalhes (contexto do lugar + o que experimentar + vibe). NÃO repetir endereço, horário, faixa de preço nem rating.
 - cost: Custo estimado por pessoa em moeda local (número decimal, 0 para gratuitas).
 - currency: Código ISO da moeda local oficial do destino (ex: BRL no Brasil, USD nos EUA, EUR na Europa, JPY no Japão, etc.). NUNCA assuma EUR ou BRL se o destino for de outro país!
-- notes: Texto estruturado com Deslocamento, Reserva/Ingresso, Dica útil e Alternativa.
+- notes: Texto estruturado com Deslocamento, Reserva/Ingresso, Dica útil e Alternativa (operacional — não substitui a description da tela Detalhes).
+
+FATOS VERIFICADOS (MAPS / BIBLIOTECA — NÃO INVENTAR):
+- Nunca invente rating, horário de funcionamento, priceLevel ($$), fotos, avaliações de usuários ou Place IDs.
+- Esses campos são anexados depois via providerPlaceId / Google Places ou vêm da biblioteca 2GO.
 
 IMPORTANTE:
 - Não crie horários sobrepostos.
@@ -709,7 +713,7 @@ IMPORTANTE:
           "duration": 60,
           "period": "Manhã",
           "location": "Rua / Bairro / Cidade",
-          "description": "Descrição detalhada do que fazer e justificativa personalizada para o viajante.",
+          "description": "3–6 frases editoriais em pt-BR para a tela Detalhes (sem rating/horário/preço/reviews inventados).",
           "cost": 10.0,
           "currency": "MOEDA_LOCAL_ISO",
           "notes": "Deslocamento: caminhada curta do hotel. Reserva: Acesso livre.",

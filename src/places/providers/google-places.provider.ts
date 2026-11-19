@@ -5,15 +5,41 @@ import {
   PlaceDetails,
   PlaceAutocompleteResult,
   PlacesLocationBias,
+  PlacePhoto,
+  PlaceReview,
+  priceLevelToDisplay,
 } from './places-provider.interface';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+
+const PLACE_DETAILS_FIELD_MASK = [
+  'id',
+  'displayName',
+  'formattedAddress',
+  'location',
+  'rating',
+  'userRatingCount',
+  'internationalPhoneNumber',
+  'websiteUri',
+  'googleMapsUri',
+  'priceLevel',
+  'types',
+  'primaryType',
+  'primaryTypeDisplayName',
+  'regularOpeningHours',
+  'currentOpeningHours',
+  'editorialSummary',
+  'photos',
+  'reviews',
+].join(',');
 
 @Injectable()
 export class GooglePlacesProvider implements PlacesProvider {
   private readonly logger = new Logger(GooglePlacesProvider.name);
   private readonly apiKey: string;
   private readonly baseUrl = 'https://places.googleapis.com/v1/places';
+  private readonly maxDetailPhotos = 5;
+  private readonly maxDetailReviews = 5;
 
   constructor(private readonly httpService: HttpService) {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
@@ -73,6 +99,7 @@ export class GooglePlacesProvider implements PlacesProvider {
         websiteUri: place.websiteUri,
         types: place.types || [],
         priceLevel: place.priceLevel,
+        priceLevelDisplay: priceLevelToDisplay(place.priceLevel),
       }));
     } catch (error) {
       this.logger.error('Failed to search Google Places', error);
@@ -180,14 +207,18 @@ export class GooglePlacesProvider implements PlacesProvider {
         this.httpService.get(`${this.baseUrl}/${providerPlaceId}`, {
           headers: {
             'X-Goog-Api-Key': this.apiKey,
-            'X-Goog-FieldMask':
-              'displayName,formattedAddress,location,rating,internationalPhoneNumber,websiteUri,googleMapsUri,priceLevel,types',
+            'X-Goog-FieldMask': PLACE_DETAILS_FIELD_MASK,
           },
+          params: { languageCode: 'pt-BR' },
         }),
       );
 
       const place = response.data;
       if (!place) return null;
+
+      const photos = await this.resolvePhotos(
+        (place.photos || []).slice(0, this.maxDetailPhotos),
+      );
 
       return {
         providerPlaceId: place.id || providerPlaceId,
@@ -201,7 +232,23 @@ export class GooglePlacesProvider implements PlacesProvider {
         websiteUri: place.websiteUri,
         googleMapsUri: place.googleMapsUri,
         priceLevel: place.priceLevel,
+        priceLevelDisplay: priceLevelToDisplay(place.priceLevel),
         types: place.types || [],
+        primaryType: place.primaryType,
+        primaryTypeDisplayName:
+          place.primaryTypeDisplayName?.text || place.primaryTypeDisplayName,
+        openingHoursText: this.formatOpeningHoursText(
+          place.currentOpeningHours || place.regularOpeningHours,
+        ),
+        weekdayDescriptions:
+          place.regularOpeningHours?.weekdayDescriptions ||
+          place.currentOpeningHours?.weekdayDescriptions,
+        editorialSummary:
+          place.editorialSummary?.text || place.editorialSummary?.overview,
+        photos,
+        reviews: this.mapReviews(
+          (place.reviews || []).slice(0, this.maxDetailReviews),
+        ),
       };
     } catch (error: any) {
       this.logger.error(
@@ -214,5 +261,87 @@ export class GooglePlacesProvider implements PlacesProvider {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  private formatOpeningHoursText(hours?: {
+    weekdayDescriptions?: string[];
+    periods?: Array<{
+      open?: { hour?: number; minute?: number; day?: number };
+      close?: { hour?: number; minute?: number; day?: number };
+    }>;
+  }): string | undefined {
+    if (!hours) return undefined;
+
+    const today = hours.periods?.[0];
+    if (today?.open && today?.close) {
+      const fmt = (h?: number, m?: number) =>
+        `${String(h ?? 0).padStart(2, '0')}:${String(m ?? 0).padStart(2, '0')}`;
+      return `${fmt(today.open.hour, today.open.minute)}-${fmt(today.close.hour, today.close.minute)}`;
+    }
+
+    const descriptions = hours.weekdayDescriptions;
+    if (descriptions?.length) {
+      // Prefer a compact single-line summary when all days share the same hours.
+      const stripped = descriptions.map((d) =>
+        d.replace(/^[^:]+:\s*/u, '').trim(),
+      );
+      if (stripped.every((s) => s === stripped[0])) {
+        return stripped[0].replace(/\s+/g, '').replace('–', '-').replace('—', '-');
+      }
+      return descriptions.join(' · ');
+    }
+
+    return undefined;
+  }
+
+  private mapReviews(raw: any[]): PlaceReview[] {
+    return raw.map((r) => ({
+      rating: r.rating,
+      text: r.text?.text || r.originalText?.text,
+      relativePublishTimeDescription: r.relativePublishTimeDescription,
+      authorName: r.authorAttribution?.displayName,
+      authorPhotoUri: r.authorAttribution?.photoUri,
+      authorUri: r.authorAttribution?.uri,
+      publishTime: r.publishTime,
+    }));
+  }
+
+  private async resolvePhotos(rawPhotos: any[]): Promise<PlacePhoto[]> {
+    const mapped: PlacePhoto[] = [];
+    for (const photo of rawPhotos) {
+      if (!photo?.name) continue;
+      const base: PlacePhoto = {
+        name: photo.name,
+        widthPx: photo.widthPx,
+        heightPx: photo.heightPx,
+        authorAttributions: (photo.authorAttributions || []).map((a: any) => ({
+          displayName: a.displayName,
+          uri: a.uri,
+          photoUri: a.photoUri,
+        })),
+      };
+      try {
+        const media = await firstValueFrom(
+          this.httpService.get(
+            `https://places.googleapis.com/v1/${photo.name}/media`,
+            {
+              headers: { 'X-Goog-Api-Key': this.apiKey },
+              params: {
+                maxHeightPx: 1200,
+                skipHttpRedirect: true,
+              },
+            },
+          ),
+        );
+        if (media.data?.photoUri) {
+          base.photoUri = media.data.photoUri;
+        }
+      } catch {
+        // Keep name so a future proxy can resolve; do not fail the whole details call.
+        this.logger.warn(`Failed to resolve place photo media for ${photo.name}`);
+      }
+      mapped.push(base);
+    }
+    return mapped;
   }
 }
