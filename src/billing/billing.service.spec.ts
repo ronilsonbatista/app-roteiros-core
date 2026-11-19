@@ -240,6 +240,75 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
       expect(quote.pricing.finalAmount).toBe(90);
       expect(quote.coupon?.code).toBe('WALL10');
       expect(quote.coupon?.applied).toBe(true);
+      expect(quote.supportedPaymentMethods).toContain('PIX');
+      expect(quote.supportedPaymentMethods).toContain('CARD');
+      expect(quote.paymentMethodAvailability.map((m) => m.method)).toEqual(
+        expect.arrayContaining(['PIX', 'CARD', 'APPLE_PAY', 'GOOGLE_PAY']),
+      );
+    });
+  });
+
+  describe('Carrinho coupon validate / card intent / expire / wallets', () => {
+    it('should soft-validate a valid coupon without throwing', async () => {
+      const res = await service.validateCouponForTrip('user-1', mockTrip.id, {
+        couponCode: 'wall10',
+      });
+      expect(res.valid).toBe(true);
+      expect(res.code).toBe('WALL10');
+      expect(res.pricing?.finalAmount).toBe(90);
+    });
+
+    it('should soft-validate an invalid coupon as valid=false', async () => {
+      const res = await service.validateCouponForTrip('user-1', mockTrip.id, {
+        couponCode: 'NOPE',
+      });
+      expect(res.valid).toBe(false);
+      expect(res.reason).toMatch(/inválido/i);
+      expect(res.pricing?.finalAmount).toBe(100);
+    });
+
+    it('should return a card intent stub with backend price', async () => {
+      const intent = await service.createCardIntent('user-1', {
+        tripId: mockTrip.id,
+        couponCode: 'WALL20',
+      });
+      expect(intent.intentId).toMatch(/^card_intent_/);
+      expect(intent.amount).toBe(80);
+      expect(intent.currency).toBe('BRL');
+      expect(intent.status).toBe('READY');
+      expect(intent.clientSecret).toBeDefined();
+    });
+
+    it('should reject Apple Pay checkout while wallets are disabled', async () => {
+      delete process.env.WALLET_PAYMENTS_ENABLED;
+      await expect(
+        service.processCheckoutPurchase('user-1', {
+          tripId: mockTrip.id,
+          paymentMethod: PaymentMethodType.APPLE_PAY,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should expire a PENDING purchase', async () => {
+      jest.spyOn(prisma.purchase, 'findUnique').mockResolvedValue({
+        ...mockPurchase,
+        status: PurchaseStatus.PENDING,
+        providerPaymentId: 'mock_pay_abc',
+      } as any);
+      jest.spyOn(prisma.purchase, 'update').mockResolvedValue({
+        ...mockPurchase,
+        status: PurchaseStatus.EXPIRED,
+        expiredAt: new Date(),
+      } as any);
+
+      const res = await service.expirePurchase('user-1', mockPurchase.id);
+      expect(res.status).toBe(PurchaseStatus.EXPIRED);
+      expect(prisma.purchase.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockPurchase.id },
+          data: expect.objectContaining({ status: PurchaseStatus.EXPIRED }),
+        }),
+      );
     });
   });
 

@@ -31,7 +31,22 @@ export interface PaymentResult {
   error?: string;
 }
 
+export interface CardIntentResult {
+  /** Client-side token / preference id for card SDK (stub when no real provider). */
+  intentId: string;
+  status: 'REQUIRES_CONFIRMATION' | 'READY' | 'UNSUPPORTED';
+  publicKey?: string;
+  amount: number;
+  currency: string;
+  /** Opaque payload for Brick / Payment Sheet when wired. */
+  clientSecret?: string;
+  expiresAt?: string;
+  message?: string;
+}
+
 export interface PaymentProvider {
   processPayment(input: ProcessPaymentInput): Promise<PaymentResult>;
   getPaymentStatus?(providerPaymentId: string): Promise<PaymentResult>;
+  /** Cancel / expire a pending charge (PIX TTL or user abandon). */
+  expirePayment?(providerPaymentId: string): Promise<PaymentResult>;
 }

@@ -20,6 +20,11 @@ import {
   CheckoutSummaryDto,
   CheckoutQuoteResponseDto,
   CheckoutResponseDto,
+  ValidateCouponDto,
+  ValidateCouponResponseDto,
+  CreateCardIntentDto,
+  CardIntentResponseDto,
+  ExpirePurchaseResponseDto,
 } from './dto/billing.dto';
 
 @ApiTags('Billing - App')
@@ -54,7 +59,7 @@ export class BillingController {
   @Get('trips/:tripId/checkout-summary')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Obter resumo de checkout para uma viagem' })
+  @ApiOperation({ summary: 'Obter resumo de checkout para uma viagem (preço do backend)' })
   getCheckoutSummary(
     @CurrentUser() user: any,
     @Param('tripId') tripId: string,
@@ -74,10 +79,27 @@ export class BillingController {
     return this.billingService.getCheckoutQuote(user.userId, tripId, dto);
   }
 
+  @Post('trips/:tripId/coupons/validate')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validar cupom no Carrinho (soft: valid=false sem 400; preço sempre do backend)',
+  })
+  validateCoupon(
+    @CurrentUser() user: any,
+    @Param('tripId') tripId: string,
+    @Body() dto: ValidateCouponDto,
+  ): Promise<ValidateCouponResponseDto> {
+    return this.billingService.validateCouponForTrip(user.userId, tripId, dto);
+  }
+
   @Post('purchases/checkout')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Criar cobrança real e iniciar pagamento (PIX ou CARTÃO)' })
+  @ApiOperation({
+    summary: 'Criar cobrança e iniciar pagamento (PIX ou CARD; wallets rejeitados até config)',
+  })
   @ApiHeader({ name: 'idempotency-key', required: false })
   processCheckout(
     @CurrentUser() user: any,
@@ -90,6 +112,35 @@ export class BillingController {
       idempotencyKey,
       user.email,
     );
+  }
+
+  @Post('purchases/card-intent')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Stub de intent de cartão (sem cobrar). Confirme depois com POST /purchases/checkout + cardToken',
+  })
+  createCardIntent(
+    @CurrentUser() user: any,
+    @Body() dto: CreateCardIntentDto,
+  ): Promise<CardIntentResponseDto> {
+    return this.billingService.createCardIntent(user.userId, dto);
+  }
+
+  @Post('purchases/:id/expire')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Expirar cobrança PENDING (Pix abandon / TTL) e liberar novo checkout',
+  })
+  expirePurchase(
+    @CurrentUser() user: any,
+    @Param('id') purchaseId: string,
+  ): Promise<ExpirePurchaseResponseDto> {
+    return this.billingService.expirePurchase(user.userId, purchaseId);
   }
 
   @Post('webhooks/mercadopago')
