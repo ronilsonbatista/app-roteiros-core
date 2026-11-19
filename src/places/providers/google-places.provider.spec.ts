@@ -54,6 +54,73 @@ describe('GooglePlacesProvider.autocompletePlaces', () => {
     expect(body.includedPrimaryTypes).toContain('locality');
   });
 
+  it('autocompleteHotels restringe a lodging e aplica locationBias', async () => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+    http.post.mockReturnValue(
+      of({
+        data: {
+          suggestions: [
+            {
+              placePrediction: {
+                placeId: 'ChIJ-hotel',
+                structuredFormat: {
+                  mainText: { text: 'Hotel Diana Roof Garden' },
+                  secondaryText: { text: 'Roma, Itália' },
+                },
+                types: ['lodging', 'hotel'],
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const res = await make().autocompleteHotels('Ho', {
+      latitude: 41.9,
+      longitude: 12.5,
+      radiusMeters: 25000,
+    });
+
+    expect(res[0].name).toBe('Hotel Diana Roof Garden');
+    const [, body] = http.post.mock.calls[0];
+    expect(body.includedPrimaryTypes).toEqual(['lodging']);
+    expect(body.locationBias).toEqual({
+      circle: {
+        center: { latitude: 41.9, longitude: 12.5 },
+        radius: 25000,
+      },
+    });
+  });
+
+  it('searchPlaces aceita includedType lodging', async () => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+    http.post.mockReturnValue(
+      of({
+        data: {
+          places: [
+            {
+              id: 'ChIJ-1',
+              displayName: { text: 'Gioberti Hotel' },
+              formattedAddress: 'Via Gioberti, Roma',
+              location: { latitude: 41.9, longitude: 12.5 },
+              types: ['lodging'],
+            },
+          ],
+        },
+      }),
+    );
+
+    const res = await make().searchPlaces('Gioberti', {
+      includedType: 'lodging',
+      locationBias: { latitude: 41.9, longitude: 12.5 },
+    });
+
+    expect(res[0].providerPlaceId).toBe('ChIJ-1');
+    const [, body] = http.post.mock.calls[0];
+    expect(body.includedType).toBe('lodging');
+    expect(body.locationBias.circle.radius).toBe(50000);
+  });
+
   it('erro do provedor vira 502 sem vazar a chave', async () => {
     process.env.GOOGLE_MAPS_API_KEY = 'secret-key-123';
     http.post.mockReturnValue(throwError(() => new Error('boom secret-key-123')));

@@ -28,6 +28,11 @@ import {
   PlacesAutocompleteQueryDto,
   PlacesAutocompleteResponseDto,
 } from './dto/places-autocomplete.dto';
+import {
+  PlacesHotelsAutocompleteQueryDto,
+  PlacesHotelsAutocompleteResponseDto,
+} from './dto/places-hotels-autocomplete.dto';
+import { PlacesHotelsSearchResponseDto } from './dto/places-hotels-search.dto';
 
 @ApiTags('Places - App')
 @Controller()
@@ -66,9 +71,51 @@ export class PlacesController {
     );
   }
 
+  // Público (guest + auth). Fluxo "Adicionar hospedagem" — typeahead.
+  // Rota estática antes de places/:providerPlaceId.
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @ApiTags('Places - App')
+  @Get('places/hotels/autocomplete')
+  @ApiOperation({
+    summary: 'Autocomplete de hospedagens (Adicionar hotel)',
+    description:
+      'Público (auth opcional). Google Places Autocomplete restrito a lodging. Sem fotos. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP. Após selecionar, use GET /places/:providerPlaceId e POST /trips/:id/accommodation.',
+  })
+  @ApiResponse({ status: 200, type: PlacesHotelsAutocompleteResponseDto })
+  autocompleteHotels(@Query() query: PlacesHotelsAutocompleteQueryDto) {
+    return this.placesService.autocompleteHotels(query.q, {
+      lat: query.lat,
+      lng: query.lng,
+      radiusMeters: query.radiusMeters,
+    });
+  }
+
+  // Text Search lodging — lista com endereço/coords sem round-trip de Details.
+  // Mais caro que autocomplete; preferir autocomplete no typeahead.
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiTags('Places - App')
+  @Get('places/hotels/search')
+  @ApiOperation({
+    summary: 'Busca Text Search de hospedagens',
+    description:
+      'Público (auth opcional). Google Places Text Search com includedType=lodging. Preferir GET /places/hotels/autocomplete no typeahead (SKU mais barato). Rate limit: 30 req/min por IP.',
+  })
+  @ApiResponse({ status: 200, type: PlacesHotelsSearchResponseDto })
+  searchHotels(@Query() query: PlacesHotelsAutocompleteQueryDto) {
+    return this.placesService.searchHotels(query.q, {
+      lat: query.lat,
+      lng: query.lng,
+      radiusMeters: query.radiusMeters,
+    });
+  }
+
   @ApiTags('Places - App')
   @Get('places/:providerPlaceId')
-  @ApiOperation({ summary: 'Obter detalhes de um lugar específico' })
+  @ApiOperation({
+    summary: 'Obter detalhes de um lugar específico',
+    description:
+      'Inclui name, formattedAddress, latitude, longitude — campos da tela de confirmação do hotel. Sem fotos (free-tier friendly).',
+  })
   getPlaceDetails(@Param('providerPlaceId') providerPlaceId: string) {
     return this.placesService.getPlaceDetails(providerPlaceId);
   }

@@ -15,6 +15,20 @@
         ]
       }
     },
+    "/version": {
+      "get": {
+        "operationId": "AppController_getVersion",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "System"
+        ]
+      }
+    },
     "/users/me": {
       "get": {
         "operationId": "UsersController_getProfile",
@@ -487,6 +501,477 @@
         ]
       }
     },
+    "/trips/{id}/accommodation": {
+      "get": {
+        "operationId": "TripsController_getAccommodation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter hospedagem vinculada à viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      },
+      "post": {
+        "operationId": "TripsController_upsertAccommodation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertAccommodationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cadastrar ou atualizar hospedagem vinculada à viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      },
+      "delete": {
+        "operationId": "TripsController_removeAccommodation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover hospedagem da viagem",
+        "tags": [
+          "Trips - App"
+        ]
+      }
+    },
+    "/places/search": {
+      "get": {
+        "operationId": "PlacesController_searchPlaces",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Buscar lugares (Google Places Text Search)",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/places/autocomplete": {
+      "get": {
+        "description": "Público (auth opcional). Retorna cidades/regiões/países com iconUrl sempre preenchido. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP.",
+        "operationId": "PlacesController_autocomplete",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Texto digitado (mín. 2 caracteres úteis; máx. 100).",
+            "schema": {
+              "example": "Roma",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacesAutocompleteResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Autocomplete de localidades (passo Onde)",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/places/hotels/autocomplete": {
+      "get": {
+        "description": "Público (auth opcional). Google Places Autocomplete restrito a lodging. Sem fotos. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP. Após selecionar, use GET /places/:providerPlaceId e POST /trips/:id/accommodation.",
+        "operationId": "PlacesController_autocompleteHotels",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Nome digitado da hospedagem (mín. 2 caracteres úteis; máx. 100).",
+            "schema": {
+              "example": "Ho",
+              "type": "string"
+            }
+          },
+          {
+            "name": "lat",
+            "required": false,
+            "in": "query",
+            "description": "Latitude do destino da viagem para viesar resultados (círculo com lng + radiusMeters).",
+            "schema": {
+              "example": 41.9028,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": false,
+            "in": "query",
+            "description": "Longitude do destino da viagem para viesar resultados (círculo com lat + radiusMeters).",
+            "schema": {
+              "example": 12.4964,
+              "type": "number"
+            }
+          },
+          {
+            "name": "radiusMeters",
+            "required": false,
+            "in": "query",
+            "description": "Raio do locationBias em metros (padrão 50000; máx. 50000). Só aplica com lat+lng.",
+            "schema": {
+              "default": 50000,
+              "example": 50000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacesHotelsAutocompleteResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Autocomplete de hospedagens (Adicionar hotel)",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/places/hotels/search": {
+      "get": {
+        "description": "Público (auth opcional). Google Places Text Search com includedType=lodging. Preferir GET /places/hotels/autocomplete no typeahead (SKU mais barato). Rate limit: 30 req/min por IP.",
+        "operationId": "PlacesController_searchHotels",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Nome digitado da hospedagem (mín. 2 caracteres úteis; máx. 100).",
+            "schema": {
+              "example": "Ho",
+              "type": "string"
+            }
+          },
+          {
+            "name": "lat",
+            "required": false,
+            "in": "query",
+            "description": "Latitude do destino da viagem para viesar resultados (círculo com lng + radiusMeters).",
+            "schema": {
+              "example": 41.9028,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": false,
+            "in": "query",
+            "description": "Longitude do destino da viagem para viesar resultados (círculo com lat + radiusMeters).",
+            "schema": {
+              "example": 12.4964,
+              "type": "number"
+            }
+          },
+          {
+            "name": "radiusMeters",
+            "required": false,
+            "in": "query",
+            "description": "Raio do locationBias em metros (padrão 50000; máx. 50000). Só aplica com lat+lng.",
+            "schema": {
+              "default": 50000,
+              "example": 50000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacesHotelsSearchResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Busca Text Search de hospedagens",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/places/{providerPlaceId}": {
+      "get": {
+        "description": "Inclui name, formattedAddress, latitude, longitude — campos da tela de confirmação do hotel. Sem fotos (free-tier friendly).",
+        "operationId": "PlacesController_getPlaceDetails",
+        "parameters": [
+          {
+            "name": "providerPlaceId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Obter detalhes de um lugar específico",
+        "tags": [
+          "Places - App",
+          "Places - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichItineraryItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer ItineraryItem com dados reais de Place",
+        "tags": [
+          "Places - App",
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/admin/base-attractions/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichBaseAttraction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer BaseAttraction com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
+    "/admin/base-restaurants/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichBaseRestaurant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer BaseRestaurant com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
+    "/admin/itinerary-items/{id}/place": {
+      "patch": {
+        "operationId": "PlacesController_enrichItineraryItemAdmin",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enriquecer ItineraryItem com dados reais (Admin)",
+        "tags": [
+          "Places - App",
+          "Admin - Places"
+        ]
+      }
+    },
     "/trip-days/{id}": {
       "patch": {
         "operationId": "TripDaysController_update",
@@ -592,7 +1077,72 @@
         ]
       }
     },
+    "/trip-days/{id}/meal-recommendations": {
+      "get": {
+        "operationId": "TripDaysController_getMealRecommendations",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "description": "Café, Almoço ou Jantar",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recomendações curadas de refeições para o dia a partir da base e Places",
+        "tags": [
+          "Trip Days - App"
+        ]
+      }
+    },
     "/itinerary-items/{id}": {
+      "get": {
+        "operationId": "ItineraryController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter detalhes verificados de um item do roteiro",
+        "tags": [
+          "Itinerary - App"
+        ]
+      },
       "patch": {
         "operationId": "ItineraryController_update",
         "parameters": [
@@ -625,7 +1175,7 @@
             "bearer": []
           }
         ],
-        "summary": "Atualizar um item do roteiro",
+        "summary": "Atualizar um item do roteiro (duração recalcula horários seguintes)",
         "tags": [
           "Itinerary - App"
         ]
@@ -697,6 +1247,197 @@
         ]
       }
     },
+    "/itinerary-items/{id}/alternatives": {
+      "get": {
+        "operationId": "ItineraryController_getAlternatives",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar alternativas para substituição com cota de trocas",
+        "tags": [
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}/substitute": {
+      "post": {
+        "operationId": "ItineraryController_substitute",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubstituteItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Substituir item do roteiro consumindo cota de trocas",
+        "tags": [
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/itinerary-items/{id}/pin-meal": {
+      "patch": {
+        "operationId": "ItineraryController_pinMeal",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinMealDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fixar recomendação de restaurante em um item de refeição",
+        "tags": [
+          "Itinerary - App"
+        ]
+      }
+    },
+    "/admin/editor/trips/{id}/generate": {
+      "post": {
+        "operationId": "ItineraryEditorController_generateTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/editor/base-trips/{id}/generate": {
+      "post": {
+        "operationId": "ItineraryEditorController_generateBaseTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
+    "/admin/editor/trips/{id}/copy-to-base": {
+      "post": {
+        "operationId": "ItineraryEditorController_copyTrip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Itinerary Editor"
+        ]
+      }
+    },
     "/admin/users": {
       "get": {
         "operationId": "AdminController_getUsers",
@@ -765,6 +1506,51 @@
           }
         ],
         "summary": "Criar um novo usuário (USER ou ADMIN)",
+        "tags": [
+          "Admin - Users"
+        ]
+      }
+    },
+    "/admin/administrators": {
+      "get": {
+        "operationId": "AdminController_getAdministrators",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar administradores nas configurações",
         "tags": [
           "Admin - Users"
         ]
@@ -1767,6 +2553,1936 @@
         ]
       }
     },
+    "/admin/customers": {
+      "get": {
+        "operationId": "CustomersController_getCustomers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os clientes com filtros de CRM, estágio e métricas",
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/customers/contacts": {
+      "get": {
+        "operationId": "CustomersController_getContacts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      },
+      "post": {
+        "operationId": "CustomersController_createContact",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/customers/contacts/{id}": {
+      "patch": {
+        "operationId": "CustomersController_updateContact",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/customers/{id}/360": {
+      "get": {
+        "operationId": "CustomersController_getCustomer360",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Visão 360 completa do cliente com timeline cronológica",
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/customers/{id}": {
+      "get": {
+        "operationId": "CustomersController_getCustomer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes do cliente",
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/customers/{id}/consent": {
+      "patch": {
+        "operationId": "CustomersController_updateConsent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar consentimento de marketing (LGPD)",
+        "tags": [
+          "Admin - Customers & CRM"
+        ]
+      }
+    },
+    "/admin/leads": {
+      "get": {
+        "operationId": "LeadsController_getLeads",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar leads e jornadas anônimas de planejamento",
+        "tags": [
+          "Admin - Leads & Funnel"
+        ]
+      }
+    },
+    "/admin/leads/{id}": {
+      "get": {
+        "operationId": "LeadsController_getLeadDetails",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes completos de um lead / jornada anônima",
+        "tags": [
+          "Admin - Leads & Funnel"
+        ]
+      }
+    },
+    "/admin/marketing/segments": {
+      "get": {
+        "operationId": "MarketingSegmentsController_getSegments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os segmentos de clientes",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      },
+      "post": {
+        "operationId": "MarketingSegmentsController_createSegment",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSegmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um novo segmento com critérios de filtro",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      }
+    },
+    "/admin/marketing/segments/preview-query": {
+      "post": {
+        "operationId": "MarketingSegmentsController_previewQuery",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prévia de audiência e contagem dinâmica por critérios",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      }
+    },
+    "/admin/marketing/segments/{id}": {
+      "get": {
+        "operationId": "MarketingSegmentsController_getSegment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de um segmento",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      },
+      "patch": {
+        "operationId": "MarketingSegmentsController_updateSegment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSegmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar um segmento",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      },
+      "delete": {
+        "operationId": "MarketingSegmentsController_deleteSegment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir um segmento",
+        "tags": [
+          "Admin - Marketing (Segments)"
+        ]
+      }
+    },
+    "/admin/marketing/templates": {
+      "get": {
+        "operationId": "MarketingTemplatesController_getTemplates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os templates de e-mail",
+        "tags": [
+          "Admin - Marketing (Templates)"
+        ]
+      },
+      "post": {
+        "operationId": "MarketingTemplatesController_createTemplate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um novo template de e-mail",
+        "tags": [
+          "Admin - Marketing (Templates)"
+        ]
+      }
+    },
+    "/admin/marketing/templates/{id}": {
+      "get": {
+        "operationId": "MarketingTemplatesController_getTemplate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de um template de e-mail",
+        "tags": [
+          "Admin - Marketing (Templates)"
+        ]
+      },
+      "patch": {
+        "operationId": "MarketingTemplatesController_updateTemplate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar um template de e-mail",
+        "tags": [
+          "Admin - Marketing (Templates)"
+        ]
+      },
+      "delete": {
+        "operationId": "MarketingTemplatesController_deleteTemplate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir um template de e-mail",
+        "tags": [
+          "Admin - Marketing (Templates)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns": {
+      "get": {
+        "operationId": "MarketingCampaignsController_getCampaigns",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar campanhas com métricas",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      },
+      "post": {
+        "operationId": "MarketingCampaignsController_createCampaign",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCampaignDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar uma nova campanha (DRAFT)",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns/{id}": {
+      "get": {
+        "operationId": "MarketingCampaignsController_getCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes completos da campanha",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      },
+      "patch": {
+        "operationId": "MarketingCampaignsController_updateCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCampaignDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar campanha",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      },
+      "delete": {
+        "operationId": "MarketingCampaignsController_deleteCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir campanha",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns/{id}/dry-run": {
+      "post": {
+        "operationId": "MarketingCampaignsController_dryRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Executar dry-run: prévia de audiência, exclusões LGPD e HTML renderizado",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns/{id}/send-test": {
+      "post": {
+        "operationId": "MarketingCampaignsController_sendTestEmail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendTestEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enviar e-mail de teste seguro para o endereço especificado",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns/{id}/schedule": {
+      "post": {
+        "operationId": "MarketingCampaignsController_scheduleCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Agendar ou disparar campanha (guardado por flag fail-closed)",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/marketing/campaigns/{id}/cancel": {
+      "post": {
+        "operationId": "MarketingCampaignsController_cancelCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancelar agendamento de campanha",
+        "tags": [
+          "Admin - Marketing (Campaigns)"
+        ]
+      }
+    },
+    "/admin/blog/posts": {
+      "get": {
+        "operationId": "BlogController_getPosts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "REVIEW",
+                "SCHEDULED",
+                "PUBLISHED",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os artigos do blog (Admin)",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      },
+      "post": {
+        "operationId": "BlogController_createPost",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBlogPostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um novo artigo (DRAFT)",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      }
+    },
+    "/admin/blog/posts/{id}": {
+      "get": {
+        "operationId": "BlogController_getPost",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de um artigo",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      },
+      "patch": {
+        "operationId": "BlogController_updatePost",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBlogPostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar artigo",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      },
+      "delete": {
+        "operationId": "BlogController_deletePost",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir artigo",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      }
+    },
+    "/admin/blog/posts/{id}/publish": {
+      "patch": {
+        "operationId": "BlogController_publishPost",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Publicar artigo (altera status para PUBLISHED)",
+        "tags": [
+          "Admin - Blog / CMS"
+        ]
+      }
+    },
+    "/blog/posts": {
+      "get": {
+        "operationId": "BlogPublicController_getPublishedPosts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Listar artigos publicados para o Site/Web",
+        "tags": [
+          "Public - Blog"
+        ]
+      }
+    },
+    "/blog/posts/{slug}": {
+      "get": {
+        "operationId": "BlogPublicController_getPublishedPostBySlug",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Visualizar artigo publicado por slug",
+        "tags": [
+          "Public - Blog"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/guidelines": {
+      "get": {
+        "operationId": "AiIntelligenceController_getGuidelines",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter diretrizes e tom de voz da IA",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/guidelines/{key}": {
+      "patch": {
+        "operationId": "AiIntelligenceController_updateGuideline",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGuidelineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar diretriz de tom de voz ou regra editorial",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/knowledge": {
+      "get": {
+        "operationId": "AiIntelligenceController_getKnowledge",
+        "parameters": [
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destination",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar artigos e briefings da base de conhecimento",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      },
+      "post": {
+        "operationId": "AiIntelligenceController_createKnowledgeArticle",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKnowledgeArticleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar novo artigo na base de conhecimento",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/knowledge/{id}": {
+      "get": {
+        "operationId": "AiIntelligenceController_getKnowledgeArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalhes de um artigo da base de conhecimento",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      },
+      "patch": {
+        "operationId": "AiIntelligenceController_updateKnowledgeArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKnowledgeArticleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar artigo na base de conhecimento",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      },
+      "delete": {
+        "operationId": "AiIntelligenceController_deleteKnowledgeArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir artigo da base de conhecimento",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/editorial-assist": {
+      "post": {
+        "operationId": "AiIntelligenceController_editorialAssist",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditorialAssistDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Assistente de IA para geração de rascunhos, títulos e SEO",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/ai-intelligence/playground": {
+      "post": {
+        "operationId": "AiIntelligenceController_playgroundSimulate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaygroundSimulateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Simulação segura e isolada da IA sem persistir viagens",
+        "tags": [
+          "Admin - AI Intelligence & Governance"
+        ]
+      }
+    },
+    "/admin/system/provider-health": {
+      "get": {
+        "operationId": "SystemController_getProviderHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Status de configuração e saúde de todos os provedores",
+        "tags": [
+          "Admin - System & Operations"
+        ]
+      }
+    },
+    "/admin/system/providers": {
+      "get": {
+        "operationId": "SystemController_getProviders",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Status de configuração e saúde de todos os provedores (alias)",
+        "tags": [
+          "Admin - System & Operations"
+        ]
+      }
+    },
+    "/admin/system/search": {
+      "get": {
+        "operationId": "SystemController_globalSearch",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Busca global unificada no ecossistema (clientes, viagens, compras, blog)",
+        "tags": [
+          "Admin - System & Operations"
+        ]
+      }
+    },
+    "/admin/system/audit-logs": {
+      "get": {
+        "operationId": "SystemController_getAuditLogs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "entity",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Trilha de auditoria das ações administrativas",
+        "tags": [
+          "Admin - System & Operations"
+        ]
+      }
+    },
+    "/admin/company-expenses/summary": {
+      "get": {
+        "operationId": "CompanyExpensesController_getSummary",
+        "parameters": [
+          {
+            "name": "competenceMonth",
+            "required": false,
+            "in": "query",
+            "description": "Mês de competência (YYYY-MM)",
+            "schema": {
+              "example": "2026-10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "Alias para competenceMonth (YYYY-MM)",
+            "schema": {
+              "example": "2026-10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "competenceYear",
+            "required": false,
+            "in": "query",
+            "description": "Ano de competência cheio (YYYY)",
+            "schema": {
+              "example": "2026",
+              "type": "string"
+            }
+          },
+          {
+            "name": "competenceMonths",
+            "required": false,
+            "in": "query",
+            "description": "Múltiplos meses separados por vírgula (YYYY-MM,YYYY-MM)",
+            "schema": {
+              "example": "2026-09,2026-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter resumo financeiro e totais agrupados por mês e categoria",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      }
+    },
+    "/admin/company-expenses": {
+      "get": {
+        "operationId": "CompanyExpensesController_findAll",
+        "parameters": [
+          {
+            "name": "competenceMonth",
+            "required": false,
+            "in": "query",
+            "description": "Mês de competência (YYYY-MM)",
+            "schema": {
+              "example": "2026-10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "Alias para competenceMonth (YYYY-MM)",
+            "schema": {
+              "example": "2026-10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "competenceYear",
+            "required": false,
+            "in": "query",
+            "description": "Ano de competência cheio (YYYY)",
+            "schema": {
+              "example": "2026",
+              "type": "string"
+            }
+          },
+          {
+            "name": "competenceMonths",
+            "required": false,
+            "in": "query",
+            "description": "Múltiplos meses separados por vírgula (YYYY-MM,YYYY-MM)",
+            "schema": {
+              "example": "2026-09,2026-10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Filtrar por categoria",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INFRA",
+                "SAAS",
+                "MARKETING",
+                "PESSOAS",
+                "VIAGEM",
+                "OUTROS"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Busca por texto no título ou fornecedor",
+            "schema": {
+              "example": "AWS",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "description": "Incluir despesas arquivadas/soft-deleted",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Número da página",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Itens por página",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "orderBy",
+            "required": false,
+            "in": "query",
+            "description": "Campo de ordenação",
+            "schema": {
+              "default": "spentAt",
+              "type": "string",
+              "enum": [
+                "spentAt",
+                "amountCents",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "Direção da ordenação",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar despesas operacionais da empresa com filtros e paginação",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      },
+      "post": {
+        "operationId": "CompanyExpensesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompanyExpenseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cadastrar nova despesa operacional da empresa",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      }
+    },
+    "/admin/company-expenses/{id}": {
+      "get": {
+        "operationId": "CompanyExpensesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter detalhes de uma despesa específica por ID",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      },
+      "patch": {
+        "operationId": "CompanyExpensesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCompanyExpenseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar dados de uma despesa existente",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      },
+      "delete": {
+        "operationId": "CompanyExpensesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hard",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir despesa (soft-delete por padrão ou hard delete via ?hard=true)",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      }
+    },
+    "/admin/company-expenses/{id}/archive": {
+      "post": {
+        "operationId": "CompanyExpensesController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Arquivar despesa (soft-delete)",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      }
+    },
+    "/admin/company-expenses/{id}/restore": {
+      "post": {
+        "operationId": "CompanyExpensesController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restaurar despesa arquivada",
+        "tags": [
+          "Admin - Company Expenses (Opex & Custos)"
+        ]
+      }
+    },
     "/admin/base-trips": {
       "post": {
         "operationId": "BaseTripsController_createBaseTrip",
@@ -2614,241 +5330,6 @@
         "tags": [
           "Travel Profile - App",
           "Travel Profile - App"
-        ]
-      }
-    },
-    "/places/search": {
-      "get": {
-        "operationId": "PlacesController_searchPlaces",
-        "parameters": [
-          {
-            "name": "query",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Buscar lugares (Google Places Text Search)",
-        "tags": [
-          "Places - App",
-          "Places - App"
-        ]
-      }
-    },
-    "/places/autocomplete": {
-      "get": {
-        "description": "Público (auth opcional). Retorna cidades/regiões/países com iconUrl sempre preenchido. Resposta envelopada ({ success, data, timestamp }). Rate limit: 60 req/min por IP.",
-        "operationId": "PlacesController_autocomplete",
-        "parameters": [
-          {
-            "name": "q",
-            "required": true,
-            "in": "query",
-            "description": "Texto digitado (mín. 2 caracteres úteis; máx. 100).",
-            "schema": {
-              "example": "Roma",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlacesAutocompleteResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Autocomplete de localidades (passo Onde)",
-        "tags": [
-          "Places - App",
-          "Places - App"
-        ]
-      }
-    },
-    "/places/{providerPlaceId}": {
-      "get": {
-        "operationId": "PlacesController_getPlaceDetails",
-        "parameters": [
-          {
-            "name": "providerPlaceId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Obter detalhes de um lugar específico",
-        "tags": [
-          "Places - App",
-          "Places - App"
-        ]
-      }
-    },
-    "/itinerary-items/{id}/place": {
-      "patch": {
-        "operationId": "PlacesController_enrichItineraryItem",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnrichPlaceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Enriquecer ItineraryItem com dados reais de Place",
-        "tags": [
-          "Places - App",
-          "Itinerary - App"
-        ]
-      }
-    },
-    "/admin/base-attractions/{id}/place": {
-      "patch": {
-        "operationId": "PlacesController_enrichBaseAttraction",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnrichPlaceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Enriquecer BaseAttraction com dados reais (Admin)",
-        "tags": [
-          "Places - App",
-          "Admin - Places"
-        ]
-      }
-    },
-    "/admin/base-restaurants/{id}/place": {
-      "patch": {
-        "operationId": "PlacesController_enrichBaseRestaurant",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnrichPlaceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Enriquecer BaseRestaurant com dados reais (Admin)",
-        "tags": [
-          "Places - App",
-          "Admin - Places"
-        ]
-      }
-    },
-    "/admin/itinerary-items/{id}/place": {
-      "patch": {
-        "operationId": "PlacesController_enrichItineraryItemAdmin",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnrichPlaceDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Enriquecer ItineraryItem com dados reais (Admin)",
-        "tags": [
-          "Places - App",
-          "Admin - Places"
         ]
       }
     },
@@ -3830,6 +6311,44 @@
         ]
       }
     },
+    "/admin/dashboard/funnel": {
+      "get": {
+        "operationId": "AnalyticsController_getFunnel",
+        "parameters": [
+          {
+            "name": "startDate",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Métricas de conversão do funil de vendas",
+        "tags": [
+          "Admin - Dashboard",
+          "Admin - Analytics"
+        ]
+      }
+    },
     "/admin/dashboard/revenue": {
       "get": {
         "operationId": "AnalyticsController_getRevenue",
@@ -4622,6 +7141,24 @@
             "type": "string",
             "example": "2027-01-20T00:00:00.000Z"
           },
+          "arrivalDateTime": {
+            "type": "string",
+            "example": "2027-01-10T14:30:00.000Z"
+          },
+          "departureDateTime": {
+            "type": "string",
+            "example": "2027-01-20T18:00:00.000Z"
+          },
+          "allowedSwapsCount": {
+            "type": "number",
+            "example": 4,
+            "default": 4
+          },
+          "usedSwapsCount": {
+            "type": "number",
+            "example": 0,
+            "default": 0
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -4667,6 +7204,24 @@
             "type": "string",
             "example": "2027-01-20T00:00:00.000Z"
           },
+          "arrivalDateTime": {
+            "type": "string",
+            "example": "2027-01-10T14:30:00.000Z"
+          },
+          "departureDateTime": {
+            "type": "string",
+            "example": "2027-01-20T18:00:00.000Z"
+          },
+          "allowedSwapsCount": {
+            "type": "number",
+            "example": 4,
+            "default": 4
+          },
+          "usedSwapsCount": {
+            "type": "number",
+            "example": 0,
+            "default": 0
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -4707,6 +7262,225 @@
         },
         "required": [
           "dayNumber"
+        ]
+      },
+      "UpsertAccommodationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Hotel Roma Centro"
+          },
+          "address": {
+            "type": "string",
+            "example": "Via del Corso, 100, Roma"
+          },
+          "neighborhood": {
+            "type": "string",
+            "example": "Centro Storico"
+          },
+          "zipCode": {
+            "type": "string",
+            "example": "00186"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 41.8902
+          },
+          "longitude": {
+            "type": "number",
+            "example": 12.4922
+          },
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ...googlePlaceId"
+          },
+          "checkInDateTime": {
+            "type": "string",
+            "example": "2026-07-25T14:00:00.000Z"
+          },
+          "checkOutDateTime": {
+            "type": "string",
+            "example": "2026-07-28T11:00:00.000Z"
+          },
+          "checkInDate": {
+            "type": "string",
+            "example": "2026-07-25"
+          },
+          "checkInTime": {
+            "type": "string",
+            "example": "14:00"
+          },
+          "checkOutDate": {
+            "type": "string",
+            "example": "2026-07-28"
+          },
+          "checkOutTime": {
+            "type": "string",
+            "example": "11:00"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "PlaceAutocompleteItemDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ…",
+            "description": "Mesmo ID de GET /places/search e de GET /home/destinations (providerPlaceId)."
+          },
+          "name": {
+            "type": "string",
+            "example": "Roma"
+          },
+          "subtitle": {
+            "type": "string",
+            "example": "Lácio, Itália",
+            "description": "Linha secundária."
+          },
+          "iconUrl": {
+            "type": "string",
+            "example": "https://api.example/static/place-icons/city.svg",
+            "description": "Thumb/ícone sempre preenchido: imagem do destino curado da Home quando o ID casa; senão ícone padrão do produto por tipo (city, region, country, place)."
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Não retornado pelo autocomplete; use GET /places/:providerPlaceId para coordenadas."
+          },
+          "longitude": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "providerPlaceId",
+          "name",
+          "subtitle",
+          "iconUrl"
+        ]
+      },
+      "PlacesAutocompleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceAutocompleteItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "PlaceHotelAutocompleteItemDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ…",
+            "description": "Mesmo ID de GET /places/:providerPlaceId e de POST /trips/:id/accommodation (providerPlaceId)."
+          },
+          "name": {
+            "type": "string",
+            "example": "Hotel Diana Roof Garden"
+          },
+          "subtitle": {
+            "type": "string",
+            "example": "Roma, Itália",
+            "description": "Linha secundária do autocomplete (cidade/região). Endereço completo vem em GET /places/:providerPlaceId."
+          }
+        },
+        "required": [
+          "providerPlaceId",
+          "name",
+          "subtitle"
+        ]
+      },
+      "PlacesHotelsAutocompleteResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceHotelAutocompleteItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "PlaceHotelSearchItemDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ…"
+          },
+          "name": {
+            "type": "string",
+            "example": "Hotel Diana Roof Garden"
+          },
+          "formattedAddress": {
+            "type": "string",
+            "example": "Via Torino, 94, 00184 Roma RM, Itália"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 41.901
+          },
+          "longitude": {
+            "type": "number",
+            "example": 12.495
+          },
+          "rating": {
+            "type": "number",
+            "example": 4.5
+          },
+          "types": {
+            "example": [
+              "lodging",
+              "hotel"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "providerPlaceId",
+          "name",
+          "formattedAddress",
+          "types"
+        ]
+      },
+      "PlacesHotelsSearchResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceHotelSearchItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "EnrichPlaceDto": {
+        "type": "object",
+        "properties": {
+          "providerPlaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "providerPlaceId"
         ]
       },
       "UpdateTripDayDto": {
@@ -4816,6 +7590,35 @@
           "isUserModified": {
             "type": "boolean",
             "default": false
+          },
+          "transitDistanceMeters": {
+            "type": "number",
+            "example": 450,
+            "description": "Distância de deslocamento em metros"
+          },
+          "transitDurationMinutes": {
+            "type": "number",
+            "example": 8,
+            "description": "Duração do deslocamento em minutos"
+          },
+          "transitMode": {
+            "type": "string",
+            "enum": [
+              "WALKING",
+              "DRIVING",
+              "TRANSIT",
+              "BICYCLING"
+            ],
+            "default": "WALKING"
+          },
+          "ticketStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "TICKET_REQUIRED",
+              "UNKNOWN"
+            ],
+            "default": "UNKNOWN"
           }
         },
         "required": [
@@ -4910,6 +7713,35 @@
           "isUserModified": {
             "type": "boolean",
             "default": false
+          },
+          "transitDistanceMeters": {
+            "type": "number",
+            "example": 450,
+            "description": "Distância de deslocamento em metros"
+          },
+          "transitDurationMinutes": {
+            "type": "number",
+            "example": 8,
+            "description": "Duração do deslocamento em minutos"
+          },
+          "transitMode": {
+            "type": "string",
+            "enum": [
+              "WALKING",
+              "DRIVING",
+              "TRANSIT",
+              "BICYCLING"
+            ],
+            "default": "WALKING"
+          },
+          "ticketStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "TICKET_REQUIRED",
+              "UNKNOWN"
+            ],
+            "default": "UNKNOWN"
           }
         }
       },
@@ -4923,6 +7755,125 @@
         },
         "required": [
           "order"
+        ]
+      },
+      "SubstituteItemDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Galeria Borghese"
+          },
+          "description": {
+            "type": "string",
+            "example": "Visita à coleção de esculturas e pinturas renascentistas"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "TOURIST_ATTRACTION",
+              "MUSEUM",
+              "RESTAURANT",
+              "CAFE",
+              "BAR",
+              "BEACH",
+              "PARK",
+              "SHOPPING",
+              "EXPERIENCE",
+              "TRANSPORT",
+              "EVENT",
+              "NIGHTLIFE",
+              "FREE_ACTIVITY",
+              "PAID_ACTIVITY"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "example": "Piazzale Scipione Borghese, 5, 00197 Roma"
+          },
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ...placeId"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 41.9142
+          },
+          "longitude": {
+            "type": "number",
+            "example": 12.4921
+          },
+          "cost": {
+            "type": "number",
+            "example": 15
+          },
+          "currency": {
+            "type": "string",
+            "example": "EUR"
+          },
+          "duration": {
+            "type": "number",
+            "example": 90
+          },
+          "ticketStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "TICKET_REQUIRED",
+              "UNKNOWN"
+            ]
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "PinMealDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Trattoria Da Enzo al 29"
+          },
+          "description": {
+            "type": "string",
+            "example": "Cozinha tradicional romana"
+          },
+          "location": {
+            "type": "string",
+            "example": "Via dei Vascellari, 29, 00153 Roma"
+          },
+          "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJ...placeId"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 41.8878
+          },
+          "longitude": {
+            "type": "number",
+            "example": 12.4776
+          },
+          "cost": {
+            "type": "number",
+            "example": 35
+          },
+          "currency": {
+            "type": "string",
+            "example": "EUR"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Carbonara clássica e cacio e pepe recomendadas"
+          },
+          "googleMapsLink": {
+            "type": "string",
+            "example": "https://maps.google.com/?q=Trattoria+Da+Enzo"
+          }
+        },
+        "required": [
+          "title"
         ]
       },
       "CreateUserAdminDto": {
@@ -4948,6 +7899,10 @@
               "ADMIN"
             ],
             "default": "USER"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+5511999999999"
           }
         },
         "required": [
@@ -4974,6 +7929,10 @@
               "USER",
               "ADMIN"
             ]
+          },
+          "phone": {
+            "type": "string",
+            "example": "+5511999999999"
           }
         }
       },
@@ -5120,6 +8079,183 @@
         "required": [
           "email"
         ]
+      },
+      "SaveContactDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateConsentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateSegmentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateSegmentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateTemplateDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateTemplateDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateCampaignDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateCampaignDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SendTestEmailDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBlogPostDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateBlogPostDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateGuidelineDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateKnowledgeArticleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateKnowledgeArticleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "EditorialAssistDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "PlaygroundSimulateDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateCompanyExpenseDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Título ou descrição curta da despesa",
+            "example": "Hospedagem AWS / Cloud"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "INFRA",
+              "SAAS",
+              "MARKETING",
+              "PESSOAS",
+              "VIAGEM",
+              "OUTROS"
+            ],
+            "description": "Categoria da despesa",
+            "example": "INFRA"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Valor em centavos (positivo)",
+            "example": 15420
+          },
+          "currency": {
+            "type": "string",
+            "description": "Moeda ISO (padrão BRL)",
+            "default": "BRL",
+            "example": "BRL"
+          },
+          "spentAt": {
+            "type": "string",
+            "description": "Data em que o gasto ocorreu (ISO 8601)",
+            "example": "2026-10-01T14:00:00.000Z"
+          },
+          "competenceMonth": {
+            "type": "string",
+            "description": "Mês de competência (YYYY-MM)",
+            "example": "2026-10"
+          },
+          "vendor": {
+            "type": "string",
+            "description": "Fornecedor ou prestador do serviço",
+            "example": "Amazon Web Services"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas ou observações adicionais",
+            "example": "Fatura de servidores de produção e banco"
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "amountCents"
+        ]
+      },
+      "UpdateCompanyExpenseDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Título ou descrição curta da despesa",
+            "example": "Hospedagem AWS / Cloud"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "INFRA",
+              "SAAS",
+              "MARKETING",
+              "PESSOAS",
+              "VIAGEM",
+              "OUTROS"
+            ],
+            "description": "Categoria da despesa",
+            "example": "INFRA"
+          },
+          "amountCents": {
+            "type": "number",
+            "description": "Valor em centavos (positivo)",
+            "example": 15420
+          },
+          "currency": {
+            "type": "string",
+            "description": "Moeda ISO (padrão BRL)",
+            "default": "BRL",
+            "example": "BRL"
+          },
+          "spentAt": {
+            "type": "string",
+            "description": "Data em que o gasto ocorreu (ISO 8601)",
+            "example": "2026-10-01T14:00:00.000Z"
+          },
+          "competenceMonth": {
+            "type": "string",
+            "description": "Mês de competência (YYYY-MM)",
+            "example": "2026-10"
+          },
+          "vendor": {
+            "type": "string",
+            "description": "Fornecedor ou prestador do serviço",
+            "example": "Amazon Web Services"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas ou observações adicionais",
+            "example": "Fatura de servidores de produção e banco"
+          }
+        }
       },
       "CreateBaseTripDto": {
         "type": "object",
@@ -5335,7 +8471,8 @@
             "type": "string"
           },
           "address": {
-            "type": "string"
+            "type": "string",
+            "description": "Endereço completo da atração"
           },
           "googleMapsLink": {
             "type": "string"
@@ -5399,6 +8536,7 @@
         "required": [
           "name",
           "category",
+          "address",
           "order"
         ]
       },
@@ -5437,7 +8575,8 @@
             "type": "string"
           },
           "address": {
-            "type": "string"
+            "type": "string",
+            "description": "Endereço completo da atração"
           },
           "googleMapsLink": {
             "type": "string"
@@ -5515,7 +8654,8 @@
             "type": "number"
           },
           "address": {
-            "type": "string"
+            "type": "string",
+            "description": "Endereço completo do restaurante"
           },
           "googleMapsLink": {
             "type": "string"
@@ -5550,6 +8690,7 @@
         },
         "required": [
           "name",
+          "address",
           "order"
         ]
       },
@@ -5569,7 +8710,8 @@
             "type": "number"
           },
           "address": {
-            "type": "string"
+            "type": "string",
+            "description": "Endereço completo do restaurante"
           },
           "googleMapsLink": {
             "type": "string"
@@ -5756,68 +8898,6 @@
             "type": "string"
           }
         }
-      },
-      "PlaceAutocompleteItemDto": {
-        "type": "object",
-        "properties": {
-          "providerPlaceId": {
-            "type": "string",
-            "example": "ChIJ…",
-            "description": "Mesmo ID de GET /places/search e de GET /home/destinations (providerPlaceId)."
-          },
-          "name": {
-            "type": "string",
-            "example": "Roma"
-          },
-          "subtitle": {
-            "type": "string",
-            "example": "Lácio, Itália",
-            "description": "Linha secundária."
-          },
-          "iconUrl": {
-            "type": "string",
-            "example": "https://api.example/static/place-icons/city.svg",
-            "description": "Thumb/ícone sempre preenchido: imagem do destino curado da Home quando o ID casa; senão ícone padrão do produto por tipo (city, region, country, place)."
-          },
-          "latitude": {
-            "type": "number",
-            "description": "Não retornado pelo autocomplete; use GET /places/:providerPlaceId para coordenadas."
-          },
-          "longitude": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "providerPlaceId",
-          "name",
-          "subtitle",
-          "iconUrl"
-        ]
-      },
-      "PlacesAutocompleteResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PlaceAutocompleteItemDto"
-            }
-          }
-        },
-        "required": [
-          "items"
-        ]
-      },
-      "EnrichPlaceDto": {
-        "type": "object",
-        "properties": {
-          "providerPlaceId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "providerPlaceId"
-        ]
       },
       "CheckoutQuoteDto": {
         "type": "object",
@@ -6008,25 +9088,14 @@
           }
         }
       },
-      "CreatePlanningSessionDto": {
-        "type": "object",
-        "properties": {
-          "answersVersion": {
-            "type": "number",
-            "description": "Versão do contrato do questionário",
-            "example": 1
-          },
-          "initialStep": {
-            "type": "number",
-            "description": "Etapa inicial do questionário (1..6)",
-            "example": 1
-          }
-        }
-      },
       "PlanningDestinationDto": {
         "type": "object",
         "properties": {
           "providerPlaceId": {
+            "type": "string",
+            "example": "ChIJaX7xOX1gLxMRFC23l00vM-Q"
+          },
+          "placeId": {
             "type": "string",
             "example": "ChIJaX7xOX1gLxMRFC23l00vM-Q"
           },
@@ -6092,9 +9161,93 @@
             "type": "string",
             "example": "09:00"
           },
+          "start": {
+            "type": "string",
+            "example": "09:00"
+          },
           "endTime": {
             "type": "string",
             "example": "18:30"
+          },
+          "end": {
+            "type": "string",
+            "example": "18:30"
+          }
+        }
+      },
+      "CreatePlanningSessionDto": {
+        "type": "object",
+        "properties": {
+          "answersVersion": {
+            "type": "number",
+            "description": "Versão do contrato do questionário",
+            "example": 1
+          },
+          "initialStep": {
+            "type": "number",
+            "description": "Etapa inicial do questionário (1..6)",
+            "example": 1
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanningDestinationDto"
+            }
+          },
+          "travelers": {
+            "$ref": "#/components/schemas/PlanningTravelersDto"
+          },
+          "interests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ART",
+                "GASTRONOMY",
+                "SPORTS",
+                "ARCHITECTURE",
+                "OUTDOOR",
+                "MUSIC",
+                "GEEK_CULTURE",
+                "LOCAL_HISTORY",
+                "NATURE"
+              ]
+            }
+          },
+          "activityHours": {
+            "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "activityWindow": {
+            "deprecated": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlanningActivityWindowDto"
+              }
+            ]
+          },
+          "travelStyle": {
+            "type": "string",
+            "enum": [
+              "ECONOMIC",
+              "COMFORT",
+              "LUXURY",
+              "ADVENTURE",
+              "FAMILY",
+              "ROMANTIC",
+              "PARTY",
+              "CULTURAL"
+            ],
+            "example": "COMFORT"
+          },
+          "budgetLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "PREMIUM"
+            ],
+            "example": "MEDIUM"
           }
         }
       },
@@ -6146,6 +9299,14 @@
           },
           "activityHours": {
             "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "activityWindow": {
+            "deprecated": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlanningActivityWindowDto"
+              }
+            ]
           },
           "travelStyle": {
             "type": "string",
@@ -6250,6 +9411,14 @@
           "activityHours": {
             "$ref": "#/components/schemas/PlanningActivityWindowDto"
           },
+          "activityWindow": {
+            "deprecated": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlanningActivityWindowDto"
+              }
+            ]
+          },
           "travelStyle": {
             "type": "string",
             "enum": [
@@ -6336,8 +9505,16 @@
               ]
             }
           },
-          "activityWindow": {
+          "activityHours": {
             "$ref": "#/components/schemas/PlanningActivityWindowDto"
+          },
+          "activityWindow": {
+            "deprecated": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlanningActivityWindowDto"
+              }
+            ]
           },
           "travelStyle": {
             "type": "string",
@@ -6505,6 +9682,14 @@
           "period": {
             "type": "string",
             "example": "Manhã"
+          },
+          "timeLabel": {
+            "type": "string",
+            "example": "08:30 - 09:30"
+          },
+          "duration": {
+            "type": "number",
+            "example": 60
           },
           "cost": {
             "type": "number",

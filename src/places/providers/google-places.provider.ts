@@ -4,6 +4,7 @@ import {
   PlaceSearchResult,
   PlaceDetails,
   PlaceAutocompleteResult,
+  PlacesLocationBias,
 } from './places-provider.interface';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -18,7 +19,10 @@ export class GooglePlacesProvider implements PlacesProvider {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
   }
 
-  async searchPlaces(query: string): Promise<PlaceSearchResult[]> {
+  async searchPlaces(
+    query: string,
+    opts?: { includedType?: string; locationBias?: PlacesLocationBias },
+  ): Promise<PlaceSearchResult[]> {
     if (!this.apiKey) {
       this.logger.warn(
         'Google Maps API Key is not configured. Returning empty list.',
@@ -27,19 +31,31 @@ export class GooglePlacesProvider implements PlacesProvider {
     }
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}:searchText`,
-          { textQuery: query },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Goog-Api-Key': this.apiKey,
-              'X-Goog-FieldMask':
-                'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.types,places.priceLevel',
+      const body: Record<string, unknown> = { textQuery: query };
+      if (opts?.includedType) {
+        body.includedType = opts.includedType;
+      }
+      if (opts?.locationBias) {
+        body.locationBias = {
+          circle: {
+            center: {
+              latitude: opts.locationBias.latitude,
+              longitude: opts.locationBias.longitude,
             },
+            radius: Math.min(opts.locationBias.radiusMeters ?? 50000, 50000),
           },
-        ),
+        };
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.post(`${this.baseUrl}:searchText`, body, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': this.apiKey,
+            'X-Goog-FieldMask':
+              'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.types,places.priceLevel',
+          },
+        }),
       );
 
       const places = response.data.places || [];
@@ -68,6 +84,31 @@ export class GooglePlacesProvider implements PlacesProvider {
   }
 
   async autocompletePlaces(input: string): Promise<PlaceAutocompleteResult[]> {
+    return this.autocompleteWithTypes(input, [
+      'locality',
+      'administrative_area_level_1',
+      'administrative_area_level_2',
+      'country',
+    ]);
+  }
+
+  /**
+   * Autocomplete restrito a hospedagens (lodging). Preferível ao Text Search
+   * no typeahead: SKU Autocomplete, sem Place Details / Photos até o usuário
+   * selecionar um item.
+   */
+  async autocompleteHotels(
+    input: string,
+    locationBias?: PlacesLocationBias,
+  ): Promise<PlaceAutocompleteResult[]> {
+    return this.autocompleteWithTypes(input, ['lodging'], locationBias);
+  }
+
+  private async autocompleteWithTypes(
+    input: string,
+    includedPrimaryTypes: string[],
+    locationBias?: PlacesLocationBias,
+  ): Promise<PlaceAutocompleteResult[]> {
     if (!this.apiKey) {
       this.logger.warn(
         'Google Maps API Key is not configured. Returning empty list.',
@@ -76,28 +117,32 @@ export class GooglePlacesProvider implements PlacesProvider {
     }
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}:autocomplete`,
-          {
-            input,
-            languageCode: 'pt-BR',
-            includedPrimaryTypes: [
-              'locality',
-              'administrative_area_level_1',
-              'administrative_area_level_2',
-              'country',
-            ],
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Goog-Api-Key': this.apiKey,
-              'X-Goog-FieldMask':
-                'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.types',
+      const body: Record<string, unknown> = {
+        input,
+        languageCode: 'pt-BR',
+        includedPrimaryTypes,
+      };
+      if (locationBias) {
+        body.locationBias = {
+          circle: {
+            center: {
+              latitude: locationBias.latitude,
+              longitude: locationBias.longitude,
             },
+            radius: Math.min(locationBias.radiusMeters ?? 50000, 50000),
           },
-        ),
+        };
+      }
+
+      const response = await firstValueFrom(
+        this.httpService.post(`${this.baseUrl}:autocomplete`, body, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': this.apiKey,
+            'X-Goog-FieldMask':
+              'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.types',
+          },
+        }),
       );
 
       const suggestions: any[] = response.data.suggestions || [];

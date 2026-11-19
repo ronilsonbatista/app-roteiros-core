@@ -28,9 +28,11 @@ export interface PlaceDetails {
   types?: string[];
 }
 
-export interface PlacesProvider {
-  searchPlaces(query: string): Promise<PlaceSearchResult[]>;
-  getPlaceDetails(providerPlaceId: string): Promise<PlaceDetails | null>;
+export interface PlacesLocationBias {
+  latitude: number;
+  longitude: number;
+  /** meters; Google Places Autocomplete max circle radius is 50000 */
+  radiusMeters?: number;
 }
 
 export interface PlaceAutocompleteResult {
@@ -38,4 +40,16 @@ export interface PlaceAutocompleteResult {
   name: string;
   subtitle: string;
   types: string[];
+}
+
+export interface PlacesProvider {
+  searchPlaces(
+    query: string,
+    opts?: { includedType?: string; locationBias?: PlacesLocationBias },
+  ): Promise<PlaceSearchResult[]>;
+  autocompleteHotels?(
+    input: string,
+    locationBias?: PlacesLocationBias,
+  ): Promise<PlaceAutocompleteResult[]>;
+  getPlaceDetails(providerPlaceId: string): Promise<PlaceDetails | null>;
 }
