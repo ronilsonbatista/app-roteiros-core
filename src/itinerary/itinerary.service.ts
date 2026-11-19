@@ -93,7 +93,17 @@ export class ItineraryService {
             websiteUri: details.websiteUri,
             internationalPhoneNumber: details.internationalPhoneNumber,
             priceLevel: details.priceLevel,
+            priceLevelDisplay: details.priceLevelDisplay,
             types: details.types,
+            primaryType: details.primaryType,
+            primaryTypeDisplayName: details.primaryTypeDisplayName,
+            openingHoursText: details.openingHoursText,
+            weekdayDescriptions: details.weekdayDescriptions,
+            editorialSummary: details.editorialSummary,
+            photos: details.photos,
+            reviews: details.reviews,
+            latitude: details.latitude,
+            longitude: details.longitude,
           };
         }
       } catch {

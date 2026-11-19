@@ -10,7 +10,31 @@ export interface PlaceSearchResult {
   googleMapsUri?: string;
   websiteUri?: string;
   types?: string[];
-  priceLevel?: number;
+  priceLevel?: number | string;
+  priceLevelDisplay?: string;
+}
+
+export interface PlacePhoto {
+  name: string;
+  widthPx?: number;
+  heightPx?: number;
+  /** Resolved Google-hosted URI safe for clients (no API key). */
+  photoUri?: string;
+  authorAttributions?: Array<{
+    displayName?: string;
+    uri?: string;
+    photoUri?: string;
+  }>;
+}
+
+export interface PlaceReview {
+  rating?: number;
+  text?: string;
+  relativePublishTimeDescription?: string;
+  authorName?: string;
+  authorPhotoUri?: string;
+  authorUri?: string;
+  publishTime?: string;
 }
 
 export interface PlaceDetails {
@@ -24,8 +48,18 @@ export interface PlaceDetails {
   internationalPhoneNumber?: string;
   websiteUri?: string;
   googleMapsUri?: string;
-  priceLevel?: number;
+  priceLevel?: number | string;
+  /** UI-ready $, $$, $$$, $$$$ */
+  priceLevelDisplay?: string;
   types?: string[];
+  primaryType?: string;
+  primaryTypeDisplayName?: string;
+  /** Compact hours for Detalhes (e.g. "12:00-23:00") or weekday summary. */
+  openingHoursText?: string;
+  weekdayDescriptions?: string[];
+  editorialSummary?: string;
+  photos?: PlacePhoto[];
+  reviews?: PlaceReview[];
 }
 
 export interface PlacesLocationBias {
@@ -52,4 +86,25 @@ export interface PlacesProvider {
     locationBias?: PlacesLocationBias,
   ): Promise<PlaceAutocompleteResult[]>;
   getPlaceDetails(providerPlaceId: string): Promise<PlaceDetails | null>;
+}
+
+/** Map Google Places (New) priceLevel enum / legacy int → $, $$, … */
+export function priceLevelToDisplay(
+  priceLevel?: number | string | null,
+): string | undefined {
+  if (priceLevel == null) return undefined;
+  if (typeof priceLevel === 'number') {
+    if (priceLevel <= 0) return undefined;
+    return '$'.repeat(Math.min(4, Math.max(1, priceLevel)));
+  }
+  const map: Record<string, string> = {
+    PRICE_LEVEL_FREE: '',
+    PRICE_LEVEL_INEXPENSIVE: '$',
+    PRICE_LEVEL_MODERATE: '$$',
+    PRICE_LEVEL_EXPENSIVE: '$$$',
+    PRICE_LEVEL_VERY_EXPENSIVE: '$$$$',
+  };
+  const display = map[priceLevel];
+  if (display === '') return undefined;
+  return display;
 }
