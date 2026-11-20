@@ -1,6 +1,7 @@
 import {
   BaseTripStatus,
   BaseTripVisibility,
+  DestinationTipSource,
   PrismaClient,
   Role,
 } from '@prisma/client';
@@ -8,6 +9,50 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
+
+/** Placeholder Home CRM tips (max 3 per destination). Grok job replaces later. */
+const PLACEHOLDER_TIPS: Array<{
+  destinationKey: string;
+  destinationName: string;
+  tips: Array<{ title: string; body: string }>;
+}> = [
+  {
+    destinationKey: 'roma',
+    destinationName: 'Roma',
+    tips: [
+      {
+        title: 'Diversifique as formas de pagamento',
+        body: 'Leve uma combinação de dinheiro em espécie (para emergências e pequenos gastos), cartão de débito internacional (como Wise ou Nomad) e cartão de crédito tradicional.',
+      },
+      {
+        title: 'Avisos de viagem no cartão',
+        body: 'Caso use cartão tradicional, avise o banco no app para evitar bloqueios por compra no exterior.',
+      },
+      {
+        title: 'Água nas fontes',
+        body: 'As fontanelle de Roma têm água potável — leve uma garrafa reutilizável e economize com bebidas.',
+      },
+    ],
+  },
+  {
+    destinationKey: 'paris',
+    destinationName: 'Paris',
+    tips: [
+      {
+        title: 'Metrô e Navigo',
+        body: 'Para alguns dias, o passe Navigo Easy ou tickets t+ costumam sair mais em conta que táxi no centro.',
+      },
+      {
+        title: 'Horário das atrações',
+        body: 'Museus grandes fecham em dias fixos (ex.: Louvre às terças). Confirme antes de montar o dia.',
+      },
+      {
+        title: 'Gorjetas',
+        body: 'Serviço já costuma estar incluído na conta; um arredondamento simbólico basta em cafés e bistrôs.',
+      },
+    ],
+  },
+];
 
 // Imagens públicas (Wikimedia Commons, HTTPS). `file` = "<hash>/<arquivo codificado>".
 const HOME_DESTINATIONS = [
@@ -166,6 +211,43 @@ async function main() {
         `⚠️ Sem providerPlaceId (não aparecem em GET /home/destinations): ${missingPlaceIds.join(', ')}. Defina GOOGLE_MAPS_API_KEY e rode o seed novamente.`,
       );
     }
+  }
+
+  // Seed DestinationTips (Home CRM "Dicas para você"). Idempotente por destinationKey+sortOrder.
+  if (process.env.SEED_DESTINATION_TIPS !== 'false') {
+    let upserted = 0;
+    for (const dest of PLACEHOLDER_TIPS) {
+      for (const [sortOrder, tip] of dest.tips.entries()) {
+        await prisma.destinationTip.upsert({
+          where: {
+            destinationKey_sortOrder: {
+              destinationKey: dest.destinationKey,
+              sortOrder,
+            },
+          },
+          create: {
+            destinationKey: dest.destinationKey,
+            destinationName: dest.destinationName,
+            title: tip.title,
+            body: tip.body,
+            sortOrder,
+            active: true,
+            source: DestinationTipSource.PLACEHOLDER,
+          },
+          update: {
+            destinationName: dest.destinationName,
+            title: tip.title,
+            body: tip.body,
+            active: true,
+            source: DestinationTipSource.PLACEHOLDER,
+          },
+        });
+        upserted += 1;
+      }
+    }
+    console.log(
+      `✅ ${upserted} dicas placeholder (DestinationTip) semeadas/atualizadas.`,
+    );
   }
 
   // Admin Bootstrap - Temporary Secret Lifecycle
