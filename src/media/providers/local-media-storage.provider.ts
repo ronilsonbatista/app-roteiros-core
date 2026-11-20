@@ -1,9 +1,16 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   MediaStorageProvider,
   UploadResult,
   DownloadResult,
+  StoredObjectUrl,
 } from './media-storage.interface';
+import { normalizeStorageKey } from './storage-key';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -34,15 +41,11 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     let targetDir = this.uploadDir;
     if (folder) {
       targetDir = path.join(this.uploadDir, folder);
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
     }
+    await fs.promises.mkdir(targetDir, { recursive: true });
 
     const filePath = path.join(targetDir, filename);
-
-    // Salvar fisicamente
-    fs.writeFileSync(filePath, file.buffer);
+    await fs.promises.writeFile(filePath, file.buffer);
 
     // URL acessível pelo front-end
     const relativeUrlPath = folder ? `${folder}/${filename}` : filename;
@@ -53,19 +56,52 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     return {
       url,
       filename,
+      key: relativeUrlPath,
       mimeType: file.mimetype,
       size: file.size,
     };
   }
 
+  resolveReadUrl(key: string): Promise<StoredObjectUrl> {
+    const clean = normalizeStorageKey(key);
+    const publicBase = (process.env.IMAGE_BANK_PUBLIC_BASE_URL || '').replace(
+      /\/$/,
+      '',
+    );
+    if (publicBase) {
+      return Promise.resolve({
+        url: `${publicBase}/${clean}`,
+        expiresAt: null,
+      });
+    }
+    const base = this.baseUrl.replace(/\/$/, '');
+    return Promise.resolve({ url: `${base}/${clean}`, expiresAt: null });
+  }
+
+  async deleteByKey(key: string): Promise<void> {
+    const filePath = this.resolveInsideUploadDir(key);
+    try {
+      await fs.promises.unlink(filePath);
+      this.logger.log(`File deleted by key: ${filePath}`);
+    } catch (error) {
+      if (nodeErrorCode(error) === 'ENOENT') return;
+      throw error;
+    }
+  }
+
   async getFile(key: string): Promise<DownloadResult> {
-    const cleanKey = key.replace(/^\//, '');
-    const filePath = path.join(this.uploadDir, cleanKey);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException(`Arquivo não encontrado: ${cleanKey}`);
+    const filePath = this.resolveInsideUploadDir(key);
+    const cleanKey = normalizeStorageKey(key);
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(filePath);
+    } catch (error) {
+      if (nodeErrorCode(error) === 'ENOENT') {
+        throw new NotFoundException(`Arquivo não encontrado: ${cleanKey}`);
+      }
+      throw error;
     }
 
-    const stat = fs.statSync(filePath);
     const stream = fs.createReadStream(filePath);
     const ext = path.extname(cleanKey).toLowerCase();
     const mimeMap: Record<string, string> = {
@@ -90,13 +126,27 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
     try {
       const relativePath = url.replace(`${this.baseUrl}/`, '');
       const filePath = path.join(this.uploadDir, relativePath);
-
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        this.logger.log(`File deleted: ${filePath}`);
-      }
+      await fs.promises.unlink(filePath);
+      this.logger.log(`File deleted: ${filePath}`);
     } catch (error) {
+      if (nodeErrorCode(error) === 'ENOENT') return;
       this.logger.error(`Error deleting file: ${url}`, error);
     }
   }
+
+  private resolveInsideUploadDir(key: string): string {
+    const clean = normalizeStorageKey(key);
+    const root = path.resolve(this.uploadDir);
+    const filePath = path.resolve(root, clean);
+    if (filePath !== root && !filePath.startsWith(root + path.sep)) {
+      throw new BadRequestException('Chave de storage inválida');
+    }
+    return filePath;
+  }
+}
+
+function nodeErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error))
+    return undefined;
+  return typeof error.code === 'string' ? error.code : undefined;
 }

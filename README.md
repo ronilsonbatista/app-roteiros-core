@@ -33,7 +33,7 @@ O sistema foi arquitetado visando escalabilidade, modularidade e segurança.
 | **ORM** | Prisma (v7) | Tradução e modelagem de entidades do banco de dados relacional. |
 | **Banco de Dados** | PostgreSQL (v15) | Armazenamento persistente de usuários, viagens, compras e logs. |
 | **Segurança** | JWT, Helmet & Throttler | Proteção contra ataques comuns, limitação de requisições e RBAC. |
-| **Mensageria / Upload** | Local Storage Provider | Serviço estruturado de uploads com validação por mime-type e tamanho. |
+| **Mensageria / Upload** | Filesystem, MinIO ou S3/R2 | Uploads com validação de mime e tamanho. O banco de imagens guarda só a chave; o binário fica no object storage. |
 | **Integração IA** | OpenAI API | Geração automatizada de roteiros com base no perfil de viagem. |
 | **Integração Mapas** | Google Places API | Pesquisa de atrações reais, geolocalização e enriquecimento de locais. |
 
@@ -41,7 +41,7 @@ O sistema foi arquitetado visando escalabilidade, modularidade e segurança.
 
 ## 📂 Módulos Existentes (App)
 
-A API possui 13 módulos funcionais principais projetados para a experiência do usuário final e controle interno:
+A API possui módulos funcionais principais projetados para a experiência do usuário final e controle interno:
 
 - **Auth**: Cadastro de contas (`/auth/signup`), login de usuários com tokens de acesso e refresh (`/auth/login`), renovação de credenciais (`/auth/refresh`) e expiração de sessões.
 - **Users**: Recuperação e atualização de dados básicos de perfil (`/users/me`).
@@ -51,7 +51,8 @@ A API possui 13 módulos funcionais principais projetados para a experiência do
 - **Itinerary**: Gestão e ordenação de atividades/atrações (`/trip-days/:id/items`) contendo horários, notas e custos.
 - **Participants**: Sistema de convites (`/trips/:id/participants`) para planejamento compartilhado.
 - **Places**: Integração de pesquisa de locais do Google Places e preenchimento automático.
-- **Media**: Upload seguro de avatares e imagens de capa de viagem para o diretório `uploads`.
+- **Media**: Upload seguro de avatares e imagens de capa de viagem para o diretório `uploads` ou S3.
+- **Image Bank**: Catálogo de destinos, cidades e 5 fotos HD de pontos turísticos por cidade publicada (`/image-bank`, escrita em `/admin/image-bank`). O arquivo fica no object storage; o Postgres guarda a chave e os metadados.
 - **Billing**: Catálogo de produtos premium (`/products`) e fluxo de compras mockado (`/purchases`).
 - **AI**: Geração automática de roteiros via OpenAI API com base no perfil.
 - **Analytics**: Métricas básicas internas.
@@ -73,6 +74,7 @@ Os endpoints administrativos são prefixados por `/admin` e protegidos de forma 
 - **Admin AI**: Logs completos de auditoria e depuração de chamadas de IA (`/admin/ai-requests`).
 - **Admin Places**: Enriquecimento geográfico administrativo de atrações e restaurantes base.
 - **Admin Media**: Upload de imagens de capa para roteiros base e pontos turísticos.
+- **Admin Image Bank**: Cadastro do banco de imagens (destino, cidade, upload das 5 fotos HD).
 - **Admin Analytics**: Análise de crescimento de usuários, geração de viagens e faturamento financeiro.
 
 ---
@@ -204,6 +206,22 @@ A especificação do Swagger divide os endpoints de forma organizada em 22 área
    ```
 
 ---
+
+## Banco de imagens
+
+Metadados em PostgreSQL. O binário HD fica em object storage com interface S3 (filesystem ou MinIO em dev, S3/R2 em produção). A leitura devolve URL assinada ou, no filesystem, o path público `MEDIA_BASE_URL` + chave. O JSON não traz o arquivo.
+
+Escala prevista: cerca de 160 destinos, em geral 1 cidade por destino (o schema aceita várias), 5 fotos originais por cidade publicada. Originais de alguns MB cada, na casa de 5–20 GB no total, fora derivados (thumb/card), que o schema já reserva e esta versão não gera.
+
+```bash
+npx prisma migrate dev
+npm run seed
+npm run start:dev
+```
+
+Com `MEDIA_STORAGE_PROVIDER=local`, o seed grava PNG 1x1 de exemplo em `uploads/image-bank/` (não baixa as fotos reais). Para MinIO: `docker compose --profile minio up -d` e as variáveis `S3_*` do `.env.example`.
+
+Leitura pública: `GET /image-bank/destinations` e `GET /image-bank/destinations/:slug`. Escrita (admin): `POST /admin/image-bank/cities/:cityId/images` em multipart.
 
 ## 🐳 Docker Compose
 

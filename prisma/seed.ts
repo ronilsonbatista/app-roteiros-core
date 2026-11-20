@@ -4,6 +4,7 @@ import {
   PrismaClient,
   Role,
 } from '@prisma/client';
+import { seedImageBank } from './image-bank.seed';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
@@ -166,6 +167,10 @@ async function main() {
         `⚠️ Sem providerPlaceId (não aparecem em GET /home/destinations): ${missingPlaceIds.join(', ')}. Defina GOOGLE_MAPS_API_KEY e rode o seed novamente.`,
       );
     }
+  }
+
+  if (process.env.SEED_IMAGE_BANK !== 'false') {
+    await seedImageBank(prisma);
   }
 
   // Admin Bootstrap - Temporary Secret Lifecycle

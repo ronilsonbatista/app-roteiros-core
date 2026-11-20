@@ -22,10 +22,16 @@ describe('MediaService', () => {
       uploadFile: jest.fn().mockResolvedValue({
         url: 'https://cdn.2go.com/avatars/test.jpg',
         filename: 'test.jpg',
+        key: 'avatars/test.jpg',
         mimeType: 'image/jpeg',
         size: 1024,
       }),
       deleteFile: jest.fn().mockResolvedValue(undefined),
+      deleteByKey: jest.fn().mockResolvedValue(undefined),
+      resolveReadUrl: jest.fn().mockResolvedValue({
+        url: 'https://cdn.2go.com/avatars/test.jpg',
+        expiresAt: null,
+      }),
       getFile: jest.fn().mockResolvedValue({
         buffer: Buffer.from(''),
         mimeType: 'image/jpeg',
@@ -50,7 +56,9 @@ describe('MediaService', () => {
 
   describe('uploadAvatar', () => {
     it('should throw BadRequestException if no file is provided', async () => {
-      await expect(service.uploadAvatar('user_123', null as any)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.uploadAvatar('user_123', null as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should upload file and update user photoUrl', async () => {
@@ -63,7 +71,10 @@ describe('MediaService', () => {
 
       const result = await service.uploadAvatar('user_123', mockFile);
 
-      expect(mediaProvider.uploadFile).toHaveBeenCalledWith(mockFile, 'avatars');
+      expect(mediaProvider.uploadFile).toHaveBeenCalledWith(
+        mockFile,
+        'avatars',
+      );
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user_123' },
         data: { photoUrl: 'https://cdn.2go.com/avatars/test.jpg' },
@@ -77,7 +88,9 @@ describe('MediaService', () => {
       prisma.baseTrip.findUnique.mockResolvedValue(null);
       const mockFile = { originalname: 'trip.jpg' } as Express.Multer.File;
 
-      await expect(service.uploadBaseTripCover('trip_999', mockFile)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.uploadBaseTripCover('trip_999', mockFile),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

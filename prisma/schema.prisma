@@ -304,6 +304,9 @@ model BaseTrip {
   days              BaseTripDay[]
   aiRequests        AIRequest[]
 
+  // Catálogo de fotos HD. Opcional: o roteiro-template continua sendo a BaseTrip.
+  imageBankDestination ImageBankDestination?
+
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -1028,5 +1031,94 @@ model CompanyExpense {
   @@index([category])
   @@index([archivedAt])
   @@map("company_expenses")
+}
+
+/// Banco de imagens de destinos de viagem.
+/// Metadados no Postgres (~160 destinos). O binário HD fica em object storage;
+/// aqui só a chave e os atributos necessários para servir a foto.
+enum ImageBankStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// ORIGINAL é a foto HD. THUMB e CARD ficam reservados para derivados futuros
+/// e não entram na contagem das 5 imagens da cidade publicada.
+enum ImageBankImageVariant {
+  ORIGINAL
+  THUMB
+  CARD
+}
+
+model ImageBankDestination {
+  id        String           @id @default(uuid())
+  slug      String           @unique
+  name      String
+  country   String
+  region    String?
+  summary   String?
+  status    ImageBankStatus  @default(DRAFT)
+
+  /// Liga o destino do banco de imagens ao roteiro-template da Home, quando existir.
+  baseTripId String?         @unique
+  baseTrip   BaseTrip?       @relation(fields: [baseTripId], references: [id], onDelete: SetNull)
+
+  cities    ImageBankCity[]
+
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([status])
+  @@map("image_bank_destinations")
+}
+
+model ImageBankCity {
+  id            String          @id @default(uuid())
+  destinationId String
+  destination   ImageBankDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  slug          String
+  name          String
+  summary       String?
+  sortOrder     Int             @default(0)
+  status        ImageBankStatus @default(DRAFT)
+
+  images        ImageBankSpotImage[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([destinationId, slug])
+  @@index([destinationId, sortOrder])
+  @@index([status])
+  @@map("image_bank_cities")
+}
+
+model ImageBankSpotImage {
+  id        String                 @id @default(uuid())
+  cityId    String
+  city      ImageBankCity          @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  spotName  String
+  altText   String
+  sortOrder Int
+  variant   ImageBankImageVariant  @default(ORIGINAL)
+
+  storageKey String                @unique
+  mimeType   String
+  width      Int
+  height     Int
+  bytes      Int
+
+  /// Preenchido só em THUMB/CARD, apontando para a ORIGINAL. Não geramos derivados agora.
+  derivedFromId String?
+  derivedFrom   ImageBankSpotImage?  @relation("ImageBankDerivatives", fields: [derivedFromId], references: [id], onDelete: Cascade)
+  derivatives   ImageBankSpotImage[] @relation("ImageBankDerivatives")
+
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@unique([cityId, variant, sortOrder])
+  @@index([derivedFromId])
+  @@map("image_bank_spot_images")
 }
 
