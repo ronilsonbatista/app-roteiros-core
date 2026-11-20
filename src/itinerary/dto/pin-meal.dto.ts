@@ -51,4 +51,21 @@ export class PinMealDto {
   @IsOptional()
   @IsString()
   googleMapsLink?: string;
+
+  /** Restaurant photo URL for timeline selected card (stored in externalLink). */
+  @ApiPropertyOptional({ example: 'https://lh3.googleusercontent.com/...' })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  /** Display price range ($, $$, …) — encoded into notes metadata with dish. */
+  @ApiPropertyOptional({ example: '$$' })
+  @IsOptional()
+  @IsString()
+  priceRange?: string;
+
+  @ApiPropertyOptional({ example: 4.7 })
+  @IsOptional()
+  @IsNumber()
+  rating?: number;
 }
