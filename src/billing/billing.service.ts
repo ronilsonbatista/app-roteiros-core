@@ -22,6 +22,14 @@ import {
   CheckoutSummaryDto,
   CheckoutQuoteResponseDto,
   CheckoutResponseDto,
+  ValidateCouponDto,
+  ValidateCouponResponseDto,
+  CreateCardIntentDto,
+  CardIntentResponseDto,
+  ExpirePurchaseResponseDto,
+  PaymentMethodType,
+  PaymentMethodAvailabilityDto,
+  PaymentMethodAvailabilityStatus,
 } from './dto/billing.dto';
 import {
   PurchaseStatus,
@@ -30,6 +38,7 @@ import {
   GuestJourneyStatus,
   Prisma,
 } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class BillingService {
@@ -91,6 +100,63 @@ export class BillingService {
     if (!code) return undefined;
     const trimmed = code.trim().toUpperCase();
     return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  /** PIX + CARD are chargeable today; wallets listed for Carrinho UI prep. */
+  public getPaymentMethodAvailability(): PaymentMethodAvailabilityDto[] {
+    const walletsEnabled =
+      (process.env.WALLET_PAYMENTS_ENABLED || '').toLowerCase() === 'true';
+
+    return [
+      {
+        method: PaymentMethodType.PIX,
+        available: true,
+        status: PaymentMethodAvailabilityStatus.AVAILABLE,
+      },
+      {
+        method: PaymentMethodType.CARD,
+        available: true,
+        status: PaymentMethodAvailabilityStatus.AVAILABLE,
+      },
+      {
+        method: PaymentMethodType.APPLE_PAY,
+        available: walletsEnabled,
+        status: walletsEnabled
+          ? PaymentMethodAvailabilityStatus.AVAILABLE
+          : PaymentMethodAvailabilityStatus.COMING_SOON,
+        reason: walletsEnabled
+          ? undefined
+          : 'Apple Pay requer configuração manual (Merchant ID + Mercado Pago). Ver docs.',
+      },
+      {
+        method: PaymentMethodType.GOOGLE_PAY,
+        available: walletsEnabled,
+        status: walletsEnabled
+          ? PaymentMethodAvailabilityStatus.AVAILABLE
+          : PaymentMethodAvailabilityStatus.COMING_SOON,
+        reason: walletsEnabled
+          ? undefined
+          : 'Google Pay requer configuração manual (Merchant ID + Mercado Pago). Ver docs.',
+      },
+    ];
+  }
+
+  public getChargeablePaymentMethods(): string[] {
+    return this.getPaymentMethodAvailability()
+      .filter((m) => m.available)
+      .map((m) => m.method);
+  }
+
+  private assertChargeablePaymentMethod(method: PaymentMethodType) {
+    const availability = this.getPaymentMethodAvailability().find(
+      (m) => m.method === method,
+    );
+    if (!availability?.available) {
+      throw new BadRequestException(
+        availability?.reason ||
+          `Método de pagamento ${method} ainda não está disponível`,
+      );
+    }
   }
 
   public async validateAndCalculateCoupon(
@@ -201,7 +267,8 @@ export class BillingService {
       },
       existingPurchaseId: existingPurchase?.id,
       existingPurchaseStatus: existingPurchase?.status,
-      supportedPaymentMethods: ['PIX', 'CARD'],
+      supportedPaymentMethods: this.getChargeablePaymentMethods(),
+      paymentMethodAvailability: this.getPaymentMethodAvailability(),
     };
   }
 
@@ -255,9 +322,211 @@ export class BillingService {
             discountValue: Number(calc.coupon.discountValue),
           }
         : undefined,
-      supportedPaymentMethods: ['PIX', 'CARD'],
+      supportedPaymentMethods: this.getChargeablePaymentMethods(),
+      paymentMethodAvailability: this.getPaymentMethodAvailability(),
       existingPurchaseId: existingPurchase?.id,
       existingPurchaseStatus: existingPurchase?.status,
+    };
+  }
+
+  /**
+   * Soft coupon validate for Carrinho (does not throw on invalid code).
+   * Price always from backend Product — never client-supplied.
+   */
+  async validateCouponForTrip(
+    userId: string,
+    tripId: string,
+    dto: ValidateCouponDto,
+  ): Promise<ValidateCouponResponseDto> {
+    const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
+    if (!trip) throw new NotFoundException('Trip não encontrada');
+    if (trip.userId !== userId) {
+      throw new ForbiddenException('Não autorizado. A viagem pertence a outro usuário.');
+    }
+
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+    });
+    if (!product) {
+      throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
+    }
+
+    try {
+      const calc = await this.validateAndCalculateCoupon(
+        dto.couponCode,
+        product.price,
+        product.type,
+      );
+      if (!calc.coupon) {
+        return {
+          valid: false,
+          reason: 'Informe um código de cupom',
+          pricing: {
+            originalAmount: Number(product.price),
+            discountAmount: 0,
+            finalAmount: Number(product.price),
+            currency: product.currency,
+          },
+        };
+      }
+      return {
+        valid: true,
+        code: calc.coupon.code,
+        pricing: {
+          originalAmount: Number(product.price),
+          discountAmount: Number(calc.discountAmount),
+          finalAmount: Number(calc.finalAmount),
+          currency: product.currency,
+        },
+        coupon: {
+          code: calc.coupon.code,
+          applied: true,
+          discountType: calc.coupon.discountType,
+          discountValue: Number(calc.coupon.discountValue),
+        },
+      };
+    } catch (err: any) {
+      if (err instanceof BadRequestException) {
+        const response = err.getResponse();
+        const message =
+          typeof response === 'string'
+            ? response
+            : typeof response === 'object' &&
+                response &&
+                'message' in response
+              ? Array.isArray((response as any).message)
+                ? (response as any).message.join(', ')
+                : String((response as any).message)
+              : 'Cupom inválido';
+        return {
+          valid: false,
+          code: this.normalizeCouponCode(dto.couponCode),
+          reason: message,
+          pricing: {
+            originalAmount: Number(product.price),
+            discountAmount: 0,
+            finalAmount: Number(product.price),
+            currency: product.currency,
+          },
+        };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Card intent stub — returns a client-ready session without charging.
+   * Real Brick / Card Form wiring needs MERCADO_PAGO_PUBLIC_KEY (Ronilson).
+   */
+  async createCardIntent(
+    userId: string,
+    dto: CreateCardIntentDto,
+  ): Promise<CardIntentResponseDto> {
+    const trip = await this.prisma.trip.findUnique({ where: { id: dto.tripId } });
+    if (!trip) throw new NotFoundException('Trip não encontrada');
+    if (trip.userId !== userId) {
+      throw new ForbiddenException('Não autorizado. A viagem pertence a outro usuário.');
+    }
+    if (trip.premiumUnlockedAt != null) {
+      throw new BadRequestException('Esta viagem já possui acesso premium liberado.');
+    }
+
+    const product = await this.prisma.product.findFirst({
+      where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
+    });
+    if (!product) {
+      throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
+    }
+
+    const calc = await this.validateAndCalculateCoupon(
+      dto.couponCode,
+      product.price,
+      product.type,
+    );
+
+    const publicKey = process.env.MERCADO_PAGO_PUBLIC_KEY || undefined;
+    const intentId = `card_intent_${randomUUID().replace(/-/g, '')}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const amount = Number(calc.finalAmount);
+
+    return {
+      intentId,
+      tripId: dto.tripId,
+      status: publicKey ? 'REQUIRES_CONFIRMATION' : 'READY',
+      publicKey,
+      amount,
+      currency: product.currency,
+      clientSecret: publicKey
+        ? undefined
+        : `stub_secret_${intentId}`,
+      expiresAt,
+      message: publicKey
+        ? 'Use publicKey no Brick/Card Form; confirme com POST /purchases/checkout + cardToken.'
+        : 'Stub sem MERCADO_PAGO_PUBLIC_KEY: use cardToken de teste no checkout (ex.: test-card-token).',
+      pricing: {
+        originalAmount: Number(product.price),
+        discountAmount: Number(calc.discountAmount),
+        finalAmount: amount,
+        currency: product.currency,
+      },
+    };
+  }
+
+  /**
+   * Expire a PENDING purchase (Pix abandon / TTL). Marks EXPIRED and asks provider to cancel.
+   */
+  async expirePurchase(
+    userId: string,
+    purchaseId: string,
+  ): Promise<ExpirePurchaseResponseDto> {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+    });
+    if (!purchase) throw new NotFoundException('Compra não encontrada');
+    if (purchase.userId !== userId) {
+      throw new ForbiddenException('Não autorizado');
+    }
+
+    if (purchase.status === PurchaseStatus.EXPIRED) {
+      return {
+        purchaseId: purchase.id,
+        status: purchase.status,
+        expiredAt: purchase.expiredAt || undefined,
+        message: 'Compra já estava expirada',
+      };
+    }
+
+    if (purchase.status !== PurchaseStatus.PENDING) {
+      throw new BadRequestException(
+        `Não é possível expirar compra com status ${purchase.status}`,
+      );
+    }
+
+    const provider = this.resolvePaymentProvider();
+    if (purchase.providerPaymentId && provider.expirePayment) {
+      try {
+        await provider.expirePayment(purchase.providerPaymentId);
+      } catch (err: any) {
+        this.logger.warn(
+          `Falha ao cancelar no provedor ao expirar ${purchaseId}: ${err.message}`,
+        );
+      }
+    }
+
+    const expiredAt = new Date();
+    const updated = await this.prisma.purchase.update({
+      where: { id: purchase.id },
+      data: {
+        status: PurchaseStatus.EXPIRED,
+        expiredAt,
+      },
+    });
+
+    return {
+      purchaseId: updated.id,
+      status: updated.status,
+      expiredAt: updated.expiredAt || expiredAt,
+      message: 'Cobrança expirada. Pode iniciar um novo pagamento.',
     };
   }
 
@@ -267,6 +536,8 @@ export class BillingService {
     idempotencyKey?: string,
     userEmail?: string,
   ): Promise<CheckoutResponseDto> {
+    this.assertChargeablePaymentMethod(dto.paymentMethod);
+
     const trip = await this.prisma.trip.findUnique({
       where: { id: dto.tripId },
     });

@@ -14,6 +14,30 @@ import { ProductType, DiscountType } from '@prisma/client';
 export enum PaymentMethodType {
   PIX = 'PIX',
   CARD = 'CARD',
+  /** Wallet prep — rejected at checkout until Ronilson configures Apple Pay + MP. */
+  APPLE_PAY = 'APPLE_PAY',
+  /** Wallet prep — rejected at checkout until Ronilson configures Google Pay + MP. */
+  GOOGLE_PAY = 'GOOGLE_PAY',
+}
+
+export enum PaymentMethodAvailabilityStatus {
+  AVAILABLE = 'AVAILABLE',
+  COMING_SOON = 'COMING_SOON',
+  REQUIRES_CONFIG = 'REQUIRES_CONFIG',
+}
+
+export class PaymentMethodAvailabilityDto {
+  @ApiProperty({ enum: PaymentMethodType })
+  method: PaymentMethodType;
+
+  @ApiProperty()
+  available: boolean;
+
+  @ApiProperty({ enum: PaymentMethodAvailabilityStatus })
+  status: PaymentMethodAvailabilityStatus;
+
+  @ApiPropertyOptional()
+  reason?: string;
 }
 
 export class CreateProductDto {
@@ -173,6 +197,13 @@ export class CheckoutQuoteDto {
   couponCode?: string;
 }
 
+export class ValidateCouponDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  couponCode: string;
+}
+
 export class CheckoutPurchaseDto {
   @ApiProperty()
   @IsString()
@@ -197,6 +228,37 @@ export class CheckoutPurchaseDto {
   @IsNumber()
   @IsOptional()
   installments?: number;
+}
+
+export class CreateCardIntentDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  tripId: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  couponCode?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsNumber()
+  @IsOptional()
+  installments?: number;
+}
+
+export class ExpirePurchaseResponseDto {
+  @ApiProperty()
+  purchaseId: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiPropertyOptional()
+  expiredAt?: Date;
+
+  @ApiPropertyOptional()
+  message?: string;
 }
 
 export class CheckoutPricingDto {
@@ -244,6 +306,55 @@ export class CheckoutCouponDto {
   description?: string;
 }
 
+export class ValidateCouponResponseDto {
+  @ApiProperty()
+  valid: boolean;
+
+  @ApiPropertyOptional()
+  code?: string;
+
+  @ApiPropertyOptional()
+  reason?: string;
+
+  @ApiPropertyOptional({ type: () => CheckoutPricingDto })
+  pricing?: CheckoutPricingDto;
+
+  @ApiPropertyOptional({ type: () => CheckoutCouponDto })
+  coupon?: CheckoutCouponDto;
+}
+
+export class CardIntentResponseDto {
+  @ApiProperty()
+  intentId: string;
+
+  @ApiProperty()
+  tripId: string;
+
+  @ApiProperty({ enum: ['REQUIRES_CONFIRMATION', 'READY', 'UNSUPPORTED'] })
+  status: 'REQUIRES_CONFIRMATION' | 'READY' | 'UNSUPPORTED';
+
+  @ApiPropertyOptional()
+  publicKey?: string;
+
+  @ApiProperty()
+  amount: number;
+
+  @ApiProperty()
+  currency: string;
+
+  @ApiPropertyOptional()
+  clientSecret?: string;
+
+  @ApiPropertyOptional()
+  expiresAt?: string;
+
+  @ApiPropertyOptional()
+  message?: string;
+
+  @ApiPropertyOptional({ type: () => CheckoutPricingDto })
+  pricing?: CheckoutPricingDto;
+}
+
 export class CheckoutSummaryDto {
   @ApiProperty()
   tripId: string;
@@ -266,8 +377,13 @@ export class CheckoutSummaryDto {
   @ApiPropertyOptional()
   existingPurchaseStatus?: string;
 
+  /** Methods accepted by POST /purchases/checkout today (PIX, CARD). */
   @ApiProperty({ type: [String] })
   supportedPaymentMethods: string[];
+
+  /** Full Carrinho matrix including wallet prep (Apple/Google Pay). */
+  @ApiProperty({ type: [PaymentMethodAvailabilityDto] })
+  paymentMethodAvailability: PaymentMethodAvailabilityDto[];
 }
 
 export class CheckoutQuoteResponseDto {
@@ -288,6 +404,9 @@ export class CheckoutQuoteResponseDto {
 
   @ApiProperty({ type: [String] })
   supportedPaymentMethods: string[];
+
+  @ApiProperty({ type: [PaymentMethodAvailabilityDto] })
+  paymentMethodAvailability: PaymentMethodAvailabilityDto[];
 
   @ApiPropertyOptional()
   existingPurchaseId?: string;

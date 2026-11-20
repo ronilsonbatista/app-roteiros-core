@@ -182,10 +182,70 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     }
   }
 
+  async expirePayment(providerPaymentId: string): Promise<PaymentResult> {
+    const accessToken = this.getAccessToken();
+
+    if (accessToken === 'TEST-MOCK-MERCADOPAGO-ACCESS-TOKEN') {
+      return {
+        success: true,
+        status: 'EXPIRED',
+        providerPaymentId,
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.mercadopago.com/v1/payments/${providerPaymentId}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'cancelled' }),
+        },
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        this.logger.warn(
+          `Falha ao cancelar pagamento MP ${providerPaymentId}: ${response.status} ${JSON.stringify(data)}`,
+        );
+        return {
+          success: false,
+          status: 'PENDING',
+          providerPaymentId,
+          error: data.message || 'Falha ao expirar pagamento no Mercado Pago',
+        };
+      }
+
+      return {
+        success: true,
+        status: 'EXPIRED',
+        providerPaymentId: data.id ? String(data.id) : providerPaymentId,
+      };
+    } catch (err: any) {
+      this.logger.error(`Exceção ao expirar pagamento MP: ${err.message}`);
+      throw new InternalServerErrorException(
+        `Erro ao expirar pagamento no Mercado Pago: ${err.message}`,
+      );
+    }
+  }
+
   async getPaymentStatus(providerPaymentId: string): Promise<PaymentResult> {
     const accessToken = this.getAccessToken();
 
     if (accessToken === 'TEST-MOCK-MERCADOPAGO-ACCESS-TOKEN') {
+      // Test-token path stays PENDING for PIX-shaped ids so Carrinho can poll/expire.
+      if (providerPaymentId.startsWith('mp_test_')) {
+        return {
+          success: false,
+          status: 'PENDING',
+          providerPaymentId,
+          amount: 19.99,
+          currency: 'BRL',
+        };
+      }
       return {
         success: true,
         status: 'PAID',
