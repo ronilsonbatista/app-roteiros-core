@@ -1,7 +1,10 @@
 import { of, throwError } from 'rxjs';
 import { HttpException } from '@nestjs/common';
 import { GooglePlacesProvider } from './google-places.provider';
-import { priceLevelToDisplay } from './places-provider.interface';
+import {
+  priceLevelToDisplay,
+  priceLevelToNumeric,
+} from './places-provider.interface';
 
 describe('GooglePlacesProvider.autocompletePlaces', () => {
   const http = { post: jest.fn() };
@@ -230,5 +233,14 @@ describe('priceLevelToDisplay', () => {
     expect(priceLevelToDisplay('PRICE_LEVEL_MODERATE')).toBe('$$');
     expect(priceLevelToDisplay(3)).toBe('$$$');
     expect(priceLevelToDisplay(undefined)).toBeUndefined();
+  });
+});
+
+describe('priceLevelToNumeric', () => {
+  it('converte enum e inteiro para escala 0–4', () => {
+    expect(priceLevelToNumeric('PRICE_LEVEL_MODERATE')).toBe(2);
+    expect(priceLevelToNumeric(3)).toBe(3);
+    expect(priceLevelToNumeric(undefined)).toBeUndefined();
+    expect(priceLevelToNumeric('PRICE_LEVEL_FREE')).toBe(0);
   });
 });

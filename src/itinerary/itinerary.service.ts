@@ -30,6 +30,7 @@ import {
   buildAlternativesFacets,
   isAccessibleFromText,
 } from './alternatives-filters.util';
+import { priceLevelToNumeric } from '../places/providers/places-provider.interface';
 
 @Injectable()
 export class ItineraryService {
@@ -288,7 +289,9 @@ export class ItineraryService {
       const places = await this.placesService.searchPlaces(
         `${item.category} ${trip.destination}`,
       );
-      placesCandidates = places.map((p) => ({
+      placesCandidates = places.map((p) => {
+        const numericPriceLevel = priceLevelToNumeric(p.priceLevel);
+        return {
         title: p.name,
         category: item.category,
         description: null,
@@ -296,7 +299,7 @@ export class ItineraryService {
         providerPlaceId: p.providerPlaceId,
         latitude: p.latitude || null,
         longitude: p.longitude || null,
-        cost: p.priceLevel ? p.priceLevel * 15 : 0,
+        cost: numericPriceLevel ? numericPriceLevel * 15 : 0,
         currency: 'EUR',
         duration: isFood ? 90 : 60,
         rating: p.rating,
@@ -310,7 +313,8 @@ export class ItineraryService {
         accessible: false,
         goodForKids: false,
         goodForRainyDays: false,
-      }));
+      };
+      });
     } catch {
       placesCandidates = [];
     }

@@ -88,6 +88,25 @@ export interface PlacesProvider {
   getPlaceDetails(providerPlaceId: string): Promise<PlaceDetails | null>;
 }
 
+/** Map Google Places (New) priceLevel enum / legacy int → 0–4 scale. */
+export function priceLevelToNumeric(
+  priceLevel?: number | string | null,
+): number | undefined {
+  if (priceLevel == null) return undefined;
+  if (typeof priceLevel === 'number') {
+    if (!Number.isFinite(priceLevel) || priceLevel < 0) return undefined;
+    return Math.min(4, Math.max(0, Math.trunc(priceLevel)));
+  }
+  const map: Record<string, number> = {
+    PRICE_LEVEL_FREE: 0,
+    PRICE_LEVEL_INEXPENSIVE: 1,
+    PRICE_LEVEL_MODERATE: 2,
+    PRICE_LEVEL_EXPENSIVE: 3,
+    PRICE_LEVEL_VERY_EXPENSIVE: 4,
+  };
+  return map[priceLevel];
+}
+
 /** Map Google Places (New) priceLevel enum / legacy int → $, $$, … */
 export function priceLevelToDisplay(
   priceLevel?: number | string | null,
