@@ -205,6 +205,22 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
                   address: 'Via dei Fori Imperiali',
                   providerPlaceId: 'place-forum',
                   requiresTicket: true,
+                  duration: 90,
+                  goodForKids: true,
+                  goodForRainyDays: false,
+                  accessibility: 'rampas',
+                },
+                {
+                  id: 'attr-2',
+                  name: 'Museu do Vaticano',
+                  category: ItineraryCategory.MUSEUM,
+                  address: 'Vaticano',
+                  providerPlaceId: 'place-vat',
+                  requiresTicket: true,
+                  duration: 180,
+                  goodForKids: false,
+                  goodForRainyDays: true,
+                  accessibility: 'elevadores',
                 },
               ],
             },
@@ -221,6 +237,101 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
       });
       expect(result.items.some((i: any) => i.title === 'Fórum Romano')).toBe(true);
       expect(result.items.some((i: any) => i.title === 'Panteão de Roma')).toBe(true);
+      expect(result.facets.categories.length).toBeGreaterThan(0);
+      expect(result.items.find((i: any) => i.title === 'Fórum Romano')).toMatchObject({
+        accessible: true,
+        goodForKids: true,
+        goodForRainyDays: false,
+      });
+    });
+
+    it('should filter alternatives by Filtrar por query params', async () => {
+      const mockItem = {
+        id: 'item-swap-1',
+        title: 'Atração Atual',
+        category: ItineraryCategory.TOURIST_ATTRACTION,
+        tripDayId: 'day-1',
+        tripDay: {
+          dayNumber: 1,
+          trip: {
+            id: 'trip-1',
+            userId: 'user-1',
+            destination: 'Roma',
+            allowedSwapsCount: 4,
+            usedSwapsCount: 0,
+            createdFromGuestJourneys: [],
+            purchases: [],
+          },
+        },
+      };
+      prismaMock.itineraryItem.findUnique.mockResolvedValue(mockItem);
+      prismaMock.itineraryItem.findMany.mockResolvedValue([{ title: 'Atração Atual' }]);
+      prismaMock.baseTrip.findMany.mockResolvedValue([
+        {
+          id: 'base-1',
+          days: [
+            {
+              attractions: [
+                {
+                  id: 'attr-1',
+                  name: 'Fórum Romano',
+                  category: ItineraryCategory.TOURIST_ATTRACTION,
+                  address: 'Via dei Fori Imperiali',
+                  providerPlaceId: 'place-forum',
+                  requiresTicket: true,
+                  duration: 90,
+                  cost: 16,
+                  goodForKids: true,
+                  goodForRainyDays: false,
+                  accessibility: null,
+                },
+                {
+                  id: 'attr-2',
+                  name: 'Museu do Vaticano',
+                  category: ItineraryCategory.MUSEUM,
+                  address: 'Vaticano',
+                  providerPlaceId: 'place-vat',
+                  requiresTicket: true,
+                  duration: 180,
+                  cost: 20,
+                  goodForKids: false,
+                  goodForRainyDays: true,
+                  accessibility: 'elevadores',
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      placesServiceMock.searchPlaces.mockResolvedValue([]);
+
+      const rainy = await service.getAlternatives(
+        { userId: 'user-1' },
+        'item-swap-1',
+        { goodForRainyDays: true },
+      );
+      expect(rainy.items.map((i: any) => i.title)).toEqual(['Museu do Vaticano']);
+
+      const museum = await service.getAlternatives(
+        { userId: 'user-1' },
+        'item-swap-1',
+        { category: ItineraryCategory.MUSEUM },
+      );
+      expect(museum.items.map((i: any) => i.title)).toEqual(['Museu do Vaticano']);
+
+      const freeOnly = await service.getAlternatives(
+        { userId: 'user-1' },
+        'item-swap-1',
+        { free: true, paid: false },
+      );
+      expect(freeOnly.items).toEqual([]);
+
+      const kidsAccessible = await service.getAlternatives(
+        { userId: 'user-1' },
+        'item-swap-1',
+        { goodForKids: true, accessible: true },
+      );
+      expect(kidsAccessible.items).toEqual([]);
     });
 
     it('should substitute item, decrement remaining quota (increment usedSwapsCount), and recalculate schedule', async () => {

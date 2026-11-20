@@ -10,6 +10,9 @@ import { UpdateItineraryItemDto } from './dto/update-itinerary-item.dto';
 import { ReorderItineraryItemDto } from './dto/reorder-itinerary-item.dto';
 import { SubstituteItemDto } from './dto/substitute-item.dto';
 import { PinMealDto } from './dto/pin-meal.dto';
+import {
+  AlternativesQueryDto,
+} from './dto/alternatives-query.dto';
 import { isTripLocked } from '../trips/trips.util';
 import {
   BaseTripStatus,
@@ -21,6 +24,12 @@ import {
   recalculateDayTimeLabels,
   recalculateDayTransits,
 } from '../trips/itinerary-schedule.util';
+import {
+  AlternativeCandidate,
+  applyAlternativesFilters,
+  buildAlternativesFacets,
+  isAccessibleFromText,
+} from './alternatives-filters.util';
 
 @Injectable()
 export class ItineraryService {
@@ -172,7 +181,11 @@ export class ItineraryService {
     return updated;
   }
 
-  async getAlternatives(user: any, itemId: string) {
+  async getAlternatives(
+    user: any,
+    itemId: string,
+    filters: AlternativesQueryDto = {},
+  ) {
     const item = await this.findOneWithAuth(user, itemId);
     const trip = item.tripDay.trip;
 
@@ -211,7 +224,7 @@ export class ItineraryService {
       },
     });
 
-    const baseCandidates: any[] = [];
+    const baseCandidates: AlternativeCandidate[] = [];
     for (const bt of baseTrips) {
       for (const d of bt.days || []) {
         if (isFood) {
@@ -230,6 +243,11 @@ export class ItineraryService {
                 duration: 90,
                 ticketStatus: TicketStatus.FREE,
                 source: 'BASE_TRIP',
+                accessible: isAccessibleFromText(
+                  (rest as { accessibility?: string | null }).accessibility,
+                ),
+                goodForKids: false,
+                goodForRainyDays: false,
               });
             }
           }
@@ -239,7 +257,8 @@ export class ItineraryService {
               baseCandidates.push({
                 title: attr.name,
                 category: attr.category || item.category,
-                description: attr.shortDescription || attr.fullDescription || null,
+                description:
+                  attr.shortDescription || attr.fullDescription || null,
                 location: attr.address || trip.destination,
                 providerPlaceId: attr.providerPlaceId || null,
                 latitude: attr.latitude || null,
@@ -251,6 +270,11 @@ export class ItineraryService {
                   ? TicketStatus.TICKET_REQUIRED
                   : TicketStatus.FREE,
                 source: 'BASE_TRIP',
+                accessible: isAccessibleFromText(attr.accessibility),
+                goodForKids: !!attr.goodForKids,
+                goodForRainyDays: !!(attr as { goodForRainyDays?: boolean })
+                  .goodForRainyDays,
+                imageUrl: attr.image || null,
               });
             }
           }
@@ -259,7 +283,7 @@ export class ItineraryService {
     }
 
     // Google Places Search
-    let placesCandidates: any[] = [];
+    let placesCandidates: AlternativeCandidate[] = [];
     try {
       const places = await this.placesService.searchPlaces(
         `${item.category} ${trip.destination}`,
@@ -268,7 +292,7 @@ export class ItineraryService {
         title: p.name,
         category: item.category,
         description: null,
-        location: p.formattedAddress,
+        location: p.formattedAddress || null,
         providerPlaceId: p.providerPlaceId,
         latitude: p.latitude || null,
         longitude: p.longitude || null,
@@ -280,17 +304,25 @@ export class ItineraryService {
         googleMapsUri: p.googleMapsUri,
         ticketStatus: TicketStatus.UNKNOWN,
         source: 'PLACES',
+        // Places rows lack curation flags — characteristic filters exclude them.
+        accessible: false,
+        goodForKids: false,
+        goodForRainyDays: false,
       }));
     } catch {
       placesCandidates = [];
     }
 
-    const items = [...baseCandidates, ...placesCandidates].filter(
+    const allItems = [...baseCandidates, ...placesCandidates].filter(
       (c) => !existingTitles.has(c.title.toLowerCase().trim()),
     );
 
+    const facets = buildAlternativesFacets(allItems);
+    const items = applyAlternativesFilters(allItems, filters);
+
     return {
       items,
+      facets,
       quota: {
         allowedSwapsCount,
         usedSwapsCount,

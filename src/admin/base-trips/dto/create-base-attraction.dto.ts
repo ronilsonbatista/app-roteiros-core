@@ -114,6 +114,14 @@ export class CreateBaseAttractionDto {
   @IsBoolean()
   goodForElders?: boolean;
 
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Ideal para dias de chuva (filtro de atrações)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  goodForRainyDays?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
