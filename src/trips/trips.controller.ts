@@ -37,9 +37,12 @@ export class TripsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obter detalhes de uma viagem específica' })
+  @ApiOperation({
+    summary:
+      'Obter detalhes de uma viagem (dono ou convidado aceito / viewer)',
+  })
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.tripsService.findOne(user.userId, id);
+    return this.tripsService.findOne(user.userId, id, true);
   }
 
   @Patch(':id')

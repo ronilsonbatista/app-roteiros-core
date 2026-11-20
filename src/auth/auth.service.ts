@@ -17,6 +17,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthErrorCode } from './enums/auth-error-codes.enum';
 import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ParticipantsService } from '../participants/participants.service';
 import { OtpPurpose } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -29,6 +30,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly participantsService: ParticipantsService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -48,6 +50,8 @@ export class AuthService {
       fullName: dto.fullName,
       passwordHash,
     });
+
+    await this.participantsService.claimPendingInvites(user.id, user.email);
 
     return {
       message: 'Usuário registrado com sucesso',
@@ -95,6 +99,8 @@ export class AuthService {
         HttpStatus.UNAUTHORIZED,
       );
     }
+
+    await this.participantsService.claimPendingInvites(user.id, user.email);
 
     return this.generateTokens(user.id, user.email, user.role);
   }
@@ -328,6 +334,8 @@ export class AuthService {
         },
       });
     }
+
+    await this.participantsService.claimPendingInvites(user.id, user.email);
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
 

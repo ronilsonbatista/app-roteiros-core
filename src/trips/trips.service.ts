@@ -76,6 +76,12 @@ export class TripsService {
     const { participants, createdFromGuestJourneys, purchases, ...tripData } =
       trip;
 
+    const withGuestFlag = <T extends object>(payload: T) => ({
+      ...payload,
+      isGuest: isViewer,
+      isOwner,
+    });
+
     if (isLocked) {
       // Server-side gating: Only Day 1 items are returned for preview. Days 2+ items are stripped.
       const gatedDays = tripData.days.map((day, idx) => {
@@ -87,13 +93,13 @@ export class TripsService {
           items: [], // Strip items for locked days
         };
       });
-      return {
+      return withGuestFlag({
         ...tripData,
         days: gatedDays,
-      };
+      });
     }
 
-    return tripData;
+    return withGuestFlag(tripData);
   }
 
   async update(userId: string, tripId: string, dto: UpdateTripDto) {

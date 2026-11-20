@@ -510,6 +510,9 @@ model TripParticipant {
   acceptedById  String?
   acceptedBy    User?           @relation("TripInviteAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
 
+  // Null = Home guest welcome modal still pending for this membership
+  welcomeSeenAt DateTime?
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -517,6 +520,7 @@ model TripParticipant {
 
   @@index([inviteToken])
   @@index([email])
+  @@index([acceptedById, welcomeSeenAt])
 
   @@map("trip_participants")
 }

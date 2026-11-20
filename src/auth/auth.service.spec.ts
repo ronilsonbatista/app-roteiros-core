@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { ParticipantsService } from '../participants/participants.service';
 import { OtpPurpose } from '@prisma/client';
 import { HttpException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -13,6 +14,7 @@ describe('AuthService', () => {
   let prisma: any;
   let emailService: any;
   let usersService: any;
+  let participantsService: any;
 
   beforeEach(async () => {
     prisma = {
@@ -44,6 +46,10 @@ describe('AuthService', () => {
       create: jest.fn(),
     };
 
+    participantsService = {
+      claimPendingInvites: jest.fn().mockResolvedValue(0),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -57,6 +63,7 @@ describe('AuthService', () => {
         },
         { provide: PrismaService, useValue: prisma },
         { provide: EmailService, useValue: emailService },
+        { provide: ParticipantsService, useValue: participantsService },
       ],
     }).compile();
 
@@ -116,6 +123,10 @@ describe('AuthService', () => {
       expect(response.accessToken).toBe('mock_jwt_token');
       expect(response.user.email).toBe('test@2go.com');
       expect(prisma.user.create).toHaveBeenCalled();
+      expect(participantsService.claimPendingInvites).toHaveBeenCalledWith(
+        'user_new',
+        'test@2go.com',
+      );
     });
 
     it('should throw error for invalid code', async () => {
