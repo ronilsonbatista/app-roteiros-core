@@ -34,6 +34,19 @@ export class CreateItineraryItemDto {
   @IsString()
   googleMapsLink?: string;
 
+  @ApiPropertyOptional({
+    example: 'ChIJ2WrMN9Kwj4ARc63y7bhgYiM',
+    description: 'Google Places id — validated on create when present',
+  })
+  @IsOptional()
+  @IsString()
+  providerPlaceId?: string;
+
+  @ApiPropertyOptional({ example: 'GOOGLE' })
+  @IsOptional()
+  @IsString()
+  placeProvider?: string;
+
   @ApiPropertyOptional({ example: 48.8606111 })
   @IsOptional()
   @IsNumber()
