@@ -380,6 +380,8 @@ model BaseAttraction {
 
   goodForKids           Boolean               @default(false)
   goodForElders         Boolean               @default(false)
+  /// Indoor / covered option for rainy-day filter (paid trip atrações).
+  goodForRainyDays      Boolean               @default(false)
 
   observations          String?
   notes                 String?

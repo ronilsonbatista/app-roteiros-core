@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { UpdateItineraryItemDto } from './dto/update-itinerary-item.dto';
 import { ReorderItineraryItemDto } from './dto/reorder-itinerary-item.dto';
 import { SubstituteItemDto } from './dto/substitute-item.dto';
 import { PinMealDto } from './dto/pin-meal.dto';
+import { AlternativesQueryDto } from './dto/alternatives-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -61,9 +63,16 @@ export class ItineraryController {
   }
 
   @Get(':id/alternatives')
-  @ApiOperation({ summary: 'Listar alternativas para substituição com cota de trocas' })
-  getAlternatives(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.itineraryService.getAlternatives(user, id);
+  @ApiOperation({
+    summary:
+      'Listar alternativas para substituição com cota de trocas e filtros (Filtrar por)',
+  })
+  getAlternatives(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Query() query: AlternativesQueryDto,
+  ) {
+    return this.itineraryService.getAlternatives(user, id, query);
   }
 
   @Post(':id/substitute')
