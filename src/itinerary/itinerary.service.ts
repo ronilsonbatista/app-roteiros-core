@@ -278,6 +278,8 @@ export class ItineraryService {
         rating: p.rating,
         userRatingsTotal: p.userRatingsTotal,
         googleMapsUri: p.googleMapsUri,
+        priceLevel: p.priceLevel ?? null,
+        priceLevelDisplay: p.priceLevelDisplay ?? null,
         ticketStatus: TicketStatus.UNKNOWN,
         source: 'PLACES',
       }));

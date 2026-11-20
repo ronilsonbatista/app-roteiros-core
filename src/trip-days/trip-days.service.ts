@@ -68,10 +68,53 @@ export class TripDaysService {
 
   async createItem(user: any, dayId: string, dto: CreateItineraryItemDto) {
     await this.findOneWithAuth(user, dayId);
+
+    let providerPlaceId = dto.providerPlaceId?.trim() || null;
+    let placeProvider = dto.placeProvider?.trim() || null;
+    let latitude = dto.latitude ?? null;
+    let longitude = dto.longitude ?? null;
+    let location = dto.location ?? null;
+    let googleMapsLink = dto.googleMapsLink ?? null;
+
+    if (providerPlaceId) {
+      try {
+        const details =
+          await this.placesService.getPlaceDetails(providerPlaceId);
+        if (details) {
+          providerPlaceId = details.providerPlaceId || providerPlaceId;
+          placeProvider = placeProvider || 'GOOGLE';
+          if (details.latitude != null && details.longitude != null) {
+            latitude = details.latitude;
+            longitude = details.longitude;
+          }
+          if (details.formattedAddress && !location) {
+            location = details.formattedAddress;
+          }
+          if (details.googleMapsUri && !googleMapsLink) {
+            googleMapsLink = details.googleMapsUri;
+          }
+        } else {
+          providerPlaceId = null;
+          placeProvider = null;
+        }
+      } catch {
+        providerPlaceId = null;
+        placeProvider = null;
+      }
+    }
+
+    const { providerPlaceId: _p, placeProvider: _pp, ...rest } = dto;
     const item = await this.prisma.itineraryItem.create({
       data: {
-        ...dto,
+        ...rest,
+        location: location ?? undefined,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
+        googleMapsLink: googleMapsLink ?? undefined,
+        providerPlaceId,
+        placeProvider,
         tripDayId: dayId,
+        isUserModified: true,
       },
     });
 
