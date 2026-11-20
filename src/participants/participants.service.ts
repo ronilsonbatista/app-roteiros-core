@@ -16,6 +16,10 @@ export class ParticipantsService {
 
   constructor(private prisma: PrismaService) {}
 
+  private normalizeEmail(email: string) {
+    return email.toLowerCase().trim();
+  }
+
   async invite(userId: string, tripId: string, dto: InviteParticipantDto) {
     const trip = await this.prisma.trip.findUnique({ where: { id: tripId } });
     if (!trip) throw new NotFoundException('Trip não encontrada');
@@ -24,8 +28,10 @@ export class ParticipantsService {
         'Apenas o dono da viagem pode convidar participantes',
       );
 
+    const email = this.normalizeEmail(dto.email);
+
     const existing = await this.prisma.tripParticipant.findUnique({
-      where: { tripId_email: { tripId, email: dto.email } },
+      where: { tripId_email: { tripId, email } },
     });
     if (existing)
       throw new BadRequestException('E-mail já convidado para esta viagem');
@@ -35,14 +41,14 @@ export class ParticipantsService {
     const participant = await this.prisma.tripParticipant.create({
       data: {
         tripId,
-        email: dto.email,
+        email,
         invitedById: userId,
         inviteToken,
       },
     });
 
     this.logger.log(
-      `[MOCK EMAIL] Convite enviado para ${dto.email}. Token: ${inviteToken}`,
+      `[MOCK EMAIL] Convite enviado para ${email}. Token: ${inviteToken}`,
     );
 
     return {
@@ -93,7 +99,7 @@ export class ParticipantsService {
       throw new NotFoundException('Convite inválido ou não encontrado');
     if (participant.accepted)
       throw new BadRequestException('Este convite já foi aceito');
-    if (participant.email !== userEmail)
+    if (this.normalizeEmail(participant.email) !== this.normalizeEmail(userEmail))
       throw new ForbiddenException('Este convite não pertence a este e-mail');
 
     await this.prisma.tripParticipant.update({
@@ -110,6 +116,30 @@ export class ParticipantsService {
     };
   }
 
+  /**
+   * After login/signup/OTP: associate pending email invites to the user.
+   * Leaves welcomeSeenAt null so Home guest modal can show.
+   */
+  async claimPendingInvites(userId: string, email: string) {
+    const normalized = this.normalizeEmail(email);
+    const result = await this.prisma.tripParticipant.updateMany({
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        accepted: false,
+      },
+      data: {
+        accepted: true,
+        acceptedById: userId,
+      },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        `Auto-claimed ${result.count} pending trip invite(s) for ${normalized}`,
+      );
+    }
+    return result.count;
+  }
+
   async getSharedTrips(userId: string) {
     const participations = await this.prisma.tripParticipant.findMany({
       where: {
@@ -122,6 +152,76 @@ export class ParticipantsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return participations.map((p) => p.trip);
+    return participations.map((p) => ({
+      ...p.trip,
+      participantId: p.id,
+      role: p.role,
+      isGuest: true,
+      welcomeSeenAt: p.welcomeSeenAt,
+    }));
+  }
+
+  async listPendingWelcomes(userId: string) {
+    const participations = await this.prisma.tripParticipant.findMany({
+      where: {
+        acceptedById: userId,
+        accepted: true,
+        welcomeSeenAt: null,
+      },
+      include: {
+        trip: {
+          select: {
+            id: true,
+            title: true,
+            destination: true,
+            coverImage: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      items: participations.map((p) => ({
+        tripId: p.tripId,
+        participantId: p.id,
+        role: p.role,
+        isGuest: true as const,
+        welcomeSeenAt: p.welcomeSeenAt,
+        trip: p.trip,
+      })),
+    };
+  }
+
+  async markWelcomeSeen(userId: string, tripId: string) {
+    const participant = await this.prisma.tripParticipant.findFirst({
+      where: {
+        tripId,
+        acceptedById: userId,
+        accepted: true,
+      },
+    });
+
+    if (!participant) {
+      throw new NotFoundException(
+        'Participação de convidado não encontrada para esta viagem',
+      );
+    }
+
+    const welcomeSeenAt = participant.welcomeSeenAt ?? new Date();
+    const updated =
+      participant.welcomeSeenAt != null
+        ? participant
+        : await this.prisma.tripParticipant.update({
+            where: { id: participant.id },
+            data: { welcomeSeenAt },
+          });
+
+    return {
+      tripId: updated.tripId,
+      participantId: updated.id,
+      isGuest: true as const,
+      welcomeSeenAt: updated.welcomeSeenAt,
+    };
   }
 }

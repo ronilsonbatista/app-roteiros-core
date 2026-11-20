@@ -5,5 +5,6 @@ import { ParticipantsController } from './participants.controller';
 @Module({
   providers: [ParticipantsService],
   controllers: [ParticipantsController],
+  exports: [ParticipantsService],
 })
 export class ParticipantsModule {}

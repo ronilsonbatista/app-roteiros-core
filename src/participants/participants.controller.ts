@@ -61,4 +61,25 @@ export class ParticipantsController {
   getSharedTrips(@CurrentUser() user: any) {
     return this.participantsService.getSharedTrips(user.userId);
   }
+
+  @Get('users/me/trip-welcomes/pending')
+  @ApiOperation({
+    summary:
+      'Listar viagens de convidado com modal de boas-vindas pendente (welcomeSeenAt null)',
+  })
+  listPendingWelcomes(@CurrentUser() user: any) {
+    return this.participantsService.listPendingWelcomes(user.userId);
+  }
+
+  @Post('users/me/trip-welcomes/:tripId/seen')
+  @ApiOperation({
+    summary:
+      'Marcar modal de boas-vindas como visto (mantém membership de convidado)',
+  })
+  markWelcomeSeen(
+    @CurrentUser() user: any,
+    @Param('tripId') tripId: string,
+  ) {
+    return this.participantsService.markWelcomeSeen(user.userId, tripId);
+  }
 }
