@@ -1,4 +1,4 @@
-import { ImageBankStatus } from '@prisma/client';
+import { ImageBankStatus } from '@prisma/image-bank-client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -7,7 +7,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -28,7 +27,7 @@ function emptyToNull({ value }: { value: unknown }): unknown {
 }
 
 export class PublicListQueryDto {
-  @ApiPropertyOptional({ minimum: 1, maximum: 200, default: 50 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 200, default: 200 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -89,13 +88,6 @@ export class CreateDestinationDto {
   @IsString()
   @MaxLength(2000)
   summary?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'BaseTrip (roteiro da Home) com o mesmo lugar, se já existir.',
-  })
-  @IsOptional()
-  @IsUUID()
-  baseTripId?: string | null;
 }
 
 export class UpdateDestinationDto {
@@ -143,11 +135,6 @@ export class UpdateDestinationDto {
   @IsOptional()
   @IsEnum(ImageBankStatus)
   status?: ImageBankStatus;
-
-  @ApiPropertyOptional({ nullable: true })
-  @IsOptional()
-  @IsUUID()
-  baseTripId?: string | null;
 }
 
 export class CreateCityDto {

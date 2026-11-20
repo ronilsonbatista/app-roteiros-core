@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # Build the app and generate prisma client
-RUN npx prisma generate
+RUN npx prisma generate && IMAGE_BANK_DATABASE_URL="postgresql://unused:unused@127.0.0.1:5432/image_bank" npx prisma generate --config prisma/image-bank/prisma.config.ts
 RUN npm run build
 
 # Production image

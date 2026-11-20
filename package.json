@@ -19,7 +19,9 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "openapi:generate": "ts-node scripts/generate-openapi.ts",
-    "seed": "npx ts-node prisma/seed.ts"
+    "prisma:generate": "prisma generate && prisma generate --config prisma/image-bank/prisma.config.ts",
+    "seed": "npx ts-node prisma/seed.ts",
+    "seed:image-bank": "npx ts-node prisma/image-bank/seed.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

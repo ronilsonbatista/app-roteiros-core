@@ -1,7 +1,5 @@
--- Banco de imagens de destinos.
--- Metadados relacionais (cerca de 160 destinos, poucas cidades, 5 fotos HD por cidade publicada).
--- O binário não entra no Postgres: storageKey aponta para o object storage.
--- THUMB e CARD ficam reservados para derivados e não são gerados nesta versão.
+-- Banco exclusivo do image bank (IMAGE_BANK_DATABASE_URL).
+-- Não referencia tabelas do core. O binário não fica aqui: só a chave e os metadados.
 
 -- CreateEnum
 CREATE TYPE "ImageBankStatus" AS ENUM ('DRAFT', 'PUBLISHED');
@@ -18,7 +16,6 @@ CREATE TABLE "image_bank_destinations" (
     "region" TEXT,
     "summary" TEXT,
     "status" "ImageBankStatus" NOT NULL DEFAULT 'DRAFT',
-    "baseTripId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -64,9 +61,6 @@ CREATE TABLE "image_bank_spot_images" (
 CREATE UNIQUE INDEX "image_bank_destinations_slug_key" ON "image_bank_destinations"("slug");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "image_bank_destinations_baseTripId_key" ON "image_bank_destinations"("baseTripId");
-
--- CreateIndex
 CREATE INDEX "image_bank_destinations_status_idx" ON "image_bank_destinations"("status");
 
 -- CreateIndex
@@ -86,9 +80,6 @@ CREATE INDEX "image_bank_spot_images_derivedFromId_idx" ON "image_bank_spot_imag
 
 -- CreateIndex
 CREATE UNIQUE INDEX "image_bank_spot_images_cityId_variant_sortOrder_key" ON "image_bank_spot_images"("cityId", "variant", "sortOrder");
-
--- AddForeignKey
-ALTER TABLE "image_bank_destinations" ADD CONSTRAINT "image_bank_destinations_baseTripId_fkey" FOREIGN KEY ("baseTripId") REFERENCES "base_trips"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "image_bank_cities" ADD CONSTRAINT "image_bank_cities_destinationId_fkey" FOREIGN KEY ("destinationId") REFERENCES "image_bank_destinations"("id") ON DELETE CASCADE ON UPDATE CASCADE;

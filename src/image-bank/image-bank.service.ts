@@ -12,9 +12,9 @@ import {
   ImageBankSpotImage,
   ImageBankStatus,
   Prisma,
-} from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from '@prisma/image-bank-client';
 import { MediaStorageProvider } from '../media/providers/media-storage.interface';
+import { ImageBankPrismaService } from './image-bank-prisma.service';
 import { inspectImage, ImageMimeType } from './image-dimensions';
 import {
   imageBankMaxBytes,
@@ -29,11 +29,9 @@ import {
   DeletedImageBankRecord,
   Page,
   PublicCityDetail,
+  PublicDestinationCard,
   PublicDestinationDetail,
-  PublicDestinationListItem,
-  PublicSpotImage,
   toAdminImage,
-  toPublicImage,
 } from './image-bank.presenter';
 import {
   AdminListQueryDto,
@@ -56,13 +54,13 @@ export class ImageBankService {
   private readonly logger = new Logger(ImageBankService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly prisma: ImageBankPrismaService,
     private readonly storage: MediaStorageProvider,
   ) {}
 
   async listPublicDestinations(
     query: PublicListQueryDto,
-  ): Promise<Page<PublicDestinationListItem>> {
+  ): Promise<Page<PublicDestinationCard>> {
     const page = this.page(query);
     const where = { status: ImageBankStatus.PUBLISHED };
     const [rows, total] = await Promise.all([
@@ -71,43 +69,61 @@ export class ImageBankService {
         orderBy: [{ name: 'asc' }, { slug: 'asc' }],
         skip: page.offset,
         take: page.limit,
-        include: {
+        select: {
+          name: true,
+          slug: true,
           cities: {
             where: { status: ImageBankStatus.PUBLISHED },
-            select: { id: true },
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            take: 1,
+            select: {
+              name: true,
+              slug: true,
+              images: {
+                where: { variant: ImageBankImageVariant.ORIGINAL },
+                orderBy: { sortOrder: 'asc' },
+                take: 1,
+                select: { storageKey: true },
+              },
+            },
           },
         },
       }),
       this.prisma.imageBankDestination.count({ where }),
     ]);
 
-    return {
-      ...page,
-      total,
-      items: rows.map((row) => ({
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        country: row.country,
-        region: row.region,
-        summary: row.summary,
-        baseTripId: row.baseTripId,
-        publishedCityCount: row.cities.length,
-      })),
-    };
+    const items = await Promise.all(
+      rows.map(async (row) => {
+        const city = row.cities[0];
+        return {
+          name: row.name,
+          slug: row.slug,
+          city: city ? { name: city.name, slug: city.slug } : null,
+          coverUrl: await this.coverUrl(city?.images[0]?.storageKey),
+        };
+      }),
+    );
+
+    return { ...page, total, items };
   }
 
   async getPublicDestination(slug: string): Promise<PublicDestinationDetail> {
     const destination = await this.prisma.imageBankDestination.findFirst({
       where: { slug, status: ImageBankStatus.PUBLISHED },
-      include: {
+      select: {
+        name: true,
+        slug: true,
         cities: {
           where: { status: ImageBankStatus.PUBLISHED },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          include: {
+          select: {
+            name: true,
+            slug: true,
             images: {
               where: { variant: ImageBankImageVariant.ORIGINAL },
               orderBy: { sortOrder: 'asc' },
+              take: 1,
+              select: { storageKey: true },
             },
           },
         },
@@ -115,26 +131,16 @@ export class ImageBankService {
     });
     if (!destination) throw new NotFoundException('Destino não encontrado');
 
-    const cities = await Promise.all(
-      destination.cities.map(async (city) => ({
-        id: city.id,
-        slug: city.slug,
-        name: city.name,
-        summary: city.summary,
-        sortOrder: city.sortOrder,
-        images: await this.presentPublicImages(city.images),
-      })),
-    );
-
+    const primary = destination.cities[0];
     return {
-      id: destination.id,
-      slug: destination.slug,
       name: destination.name,
-      country: destination.country,
-      region: destination.region,
-      summary: destination.summary,
-      baseTripId: destination.baseTripId,
-      cities,
+      slug: destination.slug,
+      city: primary ? { name: primary.name, slug: primary.slug } : null,
+      coverUrl: await this.coverUrl(primary?.images[0]?.storageKey),
+      cities: destination.cities.map((city) => ({
+        name: city.name,
+        slug: city.slug,
+      })),
     };
   }
 
@@ -151,24 +157,30 @@ export class ImageBankService {
           status: ImageBankStatus.PUBLISHED,
         },
       },
-      include: {
-        destination: { select: { slug: true, name: true, country: true } },
+      select: {
+        name: true,
+        slug: true,
+        destination: { select: { name: true, slug: true } },
         images: {
           where: { variant: ImageBankImageVariant.ORIGINAL },
           orderBy: { sortOrder: 'asc' },
+          select: { altText: true, sortOrder: true, storageKey: true },
         },
       },
     });
     if (!city) throw new NotFoundException('Cidade não encontrada');
 
     return {
-      id: city.id,
-      slug: city.slug,
       name: city.name,
-      summary: city.summary,
-      sortOrder: city.sortOrder,
+      slug: city.slug,
       destination: city.destination,
-      images: await this.presentPublicImages(city.images),
+      images: await Promise.all(
+        city.images.map(async (image) => ({
+          url: (await this.storage.resolveReadUrl(image.storageKey)).url,
+          alt: image.altText,
+          order: image.sortOrder,
+        })),
+      ),
     };
   }
 
@@ -209,7 +221,6 @@ export class ImageBankService {
         region: row.region,
         summary: row.summary,
         status: row.status,
-        baseTripId: row.baseTripId,
         publishedCityCount: row.cities.filter(
           (city) => city.status === ImageBankStatus.PUBLISHED,
         ).length,
@@ -262,7 +273,6 @@ export class ImageBankService {
       region: destination.region,
       summary: destination.summary,
       status: destination.status,
-      baseTripId: destination.baseTripId,
       cities,
     };
   }
@@ -270,7 +280,6 @@ export class ImageBankService {
   async createDestination(
     dto: CreateDestinationDto,
   ): Promise<AdminDestinationDetail> {
-    if (dto.baseTripId) await this.assertBaseTrip(dto.baseTripId);
     const slug = await this.allocateDestinationSlug(dto.slug, dto.name);
     try {
       const created = await this.prisma.imageBankDestination.create({
@@ -281,7 +290,6 @@ export class ImageBankService {
           region: dto.region ?? null,
           summary: dto.summary ?? null,
           status: ImageBankStatus.DRAFT,
-          baseTripId: dto.baseTripId ?? null,
         },
       });
       return {
@@ -292,7 +300,6 @@ export class ImageBankService {
         region: created.region,
         summary: created.summary,
         status: created.status,
-        baseTripId: created.baseTripId,
         cities: [],
       };
     } catch (error) {
@@ -306,13 +313,12 @@ export class ImageBankService {
   ): Promise<AdminDestinationDetail> {
     const current = await this.prisma.imageBankDestination.findUnique({
       where: { id },
-      select: { id: true, slug: true, baseTripId: true },
+      select: { id: true, slug: true },
     });
     if (!current) throw new NotFoundException('Destino não encontrado');
     if (dto.slug && dto.slug !== current.slug) {
       await this.assertDestinationSlugAvailable(dto.slug);
     }
-    if (dto.baseTripId) await this.assertBaseTrip(dto.baseTripId);
     if (dto.status === ImageBankStatus.PUBLISHED) {
       const publishedCities = await this.prisma.imageBankCity.count({
         where: { destinationId: id, status: ImageBankStatus.PUBLISHED },
@@ -331,13 +337,6 @@ export class ImageBankService {
     if (dto.region !== undefined) data.region = dto.region;
     if (dto.summary !== undefined) data.summary = dto.summary;
     if (dto.status !== undefined) data.status = dto.status;
-    if (dto.baseTripId !== undefined) {
-      if (dto.baseTripId === null) {
-        if (current.baseTripId) data.baseTrip = { disconnect: true };
-      } else {
-        data.baseTrip = { connect: { id: dto.baseTripId } };
-      }
-    }
 
     try {
       await this.prisma.imageBankDestination.update({ where: { id }, data });
@@ -664,17 +663,12 @@ export class ImageBankService {
     return { id, deletedImageRows: related.length };
   }
 
-  private async presentPublicImages(
-    images: ImageBankSpotImage[],
-  ): Promise<PublicSpotImage[]> {
-    return Promise.all(
-      images.map(async (image) =>
-        toPublicImage(
-          image,
-          await this.storage.resolveReadUrl(image.storageKey),
-        ),
-      ),
-    );
+  private async coverUrl(
+    storageKey: string | undefined,
+  ): Promise<string | null> {
+    if (!storageKey) return null;
+    const read = await this.storage.resolveReadUrl(storageKey);
+    return read.url;
   }
 
   private async presentAdminImages(
@@ -717,7 +711,7 @@ export class ImageBankService {
   }
 
   private page(query: PublicListQueryDto): { limit: number; offset: number } {
-    return { limit: query.limit ?? 50, offset: query.offset ?? 0 };
+    return { limit: query.limit ?? 200, offset: query.offset ?? 0 };
   }
 
   private async countOriginals(cityId: string): Promise<number> {
@@ -740,18 +734,6 @@ export class ImageBankService {
     if (others < 1) {
       throw new UnprocessableEntityException(
         'O destino está publicado e ficaria sem cidade publicada. Despublique o destino antes.',
-      );
-    }
-  }
-
-  private async assertBaseTrip(id: string): Promise<void> {
-    const baseTrip = await this.prisma.baseTrip.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!baseTrip) {
-      throw new BadRequestException(
-        'baseTripId não corresponde a uma BaseTrip',
       );
     }
   }
@@ -849,9 +831,7 @@ export class ImageBankService {
         throw new ConflictException(uniqueMessage(error.meta));
       }
       if (error.code === 'P2003') {
-        throw new BadRequestException(
-          'baseTripId não corresponde a uma BaseTrip',
-        );
+        throw new BadRequestException('Referência inválida');
       }
       if (error.code === 'P2025') {
         throw new NotFoundException('Registro não encontrado');

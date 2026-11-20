@@ -2,8 +2,11 @@ import {
   ConflictException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ImageBankImageVariant, ImageBankStatus } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  ImageBankImageVariant,
+  ImageBankStatus,
+} from '@prisma/image-bank-client';
+import { ImageBankPrismaService } from './image-bank-prisma.service';
 import { ImageBankService } from './image-bank.service';
 
 function isCreatePayload(
@@ -72,7 +75,6 @@ describe('ImageBankService', () => {
       update: jest.Mock;
       deleteMany: jest.Mock;
     };
-    baseTrip: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let storage: {
@@ -113,7 +115,6 @@ describe('ImageBankService', () => {
         update: jest.fn(),
         deleteMany: jest.fn(),
       },
-      baseTrip: { findUnique: jest.fn() },
       $transaction: jest.fn(async (arg: unknown) => {
         if (typeof arg === 'function') {
           return (arg as (tx: typeof prisma) => Promise<unknown>)(prisma);
@@ -137,7 +138,10 @@ describe('ImageBankService', () => {
       deleteFile: jest.fn(),
       getFile: jest.fn(),
     };
-    service = new ImageBankService(prisma as unknown as PrismaService, storage);
+    service = new ImageBankService(
+      prisma as unknown as ImageBankPrismaService,
+      storage,
+    );
   });
 
   it('cria cidade rascunho sem exigir 5 imagens', async () => {
@@ -315,66 +319,69 @@ describe('ImageBankService', () => {
     expect(prisma.imageBankSpotImage.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('leitura pública devolve a URL resolvida e omite a chave', async () => {
-    prisma.imageBankDestination.findFirst.mockResolvedValue({
-      id: 'dest-1',
-      slug: 'rio-de-janeiro',
+  it('lista pública devolve só o card', async () => {
+    prisma.imageBankDestination.findMany.mockResolvedValue([
+      {
+        name: 'Rio de Janeiro',
+        slug: 'rio-de-janeiro',
+        cities: [
+          {
+            name: 'Rio de Janeiro',
+            slug: 'rio-de-janeiro',
+            images: [{ storageKey }],
+          },
+        ],
+      },
+    ]);
+    prisma.imageBankDestination.count.mockResolvedValue(1);
+
+    const page = await service.listPublicDestinations({});
+    const card = page.items[0];
+
+    expect(storage.resolveReadUrl).toHaveBeenCalledTimes(1);
+    expect(storage.resolveReadUrl).toHaveBeenCalledWith(storageKey);
+    expect(card).toEqual({
       name: 'Rio de Janeiro',
-      country: 'Brasil',
-      region: 'Sudeste',
-      summary: null,
-      baseTripId: null,
-      cities: [
+      slug: 'rio-de-janeiro',
+      city: { name: 'Rio de Janeiro', slug: 'rio-de-janeiro' },
+      coverUrl: 'http://localhost:3000/uploads/image-bank/city-1/photo.jpg',
+    });
+    expect(JSON.stringify(card)).not.toMatch(
+      /width|height|bytes|altText|storageKey/,
+    );
+  });
+
+  it('detalhe da cidade devolve só url, alt e ordem', async () => {
+    prisma.imageBankCity.findFirst.mockResolvedValue({
+      name: 'Rio de Janeiro',
+      slug: 'rio-de-janeiro',
+      destination: { name: 'Rio de Janeiro', slug: 'rio-de-janeiro' },
+      images: [
         {
-          id: 'city-1',
-          slug: 'rio-de-janeiro',
-          name: 'Rio de Janeiro',
-          summary: null,
-          sortOrder: 0,
-          images: [
-            {
-              id: 'img-1',
-              cityId: 'city-1',
-              spotName: 'Cristo Redentor',
-              altText: 'Cristo no Corcovado',
-              sortOrder: 1,
-              variant: ImageBankImageVariant.ORIGINAL,
-              storageKey,
-              mimeType: 'image/jpeg',
-              width: 4000,
-              height: 3000,
-              bytes: 4_000_000,
-              derivedFromId: null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          ],
+          altText: 'Cristo no Corcovado',
+          sortOrder: 1,
+          storageKey,
         },
       ],
     });
 
-    const detail = await service.getPublicDestination('rio-de-janeiro');
-    const image = detail.cities[0].images[0];
+    const detail = await service.getPublicCity(
+      'rio-de-janeiro',
+      'rio-de-janeiro',
+    );
 
-    expect(storage.resolveReadUrl).toHaveBeenCalledWith(storageKey);
-    expect(image.url).toBe(
-      'http://localhost:3000/uploads/image-bank/city-1/photo.jpg',
-    );
-    expect(image).not.toHaveProperty('storageKey');
-    expect(image).not.toHaveProperty('buffer');
-    expect(Object.keys(image).sort()).toEqual(
-      [
-        'altText',
-        'bytes',
-        'height',
-        'id',
-        'mimeType',
-        'sortOrder',
-        'spotName',
-        'url',
-        'urlExpiresAt',
-        'width',
-      ].sort(),
-    );
+    expect(detail.images).toEqual([
+      {
+        url: 'http://localhost:3000/uploads/image-bank/city-1/photo.jpg',
+        alt: 'Cristo no Corcovado',
+        order: 1,
+      },
+    ]);
+    expect(Object.keys(detail.images[0]).sort()).toEqual([
+      'alt',
+      'order',
+      'url',
+    ]);
+    expect(JSON.stringify(detail)).not.toMatch(/width|height|bytes|storageKey/);
   });
 });

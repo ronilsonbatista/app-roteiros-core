@@ -52,7 +52,7 @@ A API possui módulos funcionais principais projetados para a experiência do us
 - **Participants**: Sistema de convites (`/trips/:id/participants`) para planejamento compartilhado.
 - **Places**: Integração de pesquisa de locais do Google Places e preenchimento automático.
 - **Media**: Upload seguro de avatares e imagens de capa de viagem para o diretório `uploads` ou S3.
-- **Image Bank**: Catálogo de destinos, cidades e 5 fotos HD de pontos turísticos por cidade publicada (`/image-bank`, escrita em `/admin/image-bank`). O arquivo fica no object storage; o Postgres guarda a chave e os metadados.
+- **Image Bank**: Catálogo de destinos, cidades e 5 fotos HD de pontos turísticos por cidade publicada (`/image-bank`, escrita em `/admin/image-bank`). Metadados no PostgreSQL de `IMAGE_BANK_DATABASE_URL`; o arquivo fica no disco local ou num bucket S3/R2.
 - **Billing**: Catálogo de produtos premium (`/products`) e fluxo de compras mockado (`/purchases`).
 - **AI**: Geração automática de roteiros via OpenAI API com base no perfil.
 - **Analytics**: Métricas básicas internas.
@@ -209,19 +209,18 @@ A especificação do Swagger divide os endpoints de forma organizada em 22 área
 
 ## Banco de imagens
 
-Metadados em PostgreSQL. O binário HD fica em object storage com interface S3 (filesystem ou MinIO em dev, S3/R2 em produção). A leitura devolve URL assinada ou, no filesystem, o path público `MEDIA_BASE_URL` + chave. O JSON não traz o arquivo.
+O catálogo usa um PostgreSQL próprio, `IMAGE_BANK_DATABASE_URL`. Não é o `DATABASE_URL` do core e não é o Postgres do `docker compose`. O binário continua fora desse banco: disco local (`MEDIA_STORAGE_PROVIDER=local`) ou um bucket S3/R2 que você já tenha. Este repositório não sobe container de banco nem de storage para o image bank.
 
-Escala prevista: cerca de 160 destinos, em geral 1 cidade por destino (o schema aceita várias), 5 fotos originais por cidade publicada. Originais de alguns MB cada, na casa de 5–20 GB no total, fora derivados (thumb/card), que o schema já reserva e esta versão não gera.
+Só as rotas `/image-bank` e `/admin/image-bank` abrem essa conexão. O client não é exportado para os outros módulos.
+
+`GET /image-bank/destinations` devolve cards: `name`, `slug`, `city` (cidade de menor `sortOrder`, ou null) e `coverUrl`. As 5 fotos (`url`, `alt`, `order`) ficam em `GET /image-bank/destinations/:slug/cities/:citySlug`.
 
 ```bash
-npx prisma migrate dev
-npm run seed
-npm run start:dev
+npx prisma migrate deploy --config prisma/image-bank/prisma.config.ts
+npm run seed:image-bank
 ```
 
-Com `MEDIA_STORAGE_PROVIDER=local`, o seed grava PNG 1x1 de exemplo em `uploads/image-bank/` (não baixa as fotos reais). Para MinIO: `docker compose --profile minio up -d` e as variáveis `S3_*` do `.env.example`.
-
-Leitura pública: `GET /image-bank/destinations` e `GET /image-bank/destinations/:slug`. Escrita (admin): `POST /admin/image-bank/cities/:cityId/images` em multipart.
+O seed grava PNG 1x1 em `uploads/image-bank/` (não baixa as fotos reais).
 
 ## 🐳 Docker Compose
 
@@ -248,7 +247,7 @@ A plataforma está totalmente dockerizada para facilitar a inicialização de to
 
 ### Mapeamento de Serviços
 * **API (approteiros_api)**: Rodando na porta **3000** com Node 22 Alpine.
-* **Banco de Dados (approteiros_db)**: Rodando na porta **5433** do host com PostgreSQL 15 Alpine (evitando conflito com uma instalação PostgreSQL local que utilize a porta padrão 5432).
+* **Banco de Dados (approteiros_db)**: Rodando na porta **5433** do host com PostgreSQL 15 Alpine (evitando conflito com uma instalação PostgreSQL local que utilize a porta padrão 5432). É só o banco do core. O image bank não entra nesse compose: aponte `IMAGE_BANK_DATABASE_URL` para um PostgreSQL externo.
 
 ---
 

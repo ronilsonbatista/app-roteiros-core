@@ -11,9 +11,9 @@ export class ImageBankController {
   @Get('destinations')
   @Header('Cache-Control', 'private, max-age=60')
   @ApiOperation({
-    summary: 'Destinos publicados do banco de imagens',
+    summary: 'Cards dos destinos publicados',
     description:
-      'Não inclui o binário. As URLs das fotos ficam no detalhe do destino ou da cidade.',
+      'Payload leve: nome, slug, cidade principal (menor sortOrder) e uma URL de capa. Não traz as 5 fotos nem width, height ou bytes.',
   })
   listDestinations(@Query() query: PublicListQueryDto) {
     return this.imageBank.listPublicDestinations(query);
@@ -24,7 +24,7 @@ export class ImageBankController {
   @ApiOperation({
     summary: 'Cidade publicada e suas 5 fotos HD',
     description:
-      'Cada imagem traz url assinada (S3/MinIO/R2) ou path público do filesystem de dev. O JSON não contém o arquivo.',
+      'Cada foto traz só url, alt e order. A url é assinada (S3) ou o path público do filesystem. O JSON não contém o arquivo nem width, height ou bytes.',
   })
   getCity(@Param('slug') slug: string, @Param('citySlug') citySlug: string) {
     return this.imageBank.getPublicCity(slug, citySlug);
@@ -33,9 +33,9 @@ export class ImageBankController {
   @Get('destinations/:slug')
   @Header('Cache-Control', 'private, max-age=60')
   @ApiOperation({
-    summary: 'Destino publicado com cidades e fotos',
+    summary: 'Destino publicado, sem as fotos HD',
     description:
-      'Somente cidades PUBLISHED. Cada uma deve ter 5 imagens originais, com url de leitura e metadados (mime, largura, altura, bytes, texto alternativo, ordem).',
+      'Mesmo card da lista, mais os nomes e slugs das cidades publicadas. As 5 fotos ficam em GET .../cities/:citySlug.',
   })
   getDestination(@Param('slug') slug: string) {
     return this.imageBank.getPublicDestination(slug);

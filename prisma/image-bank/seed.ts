@@ -1,11 +1,13 @@
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PrismaPg } from '@prisma/adapter-pg';
 import {
   ImageBankImageVariant,
   ImageBankStatus,
   PrismaClient,
-} from '@prisma/client';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+} from '@prisma/image-bank-client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Pool } from 'pg';
 
 /** PNG 1x1. Placeholder de formato — não é a foto HD. */
 const PNG_1X1 = Buffer.from(
@@ -199,10 +201,6 @@ export async function seedImageBank(prisma: PrismaClient): Promise<void> {
 
   try {
     for (const fixture of FIXTURES) {
-      const baseTrip = await prisma.baseTrip.findUnique({
-        where: { slug: fixture.slug },
-        select: { id: true },
-      });
       const destination = await prisma.imageBankDestination.upsert({
         where: { slug: fixture.slug },
         create: {
@@ -212,7 +210,6 @@ export async function seedImageBank(prisma: PrismaClient): Promise<void> {
           region: fixture.region,
           summary: fixture.summary,
           status: fixture.status,
-          baseTripId: baseTrip?.id ?? null,
         },
         update: {
           name: fixture.name,
@@ -220,7 +217,6 @@ export async function seedImageBank(prisma: PrismaClient): Promise<void> {
           region: fixture.region,
           summary: fixture.summary,
           status: fixture.status,
-          ...(baseTrip ? { baseTripId: baseTrip.id } : {}),
         },
       });
 
@@ -286,9 +282,31 @@ export async function seedImageBank(prisma: PrismaClient): Promise<void> {
     console.log(
       'ℹ️ Placeholders são PNG 1x1 em uploads/image-bank (não são as fotos HD). ' +
         'MEDIA_STORAGE_PROVIDER=local serve esses arquivos em MEDIA_BASE_URL. ' +
-        'Com s3/MinIO o seed também tenta o PutObject dos mesmos placeholders.',
+        'Se MEDIA_STORAGE_PROVIDER=s3, o seed também envia os placeholders ao bucket já configurado.',
     );
   } finally {
     s3?.destroy();
   }
 }
+
+async function main() {
+  const connectionString = process.env.IMAGE_BANK_DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      'IMAGE_BANK_DATABASE_URL é obrigatória. Não use o DATABASE_URL do core.',
+    );
+  }
+  const pool = new Pool({ connectionString });
+  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+  try {
+    await seedImageBank(prisma);
+  } finally {
+    await prisma.$disconnect();
+    await pool.end();
+  }
+}
+
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exit(1);
+});

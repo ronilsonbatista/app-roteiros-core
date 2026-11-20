@@ -2,10 +2,41 @@ import {
   ImageBankImageVariant,
   ImageBankSpotImage,
   ImageBankStatus,
-} from '@prisma/client';
+} from '@prisma/image-bank-client';
 import { StoredObjectUrl } from '../media/providers/media-storage.interface';
 
+export interface PublicCityRef {
+  name: string;
+  slug: string;
+}
+
+/** Card da lista. Sem as 5 fotos e sem metadados do arquivo. */
+export interface PublicDestinationCard {
+  name: string;
+  slug: string;
+  city: PublicCityRef | null;
+  coverUrl: string | null;
+}
+
+export interface PublicDestinationDetail extends PublicDestinationCard {
+  cities: PublicCityRef[];
+}
+
+/** Foto no detalhe da cidade. Só o que o app precisa para renderizar. */
 export interface PublicSpotImage {
+  url: string;
+  alt: string;
+  order: number;
+}
+
+export interface PublicCityDetail {
+  name: string;
+  slug: string;
+  destination: PublicCityRef;
+  images: PublicSpotImage[];
+}
+
+export interface AdminSpotImage {
   id: string;
   spotName: string;
   altText: string;
@@ -16,50 +47,8 @@ export interface PublicSpotImage {
   bytes: number;
   url: string;
   urlExpiresAt: string | null;
-}
-
-export interface AdminSpotImage extends PublicSpotImage {
   variant: ImageBankImageVariant;
   storageKey: string;
-}
-
-export interface PublicCity {
-  id: string;
-  slug: string;
-  name: string;
-  summary: string | null;
-  sortOrder: number;
-  images: PublicSpotImage[];
-}
-
-export interface PublicCityDetail extends PublicCity {
-  destination: {
-    slug: string;
-    name: string;
-    country: string;
-  };
-}
-
-export interface PublicDestinationDetail {
-  id: string;
-  slug: string;
-  name: string;
-  country: string;
-  region: string | null;
-  summary: string | null;
-  baseTripId: string | null;
-  cities: PublicCity[];
-}
-
-export interface PublicDestinationListItem {
-  id: string;
-  slug: string;
-  name: string;
-  country: string;
-  region: string | null;
-  summary: string | null;
-  baseTripId: string | null;
-  publishedCityCount: number;
 }
 
 export interface CitySummary {
@@ -81,7 +70,6 @@ export interface AdminDestinationListItem {
   region: string | null;
   summary: string | null;
   status: ImageBankStatus;
-  baseTripId: string | null;
   publishedCityCount: number;
   draftCityCount: number;
   originalImageCount: number;
@@ -99,7 +87,6 @@ export interface AdminDestinationDetail {
   region: string | null;
   summary: string | null;
   status: ImageBankStatus;
-  baseTripId: string | null;
   cities: AdminCityDetail[];
 }
 
@@ -115,10 +102,10 @@ export interface DeletedImageBankRecord {
   deletedImageRows: number;
 }
 
-export function toPublicImage(
+export function toAdminImage(
   image: ImageBankSpotImage,
   read: StoredObjectUrl,
-): PublicSpotImage {
+): AdminSpotImage {
   return {
     id: image.id,
     spotName: image.spotName,
@@ -130,15 +117,6 @@ export function toPublicImage(
     bytes: image.bytes,
     url: read.url,
     urlExpiresAt: read.expiresAt,
-  };
-}
-
-export function toAdminImage(
-  image: ImageBankSpotImage,
-  read: StoredObjectUrl,
-): AdminSpotImage {
-  return {
-    ...toPublicImage(image, read),
     variant: image.variant,
     storageKey: image.storageKey,
   };
