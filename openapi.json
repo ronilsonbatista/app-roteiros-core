@@ -6955,6 +6955,95 @@
           "Home - Public"
         ]
       }
+    },
+    "/home/trip": {
+      "get": {
+        "description": "Bearer. Retorna a próxima viagem com premiumUnlockedAt (paga) ainda vigente/futura: destinos, datas, estrutura de dias e dicas (máx. 3 por destino). `trip: null` → app mostra Home de descoberta. Envelope { success, data, timestamp }.",
+        "operationId": "HomeController_getTripHome",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeTripResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Home CRM da próxima viagem paga",
+        "tags": [
+          "Home - App"
+        ]
+      }
+    },
+    "/home/tips": {
+      "get": {
+        "description": "Bearer. Core owns tip storage. Query destinationKey (preferido) ou destination. Placeholder/seed até job Grok a partir de pins do roteiro. Envelope { success, data, timestamp }.",
+        "operationId": "HomeController_listTips",
+        "parameters": [
+          {
+            "name": "destinationKey",
+            "required": false,
+            "in": "query",
+            "description": "Normalized destination key (e.g. roma). Prefer this over free-text destination.",
+            "schema": {
+              "example": "roma",
+              "type": "string"
+            }
+          },
+          {
+            "name": "destination",
+            "required": false,
+            "in": "query",
+            "description": "Destination display name; normalized server-side when destinationKey omitted.",
+            "schema": {
+              "example": "Roma",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Max tips (1–3). Default 3.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 3,
+              "example": 3,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeTipsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dicas por destino (máx. 3)",
+        "tags": [
+          "Home - App"
+        ]
+      }
     }
   },
   "info": {
@@ -10019,6 +10108,113 @@
         "required": [
           "items"
         ]
+      },
+      "HomeTipDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "destinationKey": { "type": "string", "example": "roma" },
+          "destinationName": { "type": "string", "example": "Roma" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "sortOrder": { "type": "number", "example": 0 },
+          "source": { "type": "string", "example": "PLACEHOLDER" },
+          "providerPlaceId": { "type": "string", "nullable": true }
+        },
+        "required": [
+          "id",
+          "destinationKey",
+          "destinationName",
+          "title",
+          "body",
+          "sortOrder",
+          "source"
+        ]
+      },
+      "HomeTipsResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HomeTipDto" }
+          }
+        },
+        "required": ["items"]
+      },
+      "HomeTripDestinationDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "Roma" },
+          "city": { "type": "string", "nullable": true },
+          "country": { "type": "string", "nullable": true },
+          "providerPlaceId": { "type": "string", "nullable": true },
+          "coverImageUrl": { "type": "string", "nullable": true },
+          "arrivalDate": { "type": "string", "nullable": true },
+          "departureDate": { "type": "string", "nullable": true },
+          "order": { "type": "number" },
+          "destinationKey": { "type": "string", "example": "roma" }
+        },
+        "required": ["name", "order", "destinationKey"]
+      },
+      "HomeTripDayDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "dayNumber": { "type": "number" },
+          "date": { "type": "string", "nullable": true },
+          "destination": { "type": "string", "nullable": true },
+          "title": { "type": "string", "nullable": true },
+          "itemCount": { "type": "number" }
+        },
+        "required": ["id", "dayNumber", "date", "destination", "title", "itemCount"]
+      },
+      "HomeTripCrmDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "destinations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HomeTripDestinationDto" }
+          },
+          "coverImageUrl": { "type": "string", "nullable": true },
+          "startDate": { "type": "string", "nullable": true },
+          "endDate": { "type": "string", "nullable": true },
+          "arrivalDateTime": { "type": "string", "nullable": true },
+          "days": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HomeTripDayDto" }
+          },
+          "premiumUnlocked": { "type": "boolean" },
+          "status": { "type": "string" },
+          "tips": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HomeTipDto" }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "destinations",
+          "coverImageUrl",
+          "startDate",
+          "endDate",
+          "arrivalDateTime",
+          "days",
+          "premiumUnlocked",
+          "status",
+          "tips"
+        ]
+      },
+      "HomeTripResponseDto": {
+        "type": "object",
+        "properties": {
+          "trip": {
+            "nullable": true,
+            "allOf": [{ "$ref": "#/components/schemas/HomeTripCrmDto" }]
+          }
+        },
+        "required": ["trip"]
       }
     }
   }

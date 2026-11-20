@@ -1030,3 +1030,38 @@ model CompanyExpense {
   @@map("company_expenses")
 }
 
+/// Tips served on paid-trip Home CRM ("Dicas para você").
+/// Max 3 active tips per destinationKey. Grok generation is a follow-up job
+/// that upserts rows with source=GROK from itinerary pins (ItineraryItem).
+enum DestinationTipSource {
+  PLACEHOLDER
+  ITINERARY_PIN
+  GROK
+}
+
+model DestinationTip {
+  id               String               @id @default(uuid())
+  /// Normalized key for lookups (e.g. "roma"). Derived from destinationName.
+  destinationKey   String
+  destinationName  String
+  providerPlaceId  String?
+  title            String
+  body             String
+  sortOrder        Int                  @default(0)
+  active           Boolean              @default(true)
+  source           DestinationTipSource @default(PLACEHOLDER)
+  /// Optional link to itinerary pin / place that inspired the tip (Grok follow-up).
+  sourceItemId     String?
+  sourcePlaceId    String?
+  metadata         Json?
+  generatedAt      DateTime?
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@unique([destinationKey, sortOrder])
+  @@index([destinationKey, active])
+  @@index([providerPlaceId])
+  @@map("destination_tips")
+}
+
