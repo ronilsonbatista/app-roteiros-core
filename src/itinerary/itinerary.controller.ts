@@ -94,4 +94,12 @@ export class ItineraryController {
   ) {
     return this.itineraryService.pinMeal(user, id, dto);
   }
+
+  @Patch(':id/unpin-meal')
+  @ApiOperation({
+    summary: 'Remover restaurante fixado e restaurar o slot de refeição (Café/Almoço/Jantar)',
+  })
+  unpinMeal(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.itineraryService.unpinMeal(user, id);
+  }
 }

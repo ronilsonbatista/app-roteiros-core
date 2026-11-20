@@ -434,6 +434,10 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
         title: 'Trattoria Da Enzo al 29',
         location: 'Via dei Vascellari, 29',
         providerPlaceId: 'place-enzo-123',
+        imageUrl: 'https://cdn.example/enzo.jpg',
+        priceRange: '$$',
+        rating: 4.7,
+        notes: 'Carbonara',
       });
 
       expect(result.message).toContain('sucesso');
@@ -444,6 +448,54 @@ describe('ItineraryService (Phase 3 Controls & Substitutions)', () => {
             title: 'Trattoria Da Enzo al 29',
             category: ItineraryCategory.RESTAURANT,
             ticketStatus: TicketStatus.FREE,
+            isUserModified: true,
+            externalLink: 'https://cdn.example/enzo.jpg',
+          }),
+        }),
+      );
+      const notes = prismaMock.itineraryItem.update.mock.calls[0][0].data.notes;
+      expect(notes).toContain('2go-meal-pin:');
+      expect(notes).toContain('Carbonara');
+    });
+
+    it('should unpin meal and restore Café/Almoço/Jantar slot', async () => {
+      const mockItem = {
+        id: 'item-meal-1',
+        tripDayId: 'day-1',
+        title: 'Trattoria Da Enzo al 29',
+        period: 'Jantar',
+        category: ItineraryCategory.RESTAURANT,
+        notes: '2go-meal-pin:{"dish":"Carbonara","mealSlotTitle":"Jantar","mealSlotCategory":"RESTAURANT"}',
+        tripDay: {
+          id: 'day-1',
+          dayNumber: 1,
+          trip: { userId: 'user-1', accommodation: null, createdFromGuestJourneys: [], purchases: [] },
+        },
+      };
+      prismaMock.itineraryItem.findUnique.mockResolvedValue(mockItem);
+      prismaMock.tripDay.findUnique.mockResolvedValue({
+        id: 'day-1',
+        dayNumber: 1,
+        trip: { accommodation: null },
+        items: [],
+      });
+      prismaMock.itineraryItem.findMany.mockResolvedValue([]);
+      prismaMock.itineraryItem.update.mockResolvedValue({
+        id: 'item-meal-1',
+        title: 'Jantar',
+        category: ItineraryCategory.RESTAURANT,
+      });
+
+      const result = await service.unpinMeal({ userId: 'user-1' }, 'item-meal-1');
+      expect(result.message).toContain('restaurado');
+      expect(prismaMock.itineraryItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'item-meal-1' },
+          data: expect.objectContaining({
+            title: 'Jantar',
+            providerPlaceId: null,
+            externalLink: null,
+            notes: null,
             isUserModified: true,
           }),
         }),

@@ -13,6 +13,7 @@ import {
   recalculateDayTransits,
   recalculateDayTimeLabels,
 } from '../trips/itinerary-schedule.util';
+import { priceLevelToDisplay } from '../places/providers/places-provider.interface';
 
 @Injectable()
 export class TripDaysService {
@@ -85,6 +86,7 @@ export class TripDaysService {
     const tripDay = await this.findOneWithAuth(user, dayId);
     const trip = tripDay.trip;
     const destination = trip.destination;
+    const normalizedPeriod = normalizeMealPeriod(period);
 
     const baseTrips = await this.prisma.baseTrip.findMany({
       where: {
@@ -105,10 +107,14 @@ export class TripDaysService {
     for (const bt of baseTrips) {
       for (const d of bt.days || []) {
         for (const rest of d.restaurants || []) {
+          const priceRange =
+            rest.priceRange ||
+            priceLevelToDisplay(rest.priceLevel) ||
+            null;
           baseRestaurants.push({
             name: rest.name,
             cuisineType: rest.cuisineType,
-            priceRange: rest.priceRange,
+            priceRange,
             priceLevel: rest.priceLevel,
             recommendedDish: rest.recommendedDish,
             address: rest.address,
@@ -116,23 +122,25 @@ export class TripDaysService {
             latitude: rest.latitude || null,
             longitude: rest.longitude || null,
             rating: rest.rating,
+            userRatingsTotal: null,
+            googleMapsUri: rest.googleMapsLink || null,
+            imageUrl: rest.image || null,
+            openingHours: rest.openingHours || null,
             source: 'BASE_TRIP',
           });
         }
       }
     }
 
-    // Google Places Search
+    // Google Places Search (restaurant text query; enrich top hits for photo/hours)
     let placesRestaurants: any[] = [];
     try {
-      const query = period
-        ? `${period} restaurantes em ${destination}`
-        : `melhores restaurantes em ${destination}`;
-      const places = await this.placesService.searchPlaces(query);
-      placesRestaurants = places.map((p) => ({
+      const mealQuery = mealPlacesQuery(normalizedPeriod, destination);
+      const places = await this.placesService.searchPlaces(mealQuery);
+      const mapped = places.map((p) => ({
         name: p.name,
-        cuisineType: p.types?.slice(0, 3).join(', ') || 'Culinária local',
-        priceRange: p.priceLevel ? '€'.repeat(p.priceLevel) : '€€',
+        cuisineType: cuisineFromTypes(p.types),
+        priceRange: p.priceLevelDisplay || priceLevelToDisplay(p.priceLevel) || null,
         priceLevel: p.priceLevel,
         recommendedDish: null,
         address: p.formattedAddress,
@@ -142,8 +150,48 @@ export class TripDaysService {
         rating: p.rating,
         userRatingsTotal: p.userRatingsTotal,
         googleMapsUri: p.googleMapsUri,
+        imageUrl: null as string | null,
+        openingHours: null as string | null,
         source: 'PLACES',
       }));
+
+      const enrichLimit = Math.min(mapped.length, 8);
+      const enriched = await Promise.all(
+        mapped.slice(0, enrichLimit).map(async (item) => {
+          if (!item.providerPlaceId) return item;
+          try {
+            const details = await this.placesService.getPlaceDetails(
+              item.providerPlaceId,
+            );
+            if (!details) return item;
+            const photo = details.photos?.find((p) => p.photoUri)?.photoUri;
+            return {
+              ...item,
+              cuisineType:
+                details.primaryTypeDisplayName ||
+                cuisineFromTypes(details.types) ||
+                item.cuisineType,
+              priceRange:
+                details.priceLevelDisplay ||
+                priceLevelToDisplay(details.priceLevel) ||
+                item.priceRange,
+              priceLevel: details.priceLevel ?? item.priceLevel,
+              address: details.formattedAddress || item.address,
+              rating: details.rating ?? item.rating,
+              userRatingsTotal:
+                details.userRatingsTotal ?? item.userRatingsTotal,
+              googleMapsUri: details.googleMapsUri || item.googleMapsUri,
+              imageUrl: photo || null,
+              openingHours: details.openingHoursText || null,
+              latitude: details.latitude ?? item.latitude,
+              longitude: details.longitude ?? item.longitude,
+            };
+          } catch {
+            return item;
+          }
+        }),
+      );
+      placesRestaurants = [...enriched, ...mapped.slice(enrichLimit)];
     } catch {
       placesRestaurants = [];
     }
@@ -152,17 +200,69 @@ export class TripDaysService {
     const recommendations: any[] = [];
 
     for (const item of [...baseRestaurants, ...placesRestaurants]) {
-      const key = item.name.toLowerCase().trim();
-      if (!uniqueNames.has(key)) {
-        uniqueNames.add(key);
-        recommendations.push(item);
-      }
+      const key = (item.name || '').toLowerCase().trim();
+      if (!key || uniqueNames.has(key)) continue;
+      uniqueNames.add(key);
+      recommendations.push(item);
     }
 
     return {
       destination,
-      period: period || 'Geral',
+      period: normalizedPeriod || period || 'Geral',
       recommendations,
     };
   }
+}
+
+/** Normalize Café / Almoço / Jantar (and English aliases) for Places queries. */
+function normalizeMealPeriod(period?: string): string | undefined {
+  if (!period?.trim()) return undefined;
+  const raw = period.trim().toLowerCase();
+  if (
+    raw.includes('café') ||
+    raw.includes('cafe') ||
+    raw.includes('manhã') ||
+    raw.includes('manha') ||
+    raw.includes('breakfast')
+  ) {
+    return 'Café';
+  }
+  if (raw.includes('almoço') || raw.includes('almoco') || raw.includes('lunch')) {
+    return 'Almoço';
+  }
+  if (raw.includes('jantar') || raw.includes('dinner') || raw.includes('noite')) {
+    return 'Jantar';
+  }
+  if (raw === 'geral' || raw === 'tarde' || raw === 'pausa') return undefined;
+  return period.trim();
+}
+
+function mealPlacesQuery(period: string | undefined, destination: string): string {
+  switch (period) {
+    case 'Café':
+      return `cafés e cafés da manhã em ${destination}`;
+    case 'Almoço':
+      return `restaurantes para almoço em ${destination}`;
+    case 'Jantar':
+      return `restaurantes para jantar em ${destination}`;
+    default:
+      return `melhores restaurantes em ${destination}`;
+  }
+}
+
+function cuisineFromTypes(types?: string[]): string {
+  if (!types?.length) return 'Culinária local';
+  const skip = new Set([
+    'restaurant',
+    'food',
+    'point_of_interest',
+    'establishment',
+    'cafe',
+    'bar',
+  ]);
+  const labels = types
+    .filter((t) => !skip.has(t.toLowerCase()))
+    .slice(0, 3)
+    .map((t) => t.replace(/_/g, ' '));
+  return labels.length ? labels.join(', ') : 'Culinária local';
 }

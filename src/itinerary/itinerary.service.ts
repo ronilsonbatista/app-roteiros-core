@@ -433,6 +433,9 @@ export class ItineraryService {
     let latitude = dto.latitude ?? null;
     let longitude = dto.longitude ?? null;
     let location = dto.location ?? item.location;
+    let imageUrl = dto.imageUrl?.trim() || null;
+    let rating = dto.rating ?? null;
+    let priceRange = dto.priceRange?.trim() || null;
 
     if (validatedPlaceId) {
       try {
@@ -447,6 +450,16 @@ export class ItineraryService {
           if (details.formattedAddress && !location) {
             location = details.formattedAddress;
           }
+          if (!imageUrl) {
+            imageUrl =
+              details.photos?.find((p) => p.photoUri)?.photoUri || null;
+          }
+          if (rating == null && details.rating != null) {
+            rating = details.rating;
+          }
+          if (!priceRange) {
+            priceRange = details.priceLevelDisplay || null;
+          }
         } else {
           validatedPlaceId = null;
         }
@@ -455,7 +468,16 @@ export class ItineraryService {
       }
     }
 
-    const updated = await this.prisma.itineraryItem.update({
+    const dish = dto.notes ?? item.notes;
+    const notes = encodeMealPinNotes({
+      dish,
+      rating,
+      priceRange,
+      mealSlotTitle: mealSlotTitleFromItem(item),
+      mealSlotCategory: item.category,
+    });
+
+    await this.prisma.itineraryItem.update({
       where: { id: itemId },
       data: {
         title: dto.title,
@@ -467,8 +489,10 @@ export class ItineraryService {
         longitude,
         cost: dto.cost ?? item.cost,
         currency: dto.currency ?? item.currency,
-        notes: dto.notes ?? item.notes,
+        notes,
         googleMapsLink: dto.googleMapsLink ?? item.googleMapsLink,
+        // Photo for selected meal card (restaurants do not use ticket links).
+        externalLink: imageUrl || item.externalLink,
         category: ItineraryCategory.RESTAURANT,
         ticketStatus: TicketStatus.FREE,
         isUserModified: true,
@@ -487,4 +511,132 @@ export class ItineraryService {
       item: finalItem,
     };
   }
+
+  /**
+   * Restore a meal slot after pin: clears place fields and restores Café/Almoço/Jantar title.
+   */
+  async unpinMeal(user: any, itemId: string) {
+    const item = await this.findOneWithAuth(user, itemId);
+    const meta = decodeMealPinNotes(item.notes);
+    const period = item.period;
+    const slot = resolveMealSlot(period, meta?.mealSlotTitle, meta?.mealSlotCategory);
+
+    await this.prisma.itineraryItem.update({
+      where: { id: itemId },
+      data: {
+        title: slot.title,
+        description: null,
+        location: null,
+        providerPlaceId: null,
+        placeProvider: null,
+        latitude: null,
+        longitude: null,
+        notes: null,
+        googleMapsLink: null,
+        externalLink: null,
+        cost: null,
+        currency: null,
+        category: slot.category,
+        ticketStatus: TicketStatus.FREE,
+        isUserModified: true,
+      },
+    });
+
+    await recalculateDayTransits(item.tripDayId, this.prisma);
+    await recalculateDayTimeLabels(item.tripDayId, this.prisma);
+
+    const finalItem = await this.prisma.itineraryItem.findUnique({
+      where: { id: itemId },
+    });
+
+    return {
+      message: 'Recomendação removida; slot de refeição restaurado',
+      item: finalItem,
+    };
+  }
+}
+
+const MEAL_PIN_PREFIX = '2go-meal-pin:';
+
+function encodeMealPinNotes(input: {
+  dish?: string | null;
+  rating?: number | null;
+  priceRange?: string | null;
+  mealSlotTitle?: string | null;
+  mealSlotCategory?: ItineraryCategory | string | null;
+}): string | null {
+  const payload = {
+    dish: input.dish?.trim() || null,
+    rating: input.rating ?? null,
+    priceRange: input.priceRange?.trim() || null,
+    mealSlotTitle: input.mealSlotTitle?.trim() || null,
+    mealSlotCategory: input.mealSlotCategory || null,
+  };
+  const hasMeta =
+    payload.rating != null ||
+    !!payload.priceRange ||
+    !!payload.mealSlotTitle ||
+    !!payload.mealSlotCategory;
+  if (!hasMeta) {
+    return payload.dish;
+  }
+  return `${MEAL_PIN_PREFIX}${JSON.stringify(payload)}`;
+}
+
+function decodeMealPinNotes(notes?: string | null): {
+  dish?: string | null;
+  rating?: number | null;
+  priceRange?: string | null;
+  mealSlotTitle?: string | null;
+  mealSlotCategory?: string | null;
+} | null {
+  if (!notes?.startsWith(MEAL_PIN_PREFIX)) {
+    return notes ? { dish: notes } : null;
+  }
+  try {
+    return JSON.parse(notes.slice(MEAL_PIN_PREFIX.length));
+  } catch {
+    return { dish: notes };
+  }
+}
+
+function mealSlotTitleFromItem(item: {
+  title?: string;
+  period?: string | null;
+  category?: ItineraryCategory;
+}): string {
+  const title = (item.title || '').trim().toLowerCase();
+  const slots = ['café da manhã', 'cafe da manha', 'almoço', 'almoco', 'jantar'];
+  if (slots.includes(title)) return item.title!.trim();
+  return resolveMealSlot(item.period, item.title, item.category).title;
+}
+
+function resolveMealSlot(
+  period?: string | null,
+  fallbackTitle?: string | null,
+  fallbackCategory?: ItineraryCategory | string | null,
+): { title: string; category: ItineraryCategory } {
+  const raw = `${period || ''} ${fallbackTitle || ''}`.toLowerCase();
+  if (
+    raw.includes('café') ||
+    raw.includes('cafe') ||
+    raw.includes('manhã') ||
+    raw.includes('manha') ||
+    raw.includes('breakfast')
+  ) {
+    return { title: 'Café da manhã', category: ItineraryCategory.CAFE };
+  }
+  if (raw.includes('jantar') || raw.includes('dinner') || raw.includes('noite')) {
+    return { title: 'Jantar', category: ItineraryCategory.RESTAURANT };
+  }
+  if (raw.includes('almoço') || raw.includes('almoco') || raw.includes('lunch')) {
+    return { title: 'Almoço', category: ItineraryCategory.RESTAURANT };
+  }
+  if (
+    fallbackCategory === ItineraryCategory.CAFE ||
+    fallbackCategory === 'CAFE'
+  ) {
+    return { title: 'Café da manhã', category: ItineraryCategory.CAFE };
+  }
+  return { title: 'Almoço', category: ItineraryCategory.RESTAURANT };
 }
