@@ -1,0 +1,93 @@
+// Banco só do image bank. Não usa o DATABASE_URL do core.
+// Connection string: IMAGE_BANK_DATABASE_URL (prisma/image-bank/prisma.config.ts).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/@prisma/image-bank-client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Metadados das fotos de destinos. O binário fica em object storage.
+enum ImageBankStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// ORIGINAL é a foto HD. THUMB e CARD ficam reservados e não entram nas 5 da cidade publicada.
+enum ImageBankImageVariant {
+  ORIGINAL
+  THUMB
+  CARD
+}
+
+model ImageBankDestination {
+  id      String          @id @default(uuid())
+  slug    String          @unique
+  name    String
+  country String
+  region  String?
+  summary String?
+  status  ImageBankStatus @default(DRAFT)
+
+  cities ImageBankCity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("image_bank_destinations")
+}
+
+model ImageBankCity {
+  id            String               @id @default(uuid())
+  destinationId String
+  destination   ImageBankDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  slug      String
+  name      String
+  summary   String?
+  sortOrder Int             @default(0)
+  status    ImageBankStatus @default(DRAFT)
+
+  images ImageBankSpotImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([destinationId, slug])
+  @@index([destinationId, sortOrder])
+  @@index([status])
+  @@map("image_bank_cities")
+}
+
+model ImageBankSpotImage {
+  id     String        @id @default(uuid())
+  cityId String
+  city   ImageBankCity @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  spotName  String
+  altText   String
+  sortOrder Int
+  variant   ImageBankImageVariant @default(ORIGINAL)
+
+  storageKey String @unique
+  mimeType   String
+  width      Int
+  height     Int
+  bytes      Int
+
+  /// Preenchido só em THUMB/CARD. Originais ficam com null.
+  derivedFromId String?
+  derivedFrom   ImageBankSpotImage?  @relation("ImageBankDerivatives", fields: [derivedFromId], references: [id], onDelete: Cascade)
+  derivatives   ImageBankSpotImage[] @relation("ImageBankDerivatives")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cityId, variant, sortOrder])
+  @@index([derivedFromId])
+  @@map("image_bank_spot_images")
+}

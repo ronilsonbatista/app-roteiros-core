@@ -5,11 +5,14 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   MediaStorageProvider,
   UploadResult,
   DownloadResult,
+  StoredObjectUrl,
 } from './media-storage.interface';
+import { normalizeStorageKey } from './storage-key';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { Readable } from 'stream';
@@ -65,22 +68,59 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
 
     await this.s3Client.send(command);
 
-    const url = this.baseUrl
-      ? `${this.baseUrl}/${key}`
-      : `/media/file/${key}`;
+    const url = this.baseUrl ? `${this.baseUrl}/${key}` : `/media/file/${key}`;
 
     this.logger.log(`File uploaded to S3: ${url} (key: ${key})`);
 
     return {
       url,
       filename,
+      key,
       mimeType: file.mimetype,
       size: file.size,
     };
   }
 
+  async resolveReadUrl(key: string): Promise<StoredObjectUrl> {
+    const clean = normalizeStorageKey(key);
+    const publicBase = (process.env.IMAGE_BANK_PUBLIC_BASE_URL || '').replace(
+      /\/$/,
+      '',
+    );
+    if (publicBase) {
+      return { url: `${publicBase}/${clean}`, expiresAt: null };
+    }
+
+    const ttl = signedUrlTtlSeconds();
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: clean,
+    });
+    const url = await getSignedUrl(this.s3Client, command, { expiresIn: ttl });
+    return {
+      url,
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    };
+  }
+
+  async deleteByKey(key: string): Promise<void> {
+    const clean = normalizeStorageKey(key);
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: clean,
+        }),
+      );
+      this.logger.log(`File deleted from S3 by key: ${clean}`);
+    } catch (error) {
+      this.logger.error(`Error deleting key from S3: ${clean}`, error);
+      throw error;
+    }
+  }
+
   async getFile(key: string): Promise<DownloadResult> {
-    const cleanKey = key.replace(/^\//, '');
+    const cleanKey = normalizeStorageKey(key);
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
@@ -89,7 +129,9 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
 
       const response = await this.s3Client.send(command);
       if (!response.Body) {
-        throw new NotFoundException(`Arquivo não encontrado no storage: ${cleanKey}`);
+        throw new NotFoundException(
+          `Arquivo não encontrado no storage: ${cleanKey}`,
+        );
       }
 
       return {
@@ -97,8 +139,8 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
         contentType: response.ContentType || 'application/octet-stream',
         contentLength: response.ContentLength,
       };
-    } catch (err: any) {
-      if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+    } catch (err: unknown) {
+      if (isMissingObject(err)) {
         throw new NotFoundException(`Arquivo não encontrado: ${cleanKey}`);
       }
       this.logger.error(`Error reading file from S3: ${cleanKey}`, err);
@@ -115,7 +157,9 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
         key = urlOrKey.replace('/media/file/', '');
       } else if (urlOrKey.startsWith('http')) {
         const urlObj = new URL(urlOrKey);
-        key = urlObj.pathname.replace(/^\/media\/file\//, '').replace(/^\//, '');
+        key = urlObj.pathname
+          .replace(/^\/media\/file\//, '')
+          .replace(/^\//, '');
       }
 
       const command = new DeleteObjectCommand({
@@ -125,8 +169,31 @@ export class S3MediaStorageProvider implements MediaStorageProvider {
 
       await this.s3Client.send(command);
       this.logger.log(`File deleted from S3: ${key}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.logger.error(`Error deleting file from S3: ${urlOrKey}`, error);
     }
   }
+}
+
+function isMissingObject(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if ('name' in err && err.name === 'NoSuchKey') return true;
+  if (
+    !('$metadata' in err) ||
+    !err.$metadata ||
+    typeof err.$metadata !== 'object'
+  ) {
+    return false;
+  }
+  return (
+    'httpStatusCode' in err.$metadata && err.$metadata.httpStatusCode === 404
+  );
+}
+
+function signedUrlTtlSeconds(): number {
+  const parsed = Number(process.env.IMAGE_BANK_SIGNED_URL_TTL_SECONDS || '900');
+  if (!Number.isInteger(parsed) || parsed < 60 || parsed > 86_400) {
+    return 900;
+  }
+  return parsed;
 }

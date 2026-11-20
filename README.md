@@ -33,7 +33,7 @@ O sistema foi arquitetado visando escalabilidade, modularidade e segurança.
 | **ORM** | Prisma (v7) | Tradução e modelagem de entidades do banco de dados relacional. |
 | **Banco de Dados** | PostgreSQL (v15) | Armazenamento persistente de usuários, viagens, compras e logs. |
 | **Segurança** | JWT, Helmet & Throttler | Proteção contra ataques comuns, limitação de requisições e RBAC. |
-| **Mensageria / Upload** | Local Storage Provider | Serviço estruturado de uploads com validação por mime-type e tamanho. |
+| **Mensageria / Upload** | Filesystem, MinIO ou S3/R2 | Uploads com validação de mime e tamanho. O banco de imagens guarda só a chave; o binário fica no object storage. |
 | **Integração IA** | OpenAI API | Geração automatizada de roteiros com base no perfil de viagem. |
 | **Integração Mapas** | Google Places API | Pesquisa de atrações reais, geolocalização e enriquecimento de locais. |
 
@@ -41,7 +41,7 @@ O sistema foi arquitetado visando escalabilidade, modularidade e segurança.
 
 ## 📂 Módulos Existentes (App)
 
-A API possui 13 módulos funcionais principais projetados para a experiência do usuário final e controle interno:
+A API possui módulos funcionais principais projetados para a experiência do usuário final e controle interno:
 
 - **Auth**: Cadastro de contas (`/auth/signup`), login de usuários com tokens de acesso e refresh (`/auth/login`), renovação de credenciais (`/auth/refresh`) e expiração de sessões.
 - **Users**: Recuperação e atualização de dados básicos de perfil (`/users/me`).
@@ -51,7 +51,8 @@ A API possui 13 módulos funcionais principais projetados para a experiência do
 - **Itinerary**: Gestão e ordenação de atividades/atrações (`/trip-days/:id/items`) contendo horários, notas e custos.
 - **Participants**: Sistema de convites (`/trips/:id/participants`) para planejamento compartilhado.
 - **Places**: Integração de pesquisa de locais do Google Places e preenchimento automático.
-- **Media**: Upload seguro de avatares e imagens de capa de viagem para o diretório `uploads`.
+- **Media**: Upload seguro de avatares e imagens de capa de viagem para o diretório `uploads` ou S3.
+- **Image Bank**: Catálogo de destinos, cidades e 5 fotos HD de pontos turísticos por cidade publicada (`/image-bank`, escrita em `/admin/image-bank`). Metadados no PostgreSQL de `IMAGE_BANK_DATABASE_URL`; o arquivo fica no disco local ou num bucket S3/R2.
 - **Billing**: Catálogo de produtos premium (`/products`) e fluxo de compras mockado (`/purchases`).
 - **AI**: Geração automática de roteiros via OpenAI API com base no perfil.
 - **Analytics**: Métricas básicas internas.
@@ -73,6 +74,7 @@ Os endpoints administrativos são prefixados por `/admin` e protegidos de forma 
 - **Admin AI**: Logs completos de auditoria e depuração de chamadas de IA (`/admin/ai-requests`).
 - **Admin Places**: Enriquecimento geográfico administrativo de atrações e restaurantes base.
 - **Admin Media**: Upload de imagens de capa para roteiros base e pontos turísticos.
+- **Admin Image Bank**: Cadastro do banco de imagens (destino, cidade, upload das 5 fotos HD).
 - **Admin Analytics**: Análise de crescimento de usuários, geração de viagens e faturamento financeiro.
 
 ---
@@ -205,6 +207,21 @@ A especificação do Swagger divide os endpoints de forma organizada em 22 área
 
 ---
 
+## Banco de imagens
+
+O catálogo usa um PostgreSQL próprio, `IMAGE_BANK_DATABASE_URL`. Não é o `DATABASE_URL` do core e não é o Postgres do `docker compose`. O binário continua fora desse banco: disco local (`MEDIA_STORAGE_PROVIDER=local`) ou um bucket S3/R2 que você já tenha. Este repositório não sobe container de banco nem de storage para o image bank.
+
+Só as rotas `/image-bank` e `/admin/image-bank` abrem essa conexão. O client não é exportado para os outros módulos.
+
+`GET /image-bank/destinations` devolve cards: `name`, `slug`, `city` (cidade de menor `sortOrder`, ou null) e `coverUrl`. As 5 fotos (`url`, `alt`, `order`) ficam em `GET /image-bank/destinations/:slug/cities/:citySlug`.
+
+```bash
+npx prisma migrate deploy --config prisma/image-bank/prisma.config.ts
+npm run seed:image-bank
+```
+
+O seed grava PNG 1x1 em `uploads/image-bank/` (não baixa as fotos reais).
+
 ## 🐳 Docker Compose
 
 A plataforma está totalmente dockerizada para facilitar a inicialização de todo o ambiente local de desenvolvimento.
@@ -230,7 +247,7 @@ A plataforma está totalmente dockerizada para facilitar a inicialização de to
 
 ### Mapeamento de Serviços
 * **API (approteiros_api)**: Rodando na porta **3000** com Node 22 Alpine.
-* **Banco de Dados (approteiros_db)**: Rodando na porta **5433** do host com PostgreSQL 15 Alpine (evitando conflito com uma instalação PostgreSQL local que utilize a porta padrão 5432).
+* **Banco de Dados (approteiros_db)**: Rodando na porta **5433** do host com PostgreSQL 15 Alpine (evitando conflito com uma instalação PostgreSQL local que utilize a porta padrão 5432). É só o banco do core. O image bank não entra nesse compose: aponte `IMAGE_BANK_DATABASE_URL` para um PostgreSQL externo.
 
 ---
 

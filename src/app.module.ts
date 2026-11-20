@@ -23,6 +23,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health.module';
 import { PlanningModule } from './planning/planning.module';
 import { HomeModule } from './home/home.module';
+import { ImageBankModule } from './image-bank/image-bank.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { HomeModule } from './home/home.module';
     HealthModule,
     PlanningModule,
     HomeModule,
+    ImageBankModule,
   ],
   controllers: [AppController],
   providers: [
