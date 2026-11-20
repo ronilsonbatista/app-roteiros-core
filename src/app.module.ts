@@ -62,7 +62,7 @@ import { ImageBankModule } from './image-bank/image-bank.module';
     HealthModule,
     PlanningModule,
     HomeModule,
-    ImageBankModule,
+    ImageBankModule.register(),
   ],
   controllers: [AppController],
   providers: [
