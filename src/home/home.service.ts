@@ -5,7 +5,10 @@ import {
   DestinationTipSource,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeDestinationKey } from './destination-key.util';
+import {
+  expandDestinationKeyAliases,
+  normalizeDestinationKey,
+} from './destination-key.util';
 import {
   HomeDestinationDto,
   HomeDestinationsResponseDto,
@@ -113,11 +116,15 @@ export class HomeService {
       destinations.map((d) => d.destinationKey),
     );
 
+    const coverFromDest =
+      destinations.find((d) => d.coverImageUrl)?.coverImageUrl ?? null;
+
     const crm: HomeTripCrmDto = {
       id: trip.id,
       title: trip.title,
       destinations,
-      coverImageUrl: trip.coverImage,
+      // Prefer trip cover; else first destination cover (BaseTrip / prefs).
+      coverImageUrl: trip.coverImage ?? coverFromDest,
       startDate: trip.startDate ? toDateOnly(trip.startDate) : null,
       endDate: trip.endDate ? toDateOnly(trip.endDate) : null,
       arrivalDateTime: trip.arrivalDateTime
@@ -156,8 +163,9 @@ export class HomeService {
       TIPS_PER_DESTINATION_MAX,
     );
 
+    const keys = expandDestinationKeyAliases(key);
     const rows = await this.prisma.destinationTip.findMany({
-      where: { destinationKey: key, active: true },
+      where: { destinationKey: { in: keys }, active: true },
       orderBy: { sortOrder: 'asc' },
       take: limit,
     });
@@ -171,23 +179,35 @@ export class HomeService {
     const unique = [...new Set(destinationKeys.filter(Boolean))];
     if (unique.length === 0) return [];
 
+    const lookupKeys = [
+      ...new Set(unique.flatMap((k) => expandDestinationKeyAliases(k))),
+    ];
+
     const rows = await this.prisma.destinationTip.findMany({
-      where: { destinationKey: { in: unique }, active: true },
+      where: { destinationKey: { in: lookupKeys }, active: true },
       orderBy: [{ destinationKey: 'asc' }, { sortOrder: 'asc' }],
     });
 
     const byKey = new Map<string, typeof rows>();
     for (const row of rows) {
-      const list = byKey.get(row.destinationKey) ?? [];
-      if (list.length < TIPS_PER_DESTINATION_MAX) {
-        list.push(row);
-        byKey.set(row.destinationKey, list);
+      for (const alias of expandDestinationKeyAliases(row.destinationKey)) {
+        const list = byKey.get(alias) ?? [];
+        if (
+          list.length < TIPS_PER_DESTINATION_MAX &&
+          !list.some((t) => t.id === row.id)
+        ) {
+          list.push(row);
+          byKey.set(alias, list);
+        }
       }
     }
 
     const ordered: HomeTipDto[] = [];
+    const seenTipIds = new Set<string>();
     for (const key of unique) {
       for (const row of byKey.get(key) ?? []) {
+        if (seenTipIds.has(row.id)) continue;
+        seenTipIds.add(row.id);
         ordered.push(mapTip(row));
       }
     }
@@ -261,15 +281,35 @@ export class HomeService {
   }
 
   private async lookupCover(destinationName: string): Promise<string | null> {
-    const match = await this.prisma.baseTrip.findFirst({
+    const key = normalizeDestinationKey(destinationName);
+    const aliases = expandDestinationKeyAliases(key);
+    const candidates = [
+      destinationName,
+      ...aliases.map((a) => a.replace(/-/g, ' ')),
+    ];
+
+    for (const candidate of [...new Set(candidates.filter(Boolean))]) {
+      const match = await this.prisma.baseTrip.findFirst({
+        where: {
+          destination: { contains: candidate, mode: 'insensitive' },
+          coverImage: { not: null },
+        },
+        select: { coverImage: true },
+        orderBy: { homeSortOrder: 'asc' },
+      });
+      if (match?.coverImage) return match.coverImage;
+    }
+
+    // Slug match for catalog BaseTrips (e.g. toquio).
+    const bySlug = await this.prisma.baseTrip.findFirst({
       where: {
-        destination: { contains: destinationName, mode: 'insensitive' },
+        slug: { in: aliases },
         coverImage: { not: null },
       },
       select: { coverImage: true },
       orderBy: { homeSortOrder: 'asc' },
     });
-    return match?.coverImage ?? null;
+    return bySlug?.coverImage ?? null;
   }
 }
 
