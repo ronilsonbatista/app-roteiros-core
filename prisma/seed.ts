@@ -52,6 +52,43 @@ const PLACEHOLDER_TIPS: Array<{
       },
     ],
   },
+  // E2E / CRM trips often use English "Tokyo" → key `tokyo`; catalog uses Tóquio → `toquio`.
+  {
+    destinationKey: 'tokyo',
+    destinationName: 'Tokyo',
+    tips: [
+      {
+        title: 'IC Card (Suica / Pasmo)',
+        body: 'Carregue um cartão Suica ou Pasmo no celular ou físico — metrô, trem e conveniência ficam bem mais simples.',
+      },
+      {
+        title: 'Trens e pontualidade',
+        body: 'Trens locais e shinkansen são pontuais. Deixe margem entre conexões e confira a linha no app do operador.',
+      },
+      {
+        title: 'Dinheiro e cartão',
+        body: 'Muitos lugares aceitam cartão, mas leve ienes para templos, mercados e lojas menores.',
+      },
+    ],
+  },
+  {
+    destinationKey: 'toquio',
+    destinationName: 'Tóquio',
+    tips: [
+      {
+        title: 'IC Card (Suica / Pasmo)',
+        body: 'Carregue um cartão Suica ou Pasmo no celular ou físico — metrô, trem e conveniência ficam bem mais simples.',
+      },
+      {
+        title: 'Trens e pontualidade',
+        body: 'Trens locais e shinkansen são pontuais. Deixe margem entre conexões e confira a linha no app do operador.',
+      },
+      {
+        title: 'Dinheiro e cartão',
+        body: 'Muitos lugares aceitam cartão, mas leve ienes para templos, mercados e lojas menores.',
+      },
+    ],
+  },
 ];
 
 // Imagens públicas (Wikimedia Commons, HTTPS). `file` = "<hash>/<arquivo codificado>".

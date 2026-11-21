@@ -2,13 +2,27 @@ import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { HomeService } from './home.service';
-import { normalizeDestinationKey } from './destination-key.util';
+import {
+  expandDestinationKeyAliases,
+  normalizeDestinationKey,
+} from './destination-key.util';
 
 describe('normalizeDestinationKey', () => {
   it('normaliza acentos e espaços', () => {
     expect(normalizeDestinationKey('Roma')).toBe('roma');
     expect(normalizeDestinationKey('São Paulo')).toBe('sao-paulo');
     expect(normalizeDestinationKey('Rio de Janeiro')).toBe('rio-de-janeiro');
+    expect(normalizeDestinationKey('Tokyo')).toBe('tokyo');
+    expect(normalizeDestinationKey('Tóquio')).toBe('toquio');
+  });
+
+  it('expande aliases Tokyo/Tóquio', () => {
+    expect(expandDestinationKeyAliases('tokyo')).toEqual(
+      expect.arrayContaining(['tokyo', 'toquio', 'tokio']),
+    );
+    expect(expandDestinationKeyAliases('toquio')).toEqual(
+      expect.arrayContaining(['tokyo', 'toquio']),
+    );
   });
 });
 
@@ -133,6 +147,31 @@ describe('Home trip CRM + tips', () => {
   });
 
   describe('listTips', () => {
+    it('busca dicas Tokyo via alias toquio', async () => {
+      prisma.destinationTip.findMany.mockResolvedValue([
+        {
+          id: 'tip-tk1',
+          destinationKey: 'toquio',
+          destinationName: 'Tóquio',
+          title: 'IC Card',
+          body: 'Suica',
+          sortOrder: 0,
+          source: 'PLACEHOLDER',
+          providerPlaceId: null,
+        },
+      ]);
+      const res = await service.listTips({ destination: 'Tokyo' });
+      expect(res.items).toHaveLength(1);
+      expect(prisma.destinationTip.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            destinationKey: { in: expect.arrayContaining(['tokyo', 'toquio']) },
+            active: true,
+          },
+        }),
+      );
+    });
+
     it('exige destinationKey ou destination', async () => {
       await expect(service.listTips({})).rejects.toBeInstanceOf(
         BadRequestException,
@@ -157,7 +196,10 @@ describe('Home trip CRM + tips', () => {
 
       expect(prisma.destinationTip.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { destinationKey: 'roma', active: true },
+          where: {
+            destinationKey: { in: expect.arrayContaining(['roma', 'rome']) },
+            active: true,
+          },
           take: 3,
         }),
       );
