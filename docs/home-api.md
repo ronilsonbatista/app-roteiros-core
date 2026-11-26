@@ -32,8 +32,8 @@ Resposta (resumo):
         "name": "Capadócia",
         "country": "Turquia",
         "providerPlaceId": "ChIJ…",
-        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Cappadocia_Balloon_Inflating_Wikimedia_Commons.JPG/1920px-Cappadocia_Balloon_Inflating_Wikimedia_Commons.JPG",
-        "cardImageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Cappadocia_Balloon_Inflating_Wikimedia_Commons.JPG/960px-Cappadocia_Balloon_Inflating_Wikimedia_Commons.JPG",
+        "imageUrl": "https://2go-travel-web-app.vercel.app/images/destinations/capadocia/curated-hero.jpg",
+        "cardImageUrl": "https://2go-travel-web-app.vercel.app/images/destinations/capadocia/curated-guide-card.jpg",
         "sortOrder": 0,
         "active": true
       }
@@ -44,6 +44,10 @@ Resposta (resumo):
 ```
 
 Seed: `npm run seed` (10 destinos, upsert por slug; desligar com `SEED_HOME_DESTINATIONS=false`).
+Imagens: CDN do site (`HOME_DESTINATION_IMAGE_BASE_URL`, default `https://2go-travel-web-app.vercel.app`) —
+`/images/destinations/{slug}/curated-hero.jpg` e `curated-guide-card.jpg`. **Não** hotlink Wikimedia
+(HTTP 429 no simulador iOS). Staging já semeado: `npm run update:home-images` no shell do
+`core-api` (ou `scripts/update-home-destination-images.sql`). Cache da rota: 300s.
 Migration: `20261118120000_add_home_destinations_fields` (colunas nulas: `slug`, `cardImage`, `homeSortOrder`).
 
 ## 2. `GET /users/me` (Bearer)

@@ -21,7 +21,8 @@
     "openapi:generate": "ts-node scripts/generate-openapi.ts",
     "prisma:generate": "prisma generate && prisma generate --config prisma/image-bank/prisma.config.ts",
     "seed": "npx ts-node prisma/seed.ts",
-    "seed:image-bank": "npx ts-node prisma/image-bank/seed.ts"
+    "seed:image-bank": "npx ts-node prisma/image-bank/seed.ts",
+    "update:home-images": "npx ts-node scripts/update-home-destination-images.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
