@@ -39,6 +39,11 @@ import {
   Prisma,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import {
+  TripPricingQuote,
+  resolveTripDayCount,
+  resolveTripPricing,
+} from './trip-pricing';
 
 @Injectable()
 export class BillingService {
@@ -49,6 +54,42 @@ export class BillingService {
     private readonly mockProvider: MockPaymentProvider,
     private readonly mercadoPagoProvider: MercadoPagoPaymentProvider,
   ) {}
+
+  /**
+   * Canonical list price for ITINERARY_FULL_ACCESS from trip duration.
+   * Never trusts client-supplied amounts.
+   */
+  public async resolveListPriceForTrip(trip: {
+    id: string;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  }): Promise<TripPricingQuote> {
+    const dayCount = await this.prisma.tripDay.count({
+      where: { tripId: trip.id },
+    });
+    const days = resolveTripDayCount({
+      dayCount,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+    });
+    return resolveTripPricing(days);
+  }
+
+  private pricingSnapshot(
+    list: TripPricingQuote,
+    discountAmount: Prisma.Decimal | number,
+    finalAmount: Prisma.Decimal | number,
+  ) {
+    return {
+      originalAmount: list.amount,
+      discountAmount: Number(discountAmount),
+      finalAmount: Number(finalAmount),
+      currency: list.currency,
+      amount: list.amount,
+      days: list.days,
+      tier: list.tier,
+    };
+  }
 
   public isMockPaymentEnabled(): boolean {
     const env = (process.env.NODE_ENV || 'development').toLowerCase();
@@ -245,6 +286,8 @@ export class BillingService {
     });
     if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
 
+    const listPrice = await this.resolveListPriceForTrip(trip);
+
     const existingPurchase = await this.prisma.purchase.findFirst({
       where: { userId, tripId, productId: product.id },
       orderBy: { createdAt: 'desc' },
@@ -259,12 +302,7 @@ export class BillingService {
         name: product.name,
         description: product.description || undefined,
       },
-      pricing: {
-        originalAmount: Number(product.price),
-        discountAmount: 0,
-        finalAmount: Number(product.price),
-        currency: product.currency,
-      },
+      pricing: this.pricingSnapshot(listPrice, 0, listPrice.amount),
       existingPurchaseId: existingPurchase?.id,
       existingPurchaseStatus: existingPurchase?.status,
       supportedPaymentMethods: this.getChargeablePaymentMethods(),
@@ -292,7 +330,13 @@ export class BillingService {
     });
     if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
 
-    const calc = await this.validateAndCalculateCoupon(dto.couponCode, product.price, product.type);
+    const listPrice = await this.resolveListPriceForTrip(trip);
+    const listDecimal = new Prisma.Decimal(listPrice.amountDecimal);
+    const calc = await this.validateAndCalculateCoupon(
+      dto.couponCode,
+      listDecimal,
+      product.type,
+    );
 
     const existingPurchase = await this.prisma.purchase.findFirst({
       where: { userId, tripId, productId: product.id },
@@ -308,12 +352,11 @@ export class BillingService {
         name: product.name,
         description: product.description || undefined,
       },
-      pricing: {
-        originalAmount: Number(product.price),
-        discountAmount: Number(calc.discountAmount),
-        finalAmount: Number(calc.finalAmount),
-        currency: product.currency,
-      },
+      pricing: this.pricingSnapshot(
+        listPrice,
+        calc.discountAmount,
+        calc.finalAmount,
+      ),
       coupon: calc.coupon
         ? {
             code: calc.coupon.code,
@@ -331,7 +374,7 @@ export class BillingService {
 
   /**
    * Soft coupon validate for Carrinho (does not throw on invalid code).
-   * Price always from backend Product — never client-supplied.
+   * List price always from Core duration rule — never client-supplied.
    */
   async validateCouponForTrip(
     userId: string,
@@ -351,33 +394,30 @@ export class BillingService {
       throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
     }
 
+    const listPrice = await this.resolveListPriceForTrip(trip);
+    const listDecimal = new Prisma.Decimal(listPrice.amountDecimal);
+
     try {
       const calc = await this.validateAndCalculateCoupon(
         dto.couponCode,
-        product.price,
+        listDecimal,
         product.type,
       );
       if (!calc.coupon) {
         return {
           valid: false,
           reason: 'Informe um código de cupom',
-          pricing: {
-            originalAmount: Number(product.price),
-            discountAmount: 0,
-            finalAmount: Number(product.price),
-            currency: product.currency,
-          },
+          pricing: this.pricingSnapshot(listPrice, 0, listPrice.amount),
         };
       }
       return {
         valid: true,
         code: calc.coupon.code,
-        pricing: {
-          originalAmount: Number(product.price),
-          discountAmount: Number(calc.discountAmount),
-          finalAmount: Number(calc.finalAmount),
-          currency: product.currency,
-        },
+        pricing: this.pricingSnapshot(
+          listPrice,
+          calc.discountAmount,
+          calc.finalAmount,
+        ),
         coupon: {
           code: calc.coupon.code,
           applied: true,
@@ -402,12 +442,7 @@ export class BillingService {
           valid: false,
           code: this.normalizeCouponCode(dto.couponCode),
           reason: message,
-          pricing: {
-            originalAmount: Number(product.price),
-            discountAmount: 0,
-            finalAmount: Number(product.price),
-            currency: product.currency,
-          },
+          pricing: this.pricingSnapshot(listPrice, 0, listPrice.amount),
         };
       }
       throw err;
@@ -438,9 +473,10 @@ export class BillingService {
       throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
     }
 
+    const listPrice = await this.resolveListPriceForTrip(trip);
     const calc = await this.validateAndCalculateCoupon(
       dto.couponCode,
-      product.price,
+      new Prisma.Decimal(listPrice.amountDecimal),
       product.type,
     );
 
@@ -455,7 +491,7 @@ export class BillingService {
       status: publicKey ? 'REQUIRES_CONFIRMATION' : 'READY',
       publicKey,
       amount,
-      currency: product.currency,
+      currency: listPrice.currency,
       clientSecret: publicKey
         ? undefined
         : `stub_secret_${intentId}`,
@@ -463,12 +499,11 @@ export class BillingService {
       message: publicKey
         ? 'Use publicKey no Brick/Card Form; confirme com POST /purchases/checkout + cardToken.'
         : 'Stub sem MERCADO_PAGO_PUBLIC_KEY: use cardToken de teste no checkout (ex.: test-card-token).',
-      pricing: {
-        originalAmount: Number(product.price),
-        discountAmount: Number(calc.discountAmount),
-        finalAmount: amount,
-        currency: product.currency,
-      },
+      pricing: this.pricingSnapshot(
+        listPrice,
+        calc.discountAmount,
+        amount,
+      ),
     };
   }
 
@@ -555,9 +590,23 @@ export class BillingService {
     });
     if (!product) throw new NotFoundException('Produto de acesso completo ao roteiro não encontrado');
 
-    // Revalidate coupon and calculate final price at creation time
-    const calc = await this.validateAndCalculateCoupon(dto.couponCode, product.price, product.type);
+    // Duration-based list price (canonical) + coupon revalidation at charge time
+    const listPrice = await this.resolveListPriceForTrip(trip);
+    const listDecimal = new Prisma.Decimal(listPrice.amountDecimal);
+    const calc = await this.validateAndCalculateCoupon(
+      dto.couponCode,
+      listDecimal,
+      product.type,
+    );
     const provider = this.resolvePaymentProvider();
+
+    const purchasePricing = (p: {
+      originalAmount: Prisma.Decimal | number;
+      discountAmount: Prisma.Decimal | number;
+      finalAmount: Prisma.Decimal | number;
+      currency: string;
+    }) =>
+      this.pricingSnapshot(listPrice, p.discountAmount, p.finalAmount);
 
     // Idempotency key check
     if (idempotencyKey) {
@@ -597,12 +646,7 @@ export class BillingService {
           currency: existingKeyPurchase.currency,
           paymentMethod: existingKeyPurchase.paymentMethod || dto.paymentMethod,
           pixDetails: existingPixDetails,
-          pricing: {
-            originalAmount: Number(existingKeyPurchase.originalAmount),
-            discountAmount: Number(existingKeyPurchase.discountAmount),
-            finalAmount: Number(existingKeyPurchase.finalAmount),
-            currency: existingKeyPurchase.currency,
-          },
+          pricing: purchasePricing(existingKeyPurchase),
         };
       }
     }
@@ -634,12 +678,7 @@ export class BillingService {
             amount: Number(paid.finalAmount),
             currency: paid.currency,
             paymentMethod: paid.paymentMethod || dto.paymentMethod,
-            pricing: {
-              originalAmount: Number(paid.originalAmount),
-              discountAmount: Number(paid.discountAmount),
-              finalAmount: Number(paid.finalAmount),
-              currency: paid.currency,
-            },
+            pricing: purchasePricing(paid),
           };
         }
         if (currentStatus.status === 'PENDING') {
@@ -658,12 +697,7 @@ export class BillingService {
                     ticketUrl: currentStatus.pixDetails.ticketUrl,
                   }
                 : undefined,
-              pricing: {
-                originalAmount: Number(purchase.originalAmount),
-                discountAmount: Number(purchase.discountAmount),
-                finalAmount: Number(purchase.finalAmount),
-                currency: purchase.currency,
-              },
+              pricing: purchasePricing(purchase),
             };
           } else {
             throw new BadRequestException(
@@ -686,10 +720,10 @@ export class BillingService {
           tripId: dto.tripId,
           status: PurchaseStatus.PENDING,
           amount: calc.finalAmount,
-          originalAmount: product.price,
+          originalAmount: listDecimal,
           discountAmount: calc.discountAmount,
           finalAmount: calc.finalAmount,
-          currency: product.currency,
+          currency: listPrice.currency,
           idempotencyKey,
         },
       });
@@ -700,9 +734,10 @@ export class BillingService {
         data: {
           couponId: calc.coupon?.id,
           amount: calc.finalAmount,
-          originalAmount: product.price,
+          originalAmount: listDecimal,
           discountAmount: calc.discountAmount,
           finalAmount: calc.finalAmount,
+          currency: listPrice.currency,
         },
       });
     }
@@ -757,12 +792,7 @@ export class BillingService {
             ticketUrl: paymentResult.pixDetails.ticketUrl,
           }
         : undefined,
-      pricing: {
-        originalAmount: Number(updatedPurchase.originalAmount),
-        discountAmount: Number(updatedPurchase.discountAmount),
-        finalAmount: Number(updatedPurchase.finalAmount),
-        currency: updatedPurchase.currency,
-      },
+      pricing: purchasePricing(updatedPurchase),
     };
   }
 
@@ -1131,6 +1161,26 @@ export class BillingService {
       });
       if (existingPending) {
         return existingPending;
+      }
+
+      // Duration-based list price for itinerary unlock (same rule as checkout)
+      if (product.type === ProductType.ITINERARY_FULL_ACCESS) {
+        const listPrice = await this.resolveListPriceForTrip(trip);
+        const listDecimal = new Prisma.Decimal(listPrice.amountDecimal);
+        return this.prisma.purchase.create({
+          data: {
+            userId,
+            productId: product.id,
+            tripId: dto.tripId,
+            status: PurchaseStatus.PENDING,
+            amount: listDecimal,
+            originalAmount: listDecimal,
+            discountAmount: 0,
+            finalAmount: listDecimal,
+            currency: listPrice.currency,
+            idempotencyKey: dto.idempotencyKey,
+          },
+        });
       }
     }
 

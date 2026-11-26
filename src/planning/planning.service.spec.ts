@@ -545,7 +545,11 @@ describe('PlanningService', () => {
 
       const res1 = await service.getPreview('journey-preview-product', readyJourney);
       expect(res1.unlockOffer.available).toBe(true);
-      expect(res1.unlockOffer.price).toBe(24.9);
+      // 3-day itinerary → UP_TO_7 → R$ 99,90 (ignores Product.price)
+      expect(res1.unlockOffer.price).toBe(99.9);
+      expect(res1.unlockOffer.amount).toBe(99.9);
+      expect(res1.unlockOffer.days).toBe(3);
+      expect(res1.unlockOffer.tier).toBe('UP_TO_7');
       expect(res1.unlockOffer.name).toBe('Acesso Premium Especial');
 
       // Case 2: Inactive or Missing Product in Database
@@ -554,6 +558,8 @@ describe('PlanningService', () => {
       const res2 = await service.getPreview('journey-preview-product', readyJourney);
       expect(res2.unlockOffer.available).toBe(false);
       expect(res2.unlockOffer.code).toBe(ProductType.ITINERARY_FULL_ACCESS);
+      expect(res2.unlockOffer.amount).toBe(99.9);
+      expect(res2.unlockOffer.tier).toBe('UP_TO_7');
     });
 
     it('SECURITY & STATUS CONSTRAINTS: should reject preview when status is not PREVIEW_READY or CLAIMED', async () => {

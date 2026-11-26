@@ -1,6 +1,6 @@
 # Carrinho / Checkout Payment API
 
-Mobile Carrinho consumes these Core endpoints. **Price is always server-side** (`Product.price`); never trust client amounts.
+Mobile Carrinho consumes these Core endpoints. **Price is always server-side** from the duration rule (trip days → BRL tier); never trust client amounts. `Product` supplies identity (`id`/`name`/`type`); list amount comes from `src/billing/trip-pricing.ts` (≤7 → 99.90, 8–12 → 119.90, ≥13 → 139.90). Responses include `pricing.amount`, `pricing.currency`, `pricing.days`, `pricing.tier`.
 
 ## Endpoints
 
