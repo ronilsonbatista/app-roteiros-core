@@ -126,11 +126,29 @@ export class PlanningUnlockOfferDto {
   @ApiProperty({ example: 'Roteiro Completo 2GO' })
   name: string;
 
-  @ApiProperty({ example: 19.99 })
+  /** Duration-based list price (BRL). Prefer `amount`; `price` kept for older clients. */
+  @ApiProperty({ example: 99.9 })
   price: number;
+
+  /** Same as price — clear field for app mapping. */
+  @ApiProperty({ example: 99.9 })
+  amount: number;
 
   @ApiProperty({ example: 'BRL' })
   currency: string;
+
+  @ApiProperty({
+    description: 'Trip length used for the duration pricing tier',
+    example: 7,
+  })
+  days: number;
+
+  @ApiProperty({
+    description: 'Duration pricing tier',
+    enum: ['UP_TO_7', 'FROM_8_TO_12', 'FROM_13'],
+    example: 'UP_TO_7',
+  })
+  tier: 'UP_TO_7' | 'FROM_8_TO_12' | 'FROM_13';
 
   @ApiProperty({ example: true })
   available: boolean;

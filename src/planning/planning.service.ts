@@ -22,6 +22,7 @@ import {
 import { ClaimGuestJourneyResponseDto } from './dto/claim-guest-journey-response.dto';
 import { GuestJourneyStatus, ProductType, ItineraryCategory, TripStatus, TransitMode, TicketStatus } from '@prisma/client';
 import { AiService } from '../ai/ai.service';
+import { resolveTripPricing } from '../billing/trip-pricing';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -551,26 +552,34 @@ export class PlanningService {
         locked: true,
       }));
 
-    // Unlock Offer from Product table
+    // Unlock offer: product identity from DB + duration-based list price (canonical)
     const product = await this.prisma.product.findFirst({
       where: { type: ProductType.ITINERARY_FULL_ACCESS, active: true },
       orderBy: { createdAt: 'desc' },
     });
+
+    const listPrice = resolveTripPricing(allDays.length);
 
     const unlockOffer = product
       ? {
           productId: product.id,
           code: product.type,
           name: product.name,
-          price: Number(product.price),
-          currency: product.currency,
+          price: listPrice.amount,
+          amount: listPrice.amount,
+          currency: listPrice.currency,
+          days: listPrice.days,
+          tier: listPrice.tier,
           available: product.active,
         }
       : {
           code: ProductType.ITINERARY_FULL_ACCESS,
           name: 'Acesso Completo ao Roteiro',
-          price: 19.99,
-          currency: 'BRL',
+          price: listPrice.amount,
+          amount: listPrice.amount,
+          currency: listPrice.currency,
+          days: listPrice.days,
+          tier: listPrice.tier,
           available: false,
         };
 

@@ -211,7 +211,7 @@ export class PlanningController {
   @ApiOperation({
     summary: 'Consultar preview seguro do roteiro gerado',
     description:
-      'Retorna projeção segura contendo apenas o Dia 1 totalmente liberado com atividades, metadados mínimos dos dias bloqueados (sem conteúdo privado) e oferta de desbloqueio vinda do banco Core.',
+      'Retorna projeção segura contendo apenas o Dia 1 totalmente liberado com atividades, metadados mínimos dos dias bloqueados (sem conteúdo privado) e oferta de desbloqueio com preço por duração (faixas BRL no Core).',
   })
   @ApiHeader({
     name: 'X-Guest-Token',

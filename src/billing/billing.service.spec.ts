@@ -66,7 +66,12 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
     destination: 'Paris',
     status: 'DRAFT',
     premiumUnlockedAt: null,
+    startDate: new Date('2026-07-01T00:00:00.000Z'),
+    endDate: new Date('2026-07-07T00:00:00.000Z'),
   };
+
+  /** 7 days → UP_TO_7 → R$ 99,90 (canonical duration pricing). */
+  const expectedListAmount = 99.9;
 
   const mockPurchase = {
     id: 'pur-100',
@@ -126,6 +131,9 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
                 return Promise.resolve(null);
               }),
               update: jest.fn().mockResolvedValue({ ...mockTrip, premiumUnlockedAt: new Date() }),
+            },
+            tripDay: {
+              count: jest.fn().mockResolvedValue(7),
             },
             guestJourney: {
               findFirst: jest.fn().mockResolvedValue(null),
@@ -235,9 +243,12 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
       });
 
       expect(quote.tripId).toBe(mockTrip.id);
-      expect(quote.pricing.originalAmount).toBe(100);
-      expect(quote.pricing.discountAmount).toBe(10);
-      expect(quote.pricing.finalAmount).toBe(90);
+      expect(quote.pricing.originalAmount).toBe(expectedListAmount);
+      expect(quote.pricing.amount).toBe(expectedListAmount);
+      expect(quote.pricing.days).toBe(7);
+      expect(quote.pricing.tier).toBe('UP_TO_7');
+      expect(quote.pricing.discountAmount).toBe(9.99);
+      expect(quote.pricing.finalAmount).toBe(89.91);
       expect(quote.coupon?.code).toBe('WALL10');
       expect(quote.coupon?.applied).toBe(true);
       expect(quote.supportedPaymentMethods).toContain('PIX');
@@ -255,7 +266,8 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
       });
       expect(res.valid).toBe(true);
       expect(res.code).toBe('WALL10');
-      expect(res.pricing?.finalAmount).toBe(90);
+      expect(res.pricing?.finalAmount).toBe(89.91);
+      expect(res.pricing?.tier).toBe('UP_TO_7');
     });
 
     it('should soft-validate an invalid coupon as valid=false', async () => {
@@ -264,7 +276,7 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
       });
       expect(res.valid).toBe(false);
       expect(res.reason).toMatch(/inválido/i);
-      expect(res.pricing?.finalAmount).toBe(100);
+      expect(res.pricing?.finalAmount).toBe(expectedListAmount);
     });
 
     it('should return a card intent stub with backend price', async () => {
@@ -273,8 +285,9 @@ describe('BillingService (Phase K4 Coupons & Pricing Snapshots)', () => {
         couponCode: 'WALL20',
       });
       expect(intent.intentId).toMatch(/^card_intent_/);
-      expect(intent.amount).toBe(80);
+      expect(intent.amount).toBe(79.9); // 99.90 - 20.00 fixed
       expect(intent.currency).toBe('BRL');
+      expect(intent.pricing?.tier).toBe('UP_TO_7');
       expect(intent.status).toBe('READY');
       expect(intent.clientSecret).toBeDefined();
     });

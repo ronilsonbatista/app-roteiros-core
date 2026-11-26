@@ -262,17 +262,40 @@ export class ExpirePurchaseResponseDto {
 }
 
 export class CheckoutPricingDto {
-  @ApiProperty()
+  @ApiProperty({
+    description: 'List price before coupon (duration-based BRL)',
+    example: 99.9,
+  })
   originalAmount: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 0 })
   discountAmount: number;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Amount to charge after coupon',
+    example: 99.9,
+  })
   finalAmount: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'BRL' })
   currency: string;
+
+  /** Alias of list price (same as originalAmount) for clear client mapping. */
+  @ApiProperty({ example: 99.9 })
+  amount: number;
+
+  @ApiProperty({
+    description: 'Trip length used for the duration pricing tier',
+    example: 7,
+  })
+  days: number;
+
+  @ApiProperty({
+    description: 'Duration pricing tier',
+    enum: ['UP_TO_7', 'FROM_8_TO_12', 'FROM_13'],
+    example: 'UP_TO_7',
+  })
+  tier: 'UP_TO_7' | 'FROM_8_TO_12' | 'FROM_13';
 }
 
 export class CheckoutProductDto {
